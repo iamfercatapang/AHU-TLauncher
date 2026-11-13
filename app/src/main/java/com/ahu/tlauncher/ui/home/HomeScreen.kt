@@ -18,7 +18,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AcUnit
 import androidx.compose.material.icons.rounded.Bluetooth
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.Dehaze
+import androidx.compose.material.icons.rounded.NightsStay
+import androidx.compose.material.icons.rounded.Thunderstorm
+import androidx.compose.material.icons.rounded.Umbrella
+import androidx.compose.material.icons.rounded.WbCloudy
+import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material.icons.rounded.BluetoothConnected
 import androidx.compose.material.icons.rounded.BluetoothDisabled
 import androidx.compose.material.icons.rounded.NetworkWifi1Bar
@@ -68,10 +76,12 @@ fun HomeScreen(
     actions: HomeActions,
     initialOverlay: Overlay = Overlay.NONE,
     initialMapVisible: Boolean = true,
+    initialSettings: com.ahu.tlauncher.ui.settings.Section = com.ahu.tlauncher.ui.settings.Section.DISPLAY,
 ) {
     var overlay by remember { mutableStateOf(initialOverlay) }
     var mapVisible by rememberSaveable { mutableStateOf(initialMapVisible) }
     var toast by remember { mutableStateOf<String?>(null) }
+    var settingsStart by remember { mutableStateOf(initialSettings) }
     BackHandler(enabled = overlay != Overlay.NONE) { overlay = Overlay.NONE }
     LaunchedEffect(toast) { if (toast != null) { delay(2200); toast = null } }
     // Bring the map back when Maps/Waze starts guiding.
@@ -93,7 +103,10 @@ fun HomeScreen(
                 )
                 if (!carRight && mapVisible) MapReveal(Modifier.weight(1f).fillMaxHeight()) { MapPane(state, actions, Modifier.fillMaxSize()) }
             }
-            StatusBar(state, Modifier.fillMaxWidth().height(STATUS_H))
+            StatusBar(
+                state, Modifier.fillMaxWidth().height(STATUS_H),
+                onObdClick = { settingsStart = com.ahu.tlauncher.ui.settings.Section.DIAGNOSTICS; overlay = Overlay.SETTINGS },
+            )
 
             // overlays inside the body area
             androidx.compose.animation.AnimatedVisibility(
@@ -103,7 +116,7 @@ fun HomeScreen(
                 modifier = Modifier.align(Alignment.BottomEnd),
             ) {
                 com.ahu.tlauncher.ui.settings.SettingsScreen(
-                    state, actions, onClose = { overlay = Overlay.NONE },
+                    state, actions, onClose = { overlay = Overlay.NONE }, initial = settingsStart,
                     modifier = Modifier.width(maxWidth * (1 - SPLIT_FRACTION)).height(maxHeight - STATUS_H).padding(8.dp),
                 )
             }
@@ -153,7 +166,7 @@ fun HomeScreen(
         Dock(
             state, actions,
             overlay = overlay,
-            onOpenSettings = { toggle(Overlay.SETTINGS) },
+            onOpenSettings = { settingsStart = com.ahu.tlauncher.ui.settings.Section.DISPLAY; toggle(Overlay.SETTINGS) },
             onToggleApps = { toggle(Overlay.APPS) },
             onToggleMusic = { toggle(Overlay.MUSIC) },
             onLaunch = { app: AppEntry -> overlay = Overlay.NONE; actions.launch(app) },
@@ -178,11 +191,24 @@ private fun MapReveal(modifier: Modifier, content: @Composable () -> Unit) {
 
 /** Full-width status row floating over the stage and map: link status · date · time. */
 @Composable
-private fun StatusBar(state: HomeUiState, modifier: Modifier) {
+private fun StatusBar(state: HomeUiState, modifier: Modifier, onObdClick: () -> Unit = {}) {
     val time = state.now.format(DateTimeFormatter.ofPattern(if (is24h()) "HH:mm" else "h:mma", Locale.US)).lowercase()
     Box(modifier.padding(horizontal = 20.dp)) {
-        if (com.ahu.tlauncher.obd.ObdDisplay.show(state.obd.status)) ObdBadge(state.obd.status, Modifier.align(Alignment.CenterStart))
-        Text(state.now.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())), style = TType.button, color = T.colors.text, modifier = Modifier.align(Alignment.CenterEnd))
+        if (com.ahu.tlauncher.obd.ObdDisplay.show(state.obd.status)) {
+            ObdBadge(state.obd.status, Modifier.align(Alignment.CenterStart).pressable(onClick = onObdClick))
+        }
+        // right: weather · date
+        Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
+            state.weather?.let { w ->
+                val f = state.settings.tempUnit == com.ahu.tlauncher.data.TempUnit.F
+                val t = if (f) w.tempC * 9 / 5 + 32 else w.tempC
+                Icon(weatherIcon(w), w.kind.name.lowercase().replace('_', ' '), tint = T.colors.text, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("${Math.round(t)}°", style = TType.button, color = T.colors.text)
+                Spacer(Modifier.width(14.dp))
+            }
+            Text(state.now.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())), style = TType.button, color = T.colors.text)
+        }
         // centre: Bluetooth · time · Wi-Fi
         Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
             val (btIcon, btDesc) = when (state.bluetooth) {
@@ -209,6 +235,16 @@ private fun StatusBar(state: HomeUiState, modifier: Modifier) {
             )
         }
     }
+}
+
+private fun weatherIcon(w: com.ahu.tlauncher.system.Weather) = when (w.kind) {
+    com.ahu.tlauncher.system.WeatherKind.CLEAR -> if (w.isDay) Icons.Rounded.WbSunny else Icons.Rounded.NightsStay
+    com.ahu.tlauncher.system.WeatherKind.PARTLY_CLOUDY -> if (w.isDay) Icons.Rounded.WbCloudy else Icons.Rounded.NightsStay
+    com.ahu.tlauncher.system.WeatherKind.CLOUDY -> Icons.Rounded.Cloud
+    com.ahu.tlauncher.system.WeatherKind.FOG -> Icons.Rounded.Dehaze
+    com.ahu.tlauncher.system.WeatherKind.DRIZZLE, com.ahu.tlauncher.system.WeatherKind.RAIN -> Icons.Rounded.Umbrella
+    com.ahu.tlauncher.system.WeatherKind.SNOW -> Icons.Rounded.AcUnit
+    com.ahu.tlauncher.system.WeatherKind.STORM -> Icons.Rounded.Thunderstorm
 }
 
 @Composable

@@ -142,6 +142,8 @@ class MainActivity : ComponentActivity(), HomeActions {
         val volume by app.volume.state.collectAsState()
         val location by app.location.location.collectAsState()
         val update by app.updater.state.collectAsState()
+        val weather by app.weather.weather.collectAsState()
+        val diag by app.obd.diag.collectAsState()
         val dismissedCode by app.updater.dismissedCode.collectAsState()
         val now by produceState(LocalDateTime.now()) {
             while (true) { value = LocalDateTime.now(); delay(1000 - (System.currentTimeMillis() % 1000)) }
@@ -169,6 +171,8 @@ class MainActivity : ComponentActivity(), HomeActions {
             locationLat = location?.latitude, locationLon = location?.longitude, locationPermission = locPerm, gpsSpeedKmh = gpsSpeed,
             bluetoothOn = btOn, bluetooth = bt, wifi = wifi, isDefaultLauncher = isDefault,
             update = update, updateDismissedCode = dismissedCode, appVersion = BuildConfig.VERSION_NAME,
+            weather = weather?.takeIf { System.currentTimeMillis() - it.fetchedAtMs < com.ahu.tlauncher.system.WeatherParser.MAX_AGE_MS },
+            diag = diag,
         )
         TLauncherTheme(dark = dark) { ScaledCanvas { HomeScreen(state, this@MainActivity) } }
     }
@@ -309,6 +313,16 @@ class MainActivity : ComponentActivity(), HomeActions {
         runCatching { pickImage.launch(arrayOf("image/*")) }
     }
 
+    override fun setCarViewShown(view: CarView, shown: Boolean) {
+        lifecycleScope.launch {
+            val cur = app.prefs.settings.first().carViews
+            val next = if (shown) cur + view else cur - view
+            if (next.isNotEmpty()) app.prefs.setCarViews(next)
+        }
+    }
+    override fun setObdExtended(on: Boolean) = app.obd.setExtended(on)
+    override fun readObdCodes() = app.obd.readCodes()
+    override fun clearObdCodes() = app.obd.clearCodes()
     override fun resetCarImage(view: CarView) { lifecycleScope.launch { app.prefs.setCarImage(view, "") } }
 
     // ---------------- helpers ----------------

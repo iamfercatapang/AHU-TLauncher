@@ -24,7 +24,7 @@ class ElmBluetoothSource(private val deviceAddress: String) : ObdSource {
     private val sppUuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
     @SuppressLint("MissingPermission")
-    override fun stream(): Flow<ObdState> = flow {
+    override fun stream(link: ObdLink): Flow<ObdState> = flow {
         var data = ObdData()
         while (coroutineContext.isActive) {
             emit(ObdState(ObdStatus.CONNECTING, data))
@@ -52,6 +52,7 @@ class ElmBluetoothSource(private val deviceAddress: String) : ObdSource {
                 emit(ObdState(ObdStatus.CONNECTED, data))
 
                 var slowTick = 0
+                var extTick = 0
                 while (coroutineContext.isActive) {
                     val speed = ElmParser.speedKmh(send(output, input, "010D"))
                     val rpm = ElmParser.rpm(send(output, input, "010C"))
@@ -61,6 +62,15 @@ class ElmBluetoothSource(private val deviceAddress: String) : ObdSource {
                         val volts = ElmParser.atrv(send(output, input, "ATRV"))
                         data = data.copy(coolantC = coolant ?: data.coolantC, batteryV = volts ?: data.batteryV)
                     }
+                    if (link.extended.value) {
+                        // One extra PID per cycle so speed and RPM stay responsive.
+                        val pid = EXTRA_PIDS[extTick++ % EXTRA_PIDS.size]
+                        if (pid !in data.unsupported) {
+                            val raw = send(output, input, "01$pid")
+                            data = if (ElmParser.noData(raw)) data.copy(unsupported = data.unsupported + pid) else applyExtra(data, pid, raw)
+                        }
+                    }
+                    link.serve { cmd, t -> send(output, input, cmd, t) }
                     emit(ObdState(ObdStatus.CONNECTED, data))
                     delay(150)
                 }
@@ -73,6 +83,21 @@ class ElmBluetoothSource(private val deviceAddress: String) : ObdSource {
             }
         }
     }.flowOn(Dispatchers.IO)
+
+    companion object {
+        val EXTRA_PIDS = listOf("04", "11", "0F", "10", "0E", "06", "07")
+
+        fun applyExtra(d: ObdData, pid: String, raw: String): ObdData = when (pid) {
+            "04" -> d.copy(loadPct = ElmParser.loadPct(raw) ?: d.loadPct)
+            "11" -> d.copy(throttlePct = ElmParser.throttlePct(raw) ?: d.throttlePct)
+            "0F" -> d.copy(intakeC = ElmParser.intakeC(raw) ?: d.intakeC)
+            "10" -> d.copy(mafGs = ElmParser.mafGs(raw) ?: d.mafGs)
+            "0E" -> d.copy(timingDeg = ElmParser.timingDeg(raw) ?: d.timingDeg)
+            "06" -> d.copy(stftPct = ElmParser.fuelTrimPct(raw, "06") ?: d.stftPct)
+            "07" -> d.copy(ltftPct = ElmParser.fuelTrimPct(raw, "07") ?: d.ltftPct)
+            else -> d
+        }
+    }
 
     private suspend fun send(out: OutputStream, input: InputStream, cmd: String, timeoutMs: Long = 1200): String {
         out.write((cmd + "\r").toByteArray())

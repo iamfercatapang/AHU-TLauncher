@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bluetooth
+import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Dock
 import androidx.compose.material.icons.rounded.Info
@@ -73,13 +74,14 @@ enum class Section(val label: String, val icon: ImageVector) {
     DOCK("Dock", Icons.Rounded.Dock),
     NAVIGATION("Navigation", Icons.Rounded.Map),
     OBD("OBD-II", Icons.Rounded.Bluetooth),
+    DIAGNOSTICS("Diagnostics", Icons.Rounded.Build),
     PERMISSIONS("Permissions", Icons.Rounded.Security),
     ABOUT("About", Icons.Rounded.Info),
 }
 
 @Composable
 fun SettingsScreen(state: HomeUiState, actions: HomeActions, onClose: () -> Unit, modifier: Modifier = Modifier, initial: Section = Section.DISPLAY) {
-    var section by rememberSaveable { mutableStateOf(initial) }
+    var section by rememberSaveable(initial) { mutableStateOf(initial) }
     Row(modifier.clip(TShapes.surface).background(T.colors.panel)) {
         Column(Modifier.width(168.dp).fillMaxHeight().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Section.entries.forEach { s ->
@@ -108,6 +110,7 @@ fun SettingsScreen(state: HomeUiState, actions: HomeActions, onClose: () -> Unit
                     Section.DOCK -> DockSection(state, actions)
                     Section.NAVIGATION -> NavigationSection(state, actions)
                     Section.OBD -> ObdSection(state, actions)
+                    Section.DIAGNOSTICS -> DiagnosticsSection(state, actions)
                     Section.PERMISSIONS -> PermissionsSection(state, actions)
                     Section.ABOUT -> AboutSection(state, actions)
                 }
@@ -117,7 +120,7 @@ fun SettingsScreen(state: HomeUiState, actions: HomeActions, onClose: () -> Unit
 }
 
 @Composable
-private fun SettingRow(title: String, subtitle: String? = null, trailing: @Composable () -> Unit) {
+internal fun SettingRow(title: String, subtitle: String? = null, trailing: @Composable () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(title, style = TType.body, color = T.colors.text)
@@ -128,12 +131,12 @@ private fun SettingRow(title: String, subtitle: String? = null, trailing: @Compo
 }
 
 @Composable
-private fun SmallTitle(text: String) {
+internal fun SmallTitle(text: String) {
     Text(text, style = TType.title, color = T.colors.text, modifier = Modifier.padding(top = 16.dp, bottom = 2.dp))
 }
 
 @Composable
-private fun Divider() { Box(Modifier.fillMaxWidth().height(1.dp).background(T.colors.divider)) }
+internal fun Divider() { Box(Modifier.fillMaxWidth().height(1.dp).background(T.colors.divider)) }
 
 @Composable
 private fun DisplaySection(state: HomeUiState, a: HomeActions) {
@@ -150,17 +153,21 @@ private fun DisplaySection(state: HomeUiState, a: HomeActions) {
     Divider()
     SmallTitle("Car images")
     Text(
-        "Tap the car on the home screen to switch between views. Plain white photo backgrounds are removed automatically.",
+        "Choose which views appear on the dashboard; tap the car there to switch between them. Plain white photo backgrounds are removed automatically.",
         style = TType.label, color = T.colors.muted,
     )
     Spacer(Modifier.height(8.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        CarView.entries.forEach { v -> CarSlot(v, s.carImages[v], a, Modifier.weight(1f)) }
+        CarView.entries.forEach { v ->
+            val on = v in s.carViews
+            // The last ticked view can't be turned off.
+            CarSlot(v, s.carImages[v], a, Modifier.weight(1f), shown = on, canToggle = !on || s.carViews.size > 1)
+        }
     }
 }
 
 @Composable
-private fun CarSlot(view: CarView, customUri: String?, a: HomeActions, modifier: Modifier) {
+private fun CarSlot(view: CarView, customUri: String?, a: HomeActions, modifier: Modifier, shown: Boolean = true, canToggle: Boolean = true) {
     val ctx = LocalContext.current
     val preview = androidx.compose.ui.platform.LocalInspectionMode.current
     val src = remember(customUri) {
@@ -185,8 +192,16 @@ private fun CarSlot(view: CarView, customUri: String?, a: HomeActions, modifier:
                 }
             }
         }
-        Text(view.label, style = TType.button, color = T.colors.text)
-        Text(if (customUri != null) "Custom photo" else if (src == null) "Optional" else "Built-in", style = TType.label, color = T.colors.muted)
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(view.label, style = TType.button, color = T.colors.text)
+                Text(if (customUri != null) "Custom photo" else if (src == null) "Optional" else "Built-in", style = TType.label, color = T.colors.muted)
+            }
+            com.ahu.tlauncher.ui.components.TSwitch(
+                shown, { if (canToggle) a.setCarViewShown(view, it) },
+                Modifier.alpha(if (canToggle) 1f else 0.4f),
+            )
+        }
         Spacer(Modifier.height(8.dp))
         PillButton("Change", height = 34.dp, modifier = Modifier.fillMaxWidth(), onClick = { a.pickCarImage(view) })
         if (customUri != null) {
@@ -290,7 +305,7 @@ private fun ObdSection(state: HomeUiState, a: HomeActions) {
         }
     }
     Text(
-        "Shown: speed, engine RPM, coolant temperature, battery voltage (standard OBD-II PIDs supported by petrol cars from ~2008).",
+        "Shown: speed, engine RPM, coolant temperature, battery voltage (standard OBD-II PIDs supported by petrol cars from ~2008). Trouble codes and more live data are under Diagnostics.",
         style = TType.label, color = T.colors.muted, modifier = Modifier.padding(top = 12.dp),
     )
 }

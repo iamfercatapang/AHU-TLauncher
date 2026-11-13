@@ -32,6 +32,8 @@ data class Settings(
     val obdDeviceName: String = "",
     /** User-chosen photo per view (content:// URI); empty = built-in image. */
     val carImages: Map<CarView, String> = emptyMap(),
+    /** Views shown on the dashboard (tap the car to cycle); at least one. */
+    val carViews: Set<CarView> = CarView.entries.toSet(),
     val navApp: NavApp = NavApp.MAPS,
     val carSide: CarSide = CarSide.LEFT,
     val onboardingDone: Boolean = false,
@@ -50,6 +52,7 @@ class Prefs(private val context: Context) {
         val obdAddr = stringPreferencesKey("obd_addr")
         val obdName = stringPreferencesKey("obd_name")
         fun carImage(v: CarView) = stringPreferencesKey("car_image_" + v.name.lowercase())
+        val carViews = stringPreferencesKey("car_views")
         val navApp = stringPreferencesKey("nav_app")
         val carSide = stringPreferencesKey("car_side")
         val onboarding = booleanPreferencesKey("onboarding_done")
@@ -69,6 +72,8 @@ class Prefs(private val context: Context) {
         obdDeviceAddress = this[K.obdAddr] ?: "",
         obdDeviceName = this[K.obdName] ?: "",
         carImages = CarView.entries.mapNotNull { v -> this[K.carImage(v)]?.takeIf { it.isNotBlank() }?.let { v to it } }.toMap(),
+        carViews = this[K.carViews]?.split(',')?.mapNotNull { n -> CarView.entries.firstOrNull { it.name == n } }?.toSet()
+            ?.ifEmpty { null } ?: CarView.entries.toSet(),
         navApp = enumOr(this[K.navApp], NavApp.MAPS),
         carSide = enumOr(this[K.carSide], CarSide.LEFT),
         onboardingDone = this[K.onboarding] ?: false,
@@ -88,6 +93,7 @@ class Prefs(private val context: Context) {
         it[K.obdAddr] = addr; it[K.obdName] = name
     }
     suspend fun setCarImage(view: CarView, uri: String) = context.store.edit { it[K.carImage(view)] = uri }
+    suspend fun setCarViews(views: Set<CarView>) = context.store.edit { it[K.carViews] = views.joinToString(",") { v -> v.name } }
     suspend fun setCarSide(side: CarSide) = context.store.edit { it[K.carSide] = side.name }
     suspend fun setNavApp(a: NavApp) = context.store.edit { it[K.navApp] = a.name }
     suspend fun setOnboardingDone() = context.store.edit { it[K.onboarding] = true }

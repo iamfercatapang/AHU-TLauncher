@@ -19,4 +19,14 @@ class ElmParserTest {
     @Test fun atrvSpaced() = assertEquals(14.1, ElmParser.atrv("14.1 V\r>")!!, 0.001)
     @Test fun moduleVoltage() = assertEquals(13.9, ElmParser.moduleVoltage("41 42 36 4C")!!, 0.01)
     @Test fun multipleEcus() = assertEquals(55, ElmParser.speedKmh("41 0D 37\r41 0D 37\r>"))
+    @Test fun extraPids() {
+        assertEquals(50, ElmParser.loadPct("41 04 80"))
+        assertEquals(100, ElmParser.throttlePct("41 11 FF"))
+        assertEquals(34, ElmParser.intakeC("41 0F 4A"))
+        assertEquals(6.4, ElmParser.mafGs("41 10 02 80")!!, 0.001)
+        assertEquals(21.5, ElmParser.timingDeg("41 0E AB")!!, 0.001)
+        assertEquals(0.0, ElmParser.fuelTrimPct("41 06 80", "06")!!, 0.001)
+        assertEquals(-12.5, ElmParser.fuelTrimPct("41 07 70", "07")!!, 0.001)
+        assertEquals(true, ElmParser.noData("NO DATA\r>"))
+    }
 }

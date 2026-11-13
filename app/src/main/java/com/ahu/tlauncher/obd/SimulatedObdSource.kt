@@ -13,7 +13,9 @@ import kotlin.random.Random
  * warm-up, accelerating through gears (RPM drops at each shift), cruising, braking, idling.
  */
 class SimulatedObdSource(private val tickMs: Long = 250) : ObdSource {
-    override fun stream(): Flow<ObdState> = flow {
+    override fun stream(link: ObdLink): Flow<ObdState> = flow {
+        // A pretend ECU with one stored and one pending code, so Diagnostics can be tried out.
+        var codesCleared = false
         var speed = 0.0
         var coolant = 38.0
         var t = 0.0
@@ -47,6 +49,17 @@ class SimulatedObdSource(private val tickMs: Long = 250) : ObdSource {
             }
             coolant = min(88.0, coolant + 0.12)
             val volts = if (rpm > 0) 14.1 + Random.nextDouble(-0.05, 0.05) else 12.6
+            link.serve { cmd, _ ->
+                delay(400)
+                when (cmd) {
+                    "03" -> if (codesCleared) "43 00" else "43 01 01 71"
+                    "07" -> if (codesCleared) "47 00" else "47 01 04 20"
+                    "0101" -> if (codesCleared) "41 01 00 07 E5 00" else "41 01 81 07 E5 00"
+                    "04" -> { codesCleared = true; "44" }
+                    else -> "NO DATA"
+                }
+            }
+            val load = if (gear == 0) 22.0 else min(95.0, 25 + speed * 0.6 + (if (accel > 0 && target > speed) 25 else 0))
             emit(
                 ObdState(
                     status = ObdStatus.DEMO,
@@ -55,6 +68,13 @@ class SimulatedObdSource(private val tickMs: Long = 250) : ObdSource {
                         rpm = (rpm / 10).roundToInt() * 10,
                         coolantC = coolant.roundToInt(),
                         batteryV = (volts * 10).roundToInt() / 10.0,
+                        loadPct = load.roundToInt(),
+                        throttlePct = if (gear == 0) 0 else (load * 0.7).roundToInt(),
+                        intakeC = 34,
+                        mafGs = (rpm * load / 100.0 / 300.0 * 10).roundToInt() / 10.0,
+                        timingDeg = if (gear == 0) 8.0 else 18.0 + (rpm / 500.0).roundToInt(),
+                        stftPct = (Random.nextDouble(-3.0, 3.0) * 10).roundToInt() / 10.0,
+                        ltftPct = 4.7,
                     ),
                 )
             )

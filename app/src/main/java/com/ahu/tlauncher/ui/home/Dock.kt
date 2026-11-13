@@ -14,7 +14,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Apps
-import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.MusicNote
@@ -51,7 +50,7 @@ fun Dock(
 ) {
     val pinned = state.settings.pinnedApps.mapNotNull { key -> state.apps.firstOrNull { it.key == key } }.take(6)
     Box(modifier.background(DOCK_BG).padding(horizontal = 18.dp)) {
-        DockIcon(Icons.Rounded.DirectionsCar, "Vehicle & settings", overlay == Overlay.SETTINGS, onOpenSettings, Modifier.align(Alignment.CenterStart))
+        DockIcon(com.ahu.tlauncher.ui.components.MpvFrontIcon, "Vehicle & settings", overlay == Overlay.SETTINGS, onOpenSettings, Modifier.align(Alignment.CenterStart))
 
         // centre: pinned apps in full colour, then music + launcher
         Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {

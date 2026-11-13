@@ -30,6 +30,8 @@ data class HomeUiState(
     /** Update toast hidden for this versionCode (user tapped Later). */
     val updateDismissedCode: Int = 0,
     val appVersion: String = "",
+    val weather: com.ahu.tlauncher.system.Weather? = null,
+    val diag: com.ahu.tlauncher.obd.DiagState = com.ahu.tlauncher.obd.DiagState(),
 )
 
 /** Speed shown on screen and used by the map: OBD when it has live data, otherwise GPS. */
@@ -73,6 +75,11 @@ interface HomeActions {
     fun bondedDevices(): List<Pair<String, String>> = emptyList()
     fun pickCarImage(view: com.ahu.tlauncher.data.CarView) {}
     fun resetCarImage(view: com.ahu.tlauncher.data.CarView) {}
+    fun setCarViewShown(view: com.ahu.tlauncher.data.CarView, shown: Boolean) {}
+    // OBD diagnostics
+    fun setObdExtended(on: Boolean) {}
+    fun readObdCodes() {}
+    fun clearObdCodes() {}
 }
 
 object NoopActions : HomeActions

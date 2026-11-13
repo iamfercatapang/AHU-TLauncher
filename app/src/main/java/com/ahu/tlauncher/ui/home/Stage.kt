@@ -168,8 +168,8 @@ fun CarStage(
 @Composable
 private fun SpeedBlock(state: HomeUiState, modifier: Modifier, glideKey: Any) {
     val obdSpeed = if (ObdDisplay.show(state.obd.status)) state.obd.data.speedKmh else null
-    val kmh = state.displaySpeedKmh
-    if (kmh == null) { Spacer(modifier.height(12.dp)); return }
+    // No OBD and no GPS fix yet (e.g. parked indoors): show 0 rather than nothing.
+    val kmh = state.displaySpeedKmh ?: 0
     val mph = state.settings.speedUnit == SpeedUnit.MPH
     val target = if (mph) (kmh * 0.621371).roundToInt() else kmh
     // Count to the new value instead of jumping (tabular figures keep the width steady).
@@ -205,6 +205,12 @@ private val TELL_GREEN = Color(0xFF25CB55)
 private val TELL_BLUE = Color(0xFF3E6AE1)
 private val TELL_RED = Color(0xFFE5484D)
 
+/** The car is drawn a bit smaller than the space allows, leaving air around it. */
+private const val CAR_SCALE = 0.85f
+
+/** Width the three callouts need to sit side by side without overlapping. */
+private val CALLOUT_MIN_W = 330.dp
+
 private data class Callout(val fraction: Float, val label: String, val value: String, val alert: Boolean = false)
 
 /** Car photo (tap to change view) with mirrored floor reflection and data callouts with leader lines. */
@@ -213,9 +219,15 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, glideKey: Any) {
     val ctx = LocalContext.current
     val preview = LocalInspectionMode.current
     val custom = state.settings.carImages
-    val views = remember(custom) {
-        if (preview) listOf(CarSource.Bundled(R.drawable.car_side), CarSource.Bundled(R.drawable.car_front), CarSource.Bundled(R.drawable.car_rear))
-        else CarImages.available(ctx, custom).map { it.second }
+    val shown = state.settings.carViews
+    val views = remember(custom, shown) {
+        val all = if (preview) listOf(
+            com.ahu.tlauncher.data.CarView.SIDE to CarSource.Bundled(R.drawable.car_side),
+            com.ahu.tlauncher.data.CarView.FRONT to CarSource.Bundled(R.drawable.car_front),
+            com.ahu.tlauncher.data.CarView.REAR to CarSource.Bundled(R.drawable.car_rear),
+        ) else CarImages.available(ctx, custom)
+        // Only the views ticked in Settings; fall back to all if none of the ticked ones has an image.
+        (all.filter { it.first in shown }.ifEmpty { all.take(1) }).map { it.second }
     }
     var index by remember(views) { mutableIntStateOf(0) }
     val src = views.getOrNull(index % views.size.coerceAtLeast(1)) ?: CarSource.Illustration
@@ -234,7 +246,9 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, glideKey: Any) {
     )
     val shadowColor = if (T.colors.isDark) Color.Black.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.32f)
 
-    BoxWithConstraints(modifier.pressable(enabled = views.size > 1) { index = (index + 1) % views.size }) {
+    // With a single view there's nothing to cycle: no tap target (and no dimmed "disabled" look).
+    val tap = if (views.size > 1) Modifier.pressable { index = (index + 1) % views.size } else Modifier
+    BoxWithConstraints(modifier.then(tap)) {
         // Turntable-style view switch: the current view eases out to the left while the next
         // comes in from the right (transforms + opacity only; a new tap retargets mid-way).
         AnimatedContent(
@@ -252,24 +266,29 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, glideKey: Any) {
             // The bottom cards overlap the space under the car.
             val calloutH = if (callouts.isEmpty()) 8.dp else 56.dp
             val maxImgH = (maxHeight - calloutH) * (if (callouts.isEmpty()) 0.64f else 0.56f)
-            val imgW = min(maxWidth - 32.dp, maxImgH * ratio)
+            val imgW = min(maxWidth - 32.dp, maxImgH * ratio) * CAR_SCALE
             val imgH = imgW / ratio
             // Contact shadow: spans the bottom 14% of the photo (where the tyres meet the floor) so the
             // densest part sits under the car body and only a soft edge shows around the wheels.
             val shadowH = imgH * 0.14f
+            // Narrow views (front/rear) still get readable callouts: they spread over a wider row,
+            // without leader lines, since most of them wouldn't point at the car.
+            val rowW = if (callouts.isEmpty()) imgW else androidx.compose.ui.unit.max(imgW, min(maxWidth - 16.dp, CALLOUT_MIN_W))
+            val carX = (rowW - imgW) / 2
+            val lines = rowW == imgW
             Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.glideOnChange(glideKey).width(imgW).height(calloutH + imgH)) {
+                Box(Modifier.glideOnChange(glideKey).width(rowW).height(calloutH + imgH)) {
                     // ground shadow, drawn behind the car and anchored to the tyre line
                     Box(
-                        Modifier.offset(x = imgW * 0.06f, y = calloutH + imgH - shadowH).size(imgW * 0.88f, shadowH)
+                        Modifier.offset(x = carX + imgW * 0.06f, y = calloutH + imgH - shadowH).size(imgW * 0.88f, shadowH)
                             .drawBehind {
                                 scale(scaleX = 1f, scaleY = size.height / size.width, pivot = center) {
                                     drawCircle(Brush.radialGradient(listOf(shadowColor, Color.Transparent), center, size.width / 2), size.width / 2, center)
                                 }
                             },
                     )
-                    callouts.forEach { c -> CalloutView(c, imgW, calloutH, imgH) }
-                    Image(painter, "My car", contentScale = ContentScale.Fit, modifier = Modifier.offset(y = calloutH).size(imgW, imgH))
+                    callouts.forEach { c -> CalloutView(c, rowW, calloutH, imgH, lines) }
+                    Image(painter, "My car", contentScale = ContentScale.Fit, modifier = Modifier.offset(x = carX, y = calloutH).size(imgW, imgH))
                 }
                 if (views.size > 1) {
                     Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -301,11 +320,11 @@ private fun rememberCarPainter(src: CarSource): Painter? {
 private fun Size.isSpecified() = width.isFinite() && height.isFinite()
 
 @Composable
-private fun CalloutView(c: Callout, imgW: Dp, calloutH: Dp, imgH: Dp) {
+private fun CalloutView(c: Callout, imgW: Dp, calloutH: Dp, imgH: Dp, line: Boolean) {
     val x = imgW * c.fraction
     val lineTop = 38.dp
     val lineEnd = calloutH + imgH * 0.22f
-    Box(Modifier.offset(x = x - 0.5.dp, y = lineTop).width(1.dp).height(lineEnd - lineTop).background(T.colors.text.copy(alpha = 0.55f)))
+    if (line) Box(Modifier.offset(x = x - 0.5.dp, y = lineTop).width(1.dp).height(lineEnd - lineTop).background(T.colors.text.copy(alpha = 0.55f)))
     Column(Modifier.offset(x = x + 6.dp, y = 0.dp)) {
         Text(c.label, style = TType.caption, color = T.colors.muted, maxLines = 1)
         Text(c.value, style = TType.button, color = if (c.alert) TELL_RED else T.colors.text, maxLines = 1)

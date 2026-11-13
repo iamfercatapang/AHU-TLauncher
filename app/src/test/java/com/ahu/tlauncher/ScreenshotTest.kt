@@ -99,5 +99,25 @@ class ScreenshotTest {
     @Test fun appDrawer() = shot("app_drawer") { HomeScreen(state(), NoopActions, initialOverlay = Overlay.APPS) }
     @Test fun musicPanel() = shot("music_panel") { HomeScreen(state(), NoopActions, initialOverlay = Overlay.MUSIC) }
     @Test fun settings() = shot("settings_display") { HomeScreen(state(), NoopActions, initialOverlay = Overlay.SETTINGS) }
+    @Test fun weatherAndViews() = shot("weather_single_view", dark = false) {
+        val s = state()
+        HomeScreen(
+            s.copy(
+                settings = s.settings.copy(carViews = setOf(com.ahu.tlauncher.data.CarView.FRONT)),
+                weather = com.ahu.tlauncher.system.Weather(31.4, com.ahu.tlauncher.system.WeatherKind.PARTLY_CLOUDY, true, 0),
+            ),
+            NoopActions, initialMapVisible = false,
+        )
+    }
+    @Test fun diagnostics() = shot("settings_diagnostics") {
+        val s = state()
+        HomeScreen(
+            s.copy(
+                obd = s.obd.copy(data = s.obd.data.copy(loadPct = 34, throttlePct = 18, intakeC = 34, mafGs = 6.2, timingDeg = 21.5, stftPct = -1.6, unsupported = setOf("07"))),
+                diag = com.ahu.tlauncher.obd.DiagState(milOn = true, stored = listOf("P0171", "P1349"), pending = emptyList()),
+            ),
+            NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.DIAGNOSTICS,
+        )
+    }
     @Test fun settingsLight() = shot("settings_display_light", dark = false) { HomeScreen(state(), NoopActions, initialOverlay = Overlay.SETTINGS) }
 }
