@@ -83,12 +83,15 @@ fun HomeScreen(
     Column(Modifier.fillMaxSize().background(T.colors.appBg)) {
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val stageW = maxWidth * stageFraction
+            val carRight = state.settings.carSide == com.ahu.tlauncher.data.CarSide.RIGHT && mapVisible
             Row(Modifier.fillMaxSize()) {
+                if (carRight) MapPane(state, actions, Modifier.weight(1f).fillMaxHeight(), controlsOnLeft = true)
                 CarStage(
                     state, actions, expanded = !mapVisible, onToggleMap = { mapVisible = !mapVisible },
+                    handleOnLeft = carRight,
                     modifier = Modifier.width(stageW).fillMaxHeight(),
                 )
-                if (stageFraction < 0.999f) MapPane(state, actions, Modifier.weight(1f).fillMaxHeight())
+                if (!carRight && mapVisible) MapPane(state, actions, Modifier.weight(1f).fillMaxHeight())
             }
             StatusBar(state, Modifier.fillMaxWidth().height(STATUS_H))
 
@@ -165,9 +168,9 @@ private fun StatusBar(state: HomeUiState, modifier: Modifier) {
     val time = state.now.format(DateTimeFormatter.ofPattern(if (is24h()) "HH:mm" else "h:mma", Locale.US)).lowercase()
     Box(modifier.padding(horizontal = 20.dp)) {
         if (com.ahu.tlauncher.obd.ObdDisplay.show(state.obd.status)) ObdBadge(state.obd.status, Modifier.align(Alignment.CenterStart))
-        Text(state.now.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())), style = TType.button, color = T.colors.text, modifier = Modifier.align(Alignment.Center))
-        // right: Bluetooth · time · Wi-Fi
-        Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
+        Text(state.now.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())), style = TType.button, color = T.colors.text, modifier = Modifier.align(Alignment.CenterEnd))
+        // centre: Bluetooth · time · Wi-Fi
+        Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
             val (btIcon, btDesc) = when (state.bluetooth) {
                 BtStatus.CONNECTED -> Icons.Rounded.BluetoothConnected to "Bluetooth connected"
                 BtStatus.ON -> Icons.Rounded.Bluetooth to "Bluetooth on"

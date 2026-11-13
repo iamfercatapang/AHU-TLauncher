@@ -91,6 +91,7 @@ class ScreenshotTest {
     @Test fun updateToast() = shot("update_available") {
         HomeScreen(state().copy(update = com.ahu.tlauncher.update.UpdateState.Available(com.ahu.tlauncher.update.RemoteVersion(12, "1.0.12"))), NoopActions)
     }
+    @Test fun carOnRight() = shot("car_panel_right") { HomeScreen(state().copy(settings = state().settings.copy(carSide = com.ahu.tlauncher.data.CarSide.RIGHT)), NoopActions) }
     @Test fun homeDark() = shot("home_dark") { HomeScreen(state(), NoopActions) }
     @Test fun homeLight() = shot("home_light", dark = false) { HomeScreen(state(), NoopActions) }
     @Test fun homeNavigatingDark() = shot("home_navigating_dark") { HomeScreen(state(nav = true), NoopActions) }

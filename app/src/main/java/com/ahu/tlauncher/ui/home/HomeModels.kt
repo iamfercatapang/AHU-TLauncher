@@ -61,6 +61,7 @@ interface HomeActions {
     fun setSpeedUnit(u: com.ahu.tlauncher.data.SpeedUnit) {}
     fun setTempUnit(u: com.ahu.tlauncher.data.TempUnit) {}
     fun setNavApp(a: com.ahu.tlauncher.data.NavApp) {}
+    fun setCarSide(side: com.ahu.tlauncher.data.CarSide) {}
     fun setHome(addr: String) {}
     fun setWork(addr: String) {}
     fun setObdSource(s: com.ahu.tlauncher.data.ObdSourceType) {}

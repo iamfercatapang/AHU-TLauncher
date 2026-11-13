@@ -113,6 +113,7 @@ fun CarStage(
     expanded: Boolean,
     onToggleMap: () -> Unit,
     modifier: Modifier = Modifier,
+    handleOnLeft: Boolean = false,
 ) {
     Box(modifier.background(stageBrush()).clipToBounds()) {
         Column(Modifier.fillMaxSize().padding(top = STATUS_H)) {
@@ -135,7 +136,7 @@ fun CarStage(
 
         // drag handle on the right edge toggles the map
         Box(
-            Modifier.align(Alignment.CenterEnd).width(28.dp).height(120.dp)
+            Modifier.align(if (handleOnLeft) Alignment.CenterStart else Alignment.CenterEnd).width(28.dp).height(120.dp)
                 .pointerInput(Unit) {
                     var total = 0f
                     detectHorizontalDragGestures(onDragEnd = { if (abs(total) > 24) onToggleMap(); total = 0f }) { _, d -> total += d }

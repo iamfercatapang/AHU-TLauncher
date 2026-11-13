@@ -279,6 +279,7 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun setSpeedUnit(u: SpeedUnit) { lifecycleScope.launch { app.prefs.setSpeedUnit(u) } }
     override fun setTempUnit(u: TempUnit) { lifecycleScope.launch { app.prefs.setTempUnit(u) } }
     override fun setNavApp(a: NavApp) { lifecycleScope.launch { app.prefs.setNavApp(a) } }
+    override fun setCarSide(side: com.ahu.tlauncher.data.CarSide) { lifecycleScope.launch { app.prefs.setCarSide(side) } }
     override fun setHome(addr: String) { lifecycleScope.launch { app.prefs.setHome(addr) } }
     override fun setWork(addr: String) { lifecycleScope.launch { app.prefs.setWork(addr) } }
 

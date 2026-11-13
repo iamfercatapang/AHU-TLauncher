@@ -141,6 +141,9 @@ private fun DisplaySection(state: HomeUiState, a: HomeActions) {
     SettingRow("Appearance", "Auto switches at sunrise and sunset") {
         Segmented(listOf(ThemeMode.AUTO to "Auto", ThemeMode.DARK to "Dark", ThemeMode.LIGHT to "Light"), s.themeMode, a::setTheme)
     }
+    SettingRow("Car panel", "Side of the car next to the map") {
+        Segmented(listOf(com.ahu.tlauncher.data.CarSide.LEFT to "Left", com.ahu.tlauncher.data.CarSide.RIGHT to "Right"), s.carSide, a::setCarSide)
+    }
     Divider()
     SettingRow("Speed") { Segmented(listOf(SpeedUnit.KMH to "km/h", SpeedUnit.MPH to "mph"), s.speedUnit, a::setSpeedUnit) }
     SettingRow("Temperature") { Segmented(listOf(TempUnit.C to "°C", TempUnit.F to "°F"), s.tempUnit, a::setTempUnit) }

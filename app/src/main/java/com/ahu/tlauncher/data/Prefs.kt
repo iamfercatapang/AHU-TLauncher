@@ -16,6 +16,8 @@ enum class SpeedUnit { KMH, MPH }
 enum class TempUnit { C, F }
 enum class ObdSourceType { DEMO, BLUETOOTH }
 enum class NavApp { MAPS, WAZE, ASK }
+/** Which side the car panel sits on in the car + map split view. */
+enum class CarSide { LEFT, RIGHT }
 enum class CarView(val label: String) { SIDE("Side"), FRONT("Front"), REAR("Rear") }
 
 data class Settings(
@@ -31,6 +33,7 @@ data class Settings(
     /** User-chosen photo per view (content:// URI); empty = built-in image. */
     val carImages: Map<CarView, String> = emptyMap(),
     val navApp: NavApp = NavApp.MAPS,
+    val carSide: CarSide = CarSide.LEFT,
     val onboardingDone: Boolean = false,
     val pinnedSeeded: Boolean = false,
 )
@@ -48,6 +51,7 @@ class Prefs(private val context: Context) {
         val obdName = stringPreferencesKey("obd_name")
         fun carImage(v: CarView) = stringPreferencesKey("car_image_" + v.name.lowercase())
         val navApp = stringPreferencesKey("nav_app")
+        val carSide = stringPreferencesKey("car_side")
         val onboarding = booleanPreferencesKey("onboarding_done")
         val pinnedSeeded = booleanPreferencesKey("pinned_seeded")
     }
@@ -66,6 +70,7 @@ class Prefs(private val context: Context) {
         obdDeviceName = this[K.obdName] ?: "",
         carImages = CarView.entries.mapNotNull { v -> this[K.carImage(v)]?.takeIf { it.isNotBlank() }?.let { v to it } }.toMap(),
         navApp = enumOr(this[K.navApp], NavApp.MAPS),
+        carSide = enumOr(this[K.carSide], CarSide.LEFT),
         onboardingDone = this[K.onboarding] ?: false,
         pinnedSeeded = this[K.pinnedSeeded] ?: false,
     )
@@ -83,6 +88,7 @@ class Prefs(private val context: Context) {
         it[K.obdAddr] = addr; it[K.obdName] = name
     }
     suspend fun setCarImage(view: CarView, uri: String) = context.store.edit { it[K.carImage(view)] = uri }
+    suspend fun setCarSide(side: CarSide) = context.store.edit { it[K.carSide] = side.name }
     suspend fun setNavApp(a: NavApp) = context.store.edit { it[K.navApp] = a.name }
     suspend fun setOnboardingDone() = context.store.edit { it[K.onboarding] = true }
 

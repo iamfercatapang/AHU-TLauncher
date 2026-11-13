@@ -94,7 +94,7 @@ private interface MapControls {
 }
 
 @Composable
-fun MapPane(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modifier) {
+fun MapPane(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modifier, controlsOnLeft: Boolean = false) {
     val dark = T.colors.isDark
     val preview = LocalInspectionMode.current
     val ctx = LocalContext.current
@@ -114,7 +114,7 @@ fun MapPane(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modif
 
         // right edge: map controls
         TCard(
-            Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
+            if (controlsOnLeft) Modifier.align(Alignment.CenterStart).padding(start = 12.dp) else Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
             color = T.colors.frost, shape = TShapes.button,
         ) {
             Column(Modifier.padding(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
