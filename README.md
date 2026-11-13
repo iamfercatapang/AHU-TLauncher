@@ -24,7 +24,7 @@ These screenshots are rendered offline, so they show a placeholder street grid a
 - **Volume control** in the dock.
 
 ## Install on the head unit
-1. Download the APK from the latest successful run under **Actions → Build APK → Artifacts** (`app-release.apk`).
+1. On the head unit's browser, open **https://github.com/iamfercatapang/AHU-TLauncher/releases/latest/download/TLauncher.apk**. You can also find it on the [Releases page](https://github.com/iamfercatapang/AHU-TLauncher/releases/latest). Each change to `main` updates this file automatically.
 2. Copy it to the head unit with a USB stick, or download it there, and open it. Allow installing from unknown sources if asked.
 3. Press **Home** and choose **TLauncher → Always**. You can also go to *Settings → Permissions → Default home app*.
 4. Grant the permissions:
