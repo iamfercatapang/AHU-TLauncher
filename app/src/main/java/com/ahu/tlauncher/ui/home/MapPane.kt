@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.SystemClock
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,6 +20,7 @@ import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.location.LocationComponentActivationOptions
 import org.maplibre.android.location.LocationComponentOptions
+import org.maplibre.android.location.OnCameraTrackingChangedListener
 import org.maplibre.android.location.engine.LocationEngineRequest
 import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.location.modes.RenderMode
@@ -169,20 +172,54 @@ private class VectorHandle(val view: MapView) : MapControls {
     var map: MapLibreMap? = null
     var locationActive = false
     var styleUrl = STYLE_LIGHT
+    var mode = DriveCamera.Mode.PARK
+    var following = true
+    var lastTouch = 0L
+    var speedKmh: Int? = null
+    private var appliedMode: DriveCamera.Mode? = null
+    private var appliedZoom = -1.0
+
     override fun zoomIn() { map?.animateCamera(CameraUpdateFactory.zoomIn(), 300) }
     override fun zoomOut() { map?.animateCamera(CameraUpdateFactory.zoomOut(), 300) }
+
+    /** ⊙ button: follow the car again right away, in the current mode. */
     override fun recenter() {
-        val lc = map?.locationComponent ?: return
-        if (!locationActive) return
-        lc.cameraMode = CameraMode.TRACKING_GPS
-        lc.zoomWhileTracking(16.0)
-        lc.tiltWhileTracking(45.0)
+        following = true
+        appliedMode = null
+        apply()
+    }
+
+    /** Drive: heading-up, tilted, zoom by speed. Park: flat, north-up overview. */
+    fun apply() {
+        val m = map ?: return
+        if (!locationActive || !following) return
+        val lc = m.locationComponent
+        if (mode == DriveCamera.Mode.DRIVE) {
+            val z = DriveCamera.zoomFor(speedKmh ?: 30)
+            if (appliedMode != mode) {
+                lc.cameraMode = CameraMode.TRACKING_GPS
+                lc.renderMode = RenderMode.GPS
+                lc.tiltWhileTracking(DriveCamera.DRIVE_TILT, 750)
+                lc.zoomWhileTracking(z, 750); appliedZoom = z
+            } else if (kotlin.math.abs(z - appliedZoom) >= 0.25) {
+                lc.zoomWhileTracking(z, 1200); appliedZoom = z
+            }
+        } else if (appliedMode != mode) {
+            lc.cameraMode = CameraMode.TRACKING
+            lc.renderMode = RenderMode.NORMAL
+            lc.tiltWhileTracking(DriveCamera.PARK_TILT, 750)
+            lc.zoomWhileTracking(DriveCamera.PARK_ZOOM, 750)
+            m.animateCamera(CameraUpdateFactory.bearingTo(0.0), 750)
+            appliedZoom = DriveCamera.PARK_ZOOM
+        }
+        appliedMode = mode
     }
 }
 
 @SuppressLint("MissingPermission")
 @Composable
 private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier): MapControls {
+    val speed = state.displaySpeedKmh
     val ctx = LocalContext.current
     val handle = remember {
         MapLibre.getInstance(ctx)
@@ -194,7 +231,12 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier): Ma
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     LifecycleBinding(handle.view::onStart, handle.view::onResume, handle.view::onPause, handle.view::onStop, handle.view::onDestroy)
     DisposableEffect(handle) {
-        handle.view.getMapAsync { m -> handle.map = m; map = m }
+        handle.view.getMapAsync { m ->
+            handle.map = m; map = m
+            m.addOnCameraMoveStartedListener { reason ->
+                if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) handle.lastTouch = SystemClock.elapsedRealtime()
+            }
+        }
         handle.view.addOnDidFailLoadingMapListener {
             if (handle.styleUrl == STYLE_DARK) { handle.styleUrl = STYLE_LIGHT; handle.map?.setStyle(Style.Builder().fromUri(STYLE_LIGHT)) }
         }
@@ -227,11 +269,36 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier): Ma
                             .build()
                     )
                     lc.isLocationComponentEnabled = true
-                    lc.renderMode = RenderMode.GPS
+                    lc.addOnCameraTrackingChangedListener(object : OnCameraTrackingChangedListener {
+                        override fun onCameraTrackingDismissed() {
+                            handle.following = false
+                            handle.lastTouch = SystemClock.elapsedRealtime()
+                        }
+                        override fun onCameraTrackingChanged(currentMode: Int) = Unit
+                    })
                     handle.locationActive = true
                     handle.recenter()
                 }
             }
+        }
+    }
+    // Speed decides park vs. drive (with hysteresis); starting to drive always resumes following.
+    LaunchedEffect(speed) {
+        handle.speedKmh = speed
+        val next = DriveCamera.nextMode(handle.mode, speed)
+        if (next != handle.mode) {
+            handle.mode = next
+            if (next == DriveCamera.Mode.DRIVE) handle.following = true
+        }
+        handle.apply()
+    }
+    // While driving, re-follow the car 10 s after the last touch.
+    LaunchedEffect(handle) {
+        while (true) {
+            delay(1000)
+            if (!handle.following && handle.mode == DriveCamera.Mode.DRIVE &&
+                SystemClock.elapsedRealtime() - handle.lastTouch >= DriveCamera.REFOLLOW_MS
+            ) handle.recenter()
         }
     }
     AndroidView(factory = { handle.view }, modifier = modifier.clipToBounds())
@@ -256,6 +323,20 @@ private class RasterHandle(val map: org.osmdroid.views.MapView, val me: MyLocati
     override fun zoomIn() { map.controller.zoomIn() }
     override fun zoomOut() { map.controller.zoomOut() }
     override fun recenter() { me?.let { it.enableFollowLocation(); it.myLocation?.let { p -> map.controller.animateTo(p) } } }
+
+    var mode = DriveCamera.Mode.PARK
+    var unfollowedAt = 0L
+
+    /** Drive: heading-up + zoom by speed. Park: north-up at street zoom. */
+    fun apply(speedKmh: Int?) {
+        if (mode == DriveCamera.Mode.DRIVE) {
+            me?.lastFix?.takeIf { it.hasBearing() }?.let { map.mapOrientation = -it.bearing }
+            map.controller.zoomTo(DriveCamera.zoomFor(speedKmh ?: 30), 800L)
+        } else {
+            map.mapOrientation = 0f
+            map.controller.zoomTo(DriveCamera.PARK_ZOOM, 800L)
+        }
+    }
 }
 
 @Composable
@@ -287,6 +368,24 @@ private fun rasterMap(dark: Boolean, state: HomeUiState, modifier: Modifier): Ma
         RasterHandle(map, me)
     }
     LifecycleBinding({}, handle.map::onResume, handle.map::onPause, {}, { handle.me?.disableMyLocation(); handle.map.onDetach() })
+    val speed = state.displaySpeedKmh
+    LaunchedEffect(handle, speed) {
+        val next = DriveCamera.nextMode(handle.mode, speed)
+        if (next != handle.mode && next == DriveCamera.Mode.DRIVE) handle.recenter()
+        handle.mode = next
+        handle.apply(speed)
+    }
+    // While driving, re-follow 10 s after a touch stopped following.
+    LaunchedEffect(handle) {
+        while (true) {
+            delay(1000)
+            val me = handle.me ?: continue
+            if (me.isFollowLocationEnabled) { handle.unfollowedAt = 0L; continue }
+            val now = SystemClock.elapsedRealtime()
+            if (handle.unfollowedAt == 0L) handle.unfollowedAt = now
+            else if (handle.mode == DriveCamera.Mode.DRIVE && now - handle.unfollowedAt >= DriveCamera.REFOLLOW_MS) handle.recenter()
+        }
+    }
     androidx.compose.runtime.key(handle) {
         AndroidView(factory = { handle.map }, modifier = modifier.clipToBounds(), update = { m ->
             m.overlayManager.tilesOverlay.setColorFilter(if (dark) DARK_TILES else null)

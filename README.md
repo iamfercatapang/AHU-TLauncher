@@ -17,7 +17,7 @@ These screenshots are rendered offline, so they show a placeholder street grid a
 - **Your own photos**: you can replace any view from the gallery in *Settings → Display → Car images*. Plain white photo backgrounds are removed automatically.
 - **Engine data from OBD-II**, read through a Bluetooth ELM327 adapter: speed, RPM, coolant temperature and battery voltage. There's no gear or transmission data, since the car is manual. With no adapter connected, all engine data is hidden and the speed comes from GPS. A **Demo** mode in Settings simulates driving data.
 - **Music card**: shows and controls whatever is playing in Spotify, YouTube Music, the radio app and so on.
-- **Map**: a vector map (MapLibre + OpenFreeMap, no API key) with day/night styles and a GPS-following arrow in a tilted driving view.
+- **Map**: a vector map (MapLibre + OpenFreeMap, no API key) with day/night styles. When parked it shows a flat, north-up view. Once you're moving (above ~8 km/h) it switches to a tilted, heading-up driving view that zooms out as speed rises. If you drag the map while driving, it re-centers after 10 s, or straight away with ⊙.
 - **Google Maps / Waze turn-by-turn on the dashboard**: while either app is navigating, the next turn, distance and arrival time appear on the map. Tap the card to open the full app.
 - **Navigate / Home / Work shortcuts** that open Google Maps, Waze, or ask which app to use.
 - **Automatic day and night themes**, switched by sunrise and sunset at your location. You can also force light or dark.

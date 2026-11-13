@@ -32,6 +32,10 @@ data class HomeUiState(
     val appVersion: String = "",
 )
 
+/** Speed shown on screen and used by the map: OBD when it has live data, otherwise GPS. */
+val HomeUiState.displaySpeedKmh: Int?
+    get() = (if (com.ahu.tlauncher.obd.ObdDisplay.show(obd.status)) obd.data.speedKmh else null) ?: gpsSpeedKmh
+
 /** Everything the UI can ask for. Default no-ops keep previews and screenshot tests simple. */
 interface HomeActions {
     fun launch(app: AppEntry) {}

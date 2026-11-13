@@ -152,7 +152,7 @@ fun CarStage(
 @Composable
 private fun SpeedBlock(state: HomeUiState, modifier: Modifier) {
     val obdSpeed = if (ObdDisplay.show(state.obd.status)) state.obd.data.speedKmh else null
-    val kmh = obdSpeed ?: state.gpsSpeedKmh
+    val kmh = state.displaySpeedKmh
     if (kmh == null) { Spacer(modifier.height(12.dp)); return }
     val mph = state.settings.speedUnit == SpeedUnit.MPH
     val speed = if (mph) (kmh * 0.621371).roundToInt() else kmh
@@ -210,7 +210,7 @@ private fun CarHero(state: HomeUiState, modifier: Modifier) {
         d.coolantC?.let { Callout(0.5f, "Coolant", "${if (f) (it * 9 / 5.0 + 32).roundToInt() else it}°${if (f) "F" else "C"}", alert = it >= 105) },
         d.batteryV?.let { Callout(0.82f, "Battery", "%.1f V".format(it), alert = it < 11.8 || it > 15.2) },
     )
-    val shadowColor = if (T.colors.isDark) Color.Black.copy(alpha = 0.55f) else Color.Black.copy(alpha = 0.22f)
+    val shadowColor = if (T.colors.isDark) Color.Black.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.32f)
 
     BoxWithConstraints(modifier.pressable(enabled = views.size > 1) { index = (index + 1) % views.size }) {
         Crossfade(src, animationSpec = TMotion.std(), label = "car") { s ->
@@ -222,12 +222,14 @@ private fun CarHero(state: HomeUiState, modifier: Modifier) {
             val maxImgH = (maxHeight - calloutH) * (if (callouts.isEmpty()) 0.64f else 0.56f)
             val imgW = min(maxWidth - 32.dp, maxImgH * ratio)
             val imgH = imgW / ratio
-            val shadowH = imgH * 0.16f
+            // Contact shadow: spans the bottom 14% of the photo (where the tyres meet the floor) so the
+            // densest part sits under the car body and only a soft edge shows around the wheels.
+            val shadowH = imgH * 0.14f
             Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.width(imgW).height(calloutH + imgH + shadowH * 0.4f)) {
-                    // ground shadow, centred under the wheels
+                Box(Modifier.width(imgW).height(calloutH + imgH)) {
+                    // ground shadow, drawn behind the car and anchored to the tyre line
                     Box(
-                        Modifier.offset(x = imgW * 0.04f, y = calloutH + imgH - shadowH * 0.6f).size(imgW * 0.92f, shadowH)
+                        Modifier.offset(x = imgW * 0.06f, y = calloutH + imgH - shadowH).size(imgW * 0.88f, shadowH)
                             .drawBehind {
                                 scale(scaleX = 1f, scaleY = size.height / size.width, pivot = center) {
                                     drawCircle(Brush.radialGradient(listOf(shadowColor, Color.Transparent), center, size.width / 2), size.width / 2, center)
