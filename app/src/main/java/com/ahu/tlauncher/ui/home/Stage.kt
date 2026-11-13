@@ -2,7 +2,17 @@ package com.ahu.tlauncher.ui.home
 
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import com.ahu.tlauncher.ui.components.glideOnChange
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
@@ -117,20 +127,26 @@ fun CarStage(
 ) {
     Box(modifier.background(stageBrush()).clipToBounds()) {
         Column(Modifier.fillMaxSize().padding(top = STATUS_H)) {
-            SpeedBlock(state, Modifier.fillMaxWidth())
-            CarHero(state, Modifier.fillMaxWidth().weight(1f))
+            SpeedBlock(state, Modifier.fillMaxWidth(), glideKey = expanded)
+            CarHero(state, Modifier.fillMaxWidth().weight(1f), glideKey = expanded)
         }
         Telltales(state, Modifier.align(Alignment.TopStart).padding(start = 18.dp, top = STATUS_H + 8.dp))
 
         // bottom cards overlap the reflection, as in the reference layout
         Box(Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 10.dp)) {
-            if (expanded) {
-                Row(Modifier.widthIn(max = 660.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    MusicCard(state, actions, Modifier.weight(1.6f))
-                    NavigateCard(actions, Modifier.weight(1f))
+            AnimatedContent(
+                expanded,
+                transitionSpec = { (fadeIn(TMotion.enter()) togetherWith fadeOut(tween(120, easing = TMotion.EaseOut))).using(SizeTransform(clip = false) { _, _ -> snap() }) },
+                label = "cards",
+            ) { full ->
+                if (full) {
+                    Row(Modifier.widthIn(max = 660.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        MusicCard(state, actions, Modifier.weight(1.6f))
+                        NavigateCard(actions, Modifier.weight(1f))
+                    }
+                } else {
+                    CardPager(state, actions)
                 }
-            } else {
-                CardPager(state, actions)
             }
         }
 
@@ -150,14 +166,16 @@ fun CarStage(
 }
 
 @Composable
-private fun SpeedBlock(state: HomeUiState, modifier: Modifier) {
+private fun SpeedBlock(state: HomeUiState, modifier: Modifier, glideKey: Any) {
     val obdSpeed = if (ObdDisplay.show(state.obd.status)) state.obd.data.speedKmh else null
     val kmh = state.displaySpeedKmh
     if (kmh == null) { Spacer(modifier.height(12.dp)); return }
     val mph = state.settings.speedUnit == SpeedUnit.MPH
-    val speed = if (mph) (kmh * 0.621371).roundToInt() else kmh
+    val target = if (mph) (kmh * 0.621371).roundToInt() else kmh
+    // Count to the new value instead of jumping (tabular figures keep the width steady).
+    val speed by animateIntAsState(target, TMotion.count(), label = "speed")
     Column(modifier.padding(top = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(speed.toString(), style = TType.speed, color = T.colors.text, textAlign = TextAlign.Center)
+        Text(speed.toString(), modifier = Modifier.glideOnChange(glideKey), style = TType.speed, color = T.colors.text, textAlign = TextAlign.Center)
         Text(
             (if (mph) "mph" else "km/h") + if (obdSpeed == null) " · GPS" else "",
             style = TType.label, color = T.colors.muted, modifier = Modifier.offset(y = (-6).dp),
@@ -191,7 +209,7 @@ private data class Callout(val fraction: Float, val label: String, val value: St
 
 /** Car photo (tap to change view) with mirrored floor reflection and data callouts with leader lines. */
 @Composable
-private fun CarHero(state: HomeUiState, modifier: Modifier) {
+private fun CarHero(state: HomeUiState, modifier: Modifier, glideKey: Any) {
     val ctx = LocalContext.current
     val preview = LocalInspectionMode.current
     val custom = state.settings.carImages
@@ -205,16 +223,30 @@ private fun CarHero(state: HomeUiState, modifier: Modifier) {
     val showObd = ObdDisplay.show(state.obd.status)
     val d = state.obd.data
     val f = state.settings.tempUnit == TempUnit.F
+    // Readouts count to new values rather than jumping.
+    val rpm by animateIntAsState(d.rpm ?: 0, TMotion.count(), label = "rpm")
+    val coolant by animateIntAsState(d.coolantC ?: 0, TMotion.count(), label = "coolant")
+    val volts by animateFloatAsState((d.batteryV ?: 0.0).toFloat(), TMotion.count(), label = "volts")
     val callouts = if (!showObd) emptyList() else listOfNotNull(
-        d.rpm?.let { Callout(0.2f, "Engine", "%,d rpm".format(it)) },
-        d.coolantC?.let { Callout(0.5f, "Coolant", "${if (f) (it * 9 / 5.0 + 32).roundToInt() else it}°${if (f) "F" else "C"}", alert = it >= 105) },
-        d.batteryV?.let { Callout(0.82f, "Battery", "%.1f V".format(it), alert = it < 11.8 || it > 15.2) },
+        d.rpm?.let { Callout(0.2f, "Engine", "%,d rpm".format(rpm)) },
+        d.coolantC?.let { Callout(0.5f, "Coolant", "${if (f) (coolant * 9 / 5.0 + 32).roundToInt() else coolant}°${if (f) "F" else "C"}", alert = it >= 105) },
+        d.batteryV?.let { Callout(0.82f, "Battery", "%.1f V".format(volts), alert = it < 11.8 || it > 15.2) },
     )
     val shadowColor = if (T.colors.isDark) Color.Black.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.32f)
 
     BoxWithConstraints(modifier.pressable(enabled = views.size > 1) { index = (index + 1) % views.size }) {
-        Crossfade(src, animationSpec = TMotion.std(), label = "car") { s ->
-            val painter = rememberCarPainter(s) ?: return@Crossfade
+        // Turntable-style view switch: the current view eases out to the left while the next
+        // comes in from the right (transforms + opacity only; a new tap retargets mid-way).
+        AnimatedContent(
+            src,
+            transitionSpec = {
+                val enter = slideInHorizontally(TMotion.enter()) { it / 10 } + fadeIn(TMotion.enter()) + scaleIn(TMotion.enter(), initialScale = 0.97f)
+                val exit = slideOutHorizontally(tween(160, easing = TMotion.EaseOut)) { -it / 10 } + fadeOut(tween(160, easing = TMotion.EaseOut))
+                (enter togetherWith exit).using(SizeTransform(clip = false) { _, _ -> snap() }) // no per-frame re-layout
+            },
+            label = "car",
+        ) { s ->
+            val painter = rememberCarPainter(s) ?: return@AnimatedContent
             val ratio = painter.intrinsicSize.let { if (it.isSpecified() && it.height > 0) it.width / it.height else 2f }
             // Callout zone on top (only with OBD data), then the car on a soft ground shadow.
             // The bottom cards overlap the space under the car.
@@ -226,7 +258,7 @@ private fun CarHero(state: HomeUiState, modifier: Modifier) {
             // densest part sits under the car body and only a soft edge shows around the wheels.
             val shadowH = imgH * 0.14f
             Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.width(imgW).height(calloutH + imgH)) {
+                Box(Modifier.glideOnChange(glideKey).width(imgW).height(calloutH + imgH)) {
                     // ground shadow, drawn behind the car and anchored to the tyre line
                     Box(
                         Modifier.offset(x = imgW * 0.06f, y = calloutH + imgH - shadowH).size(imgW * 0.88f, shadowH)

@@ -85,13 +85,13 @@ fun HomeScreen(
             val stageW = maxWidth * stageFraction
             val carRight = state.settings.carSide == com.ahu.tlauncher.data.CarSide.RIGHT && mapVisible
             Row(Modifier.fillMaxSize()) {
-                if (carRight) MapPane(state, actions, Modifier.weight(1f).fillMaxHeight(), controlsOnLeft = true)
+                if (carRight) MapReveal(Modifier.weight(1f).fillMaxHeight()) { MapPane(state, actions, Modifier.fillMaxSize(), controlsOnLeft = true) }
                 CarStage(
                     state, actions, expanded = !mapVisible, onToggleMap = { mapVisible = !mapVisible },
                     handleOnLeft = carRight,
                     modifier = Modifier.width(stageW).fillMaxHeight(),
                 )
-                if (!carRight && mapVisible) MapPane(state, actions, Modifier.weight(1f).fillMaxHeight())
+                if (!carRight && mapVisible) MapReveal(Modifier.weight(1f).fillMaxHeight()) { MapPane(state, actions, Modifier.fillMaxSize()) }
             }
             StatusBar(state, Modifier.fillMaxWidth().height(STATUS_H))
 
@@ -159,6 +159,20 @@ fun HomeScreen(
             onLaunch = { app: AppEntry -> overlay = Overlay.NONE; actions.launch(app) },
             modifier = Modifier.fillMaxWidth().height(DOCK_H),
         )
+    }
+}
+
+/**
+ * When the map comes back, it fades in from the canvas colour. A cover drawn above the map is
+ * faded out, because the map renders in its own surface and ignores alpha on itself.
+ */
+@Composable
+private fun MapReveal(modifier: Modifier, content: @Composable () -> Unit) {
+    val cover = remember { androidx.compose.animation.core.Animatable(1f) }
+    LaunchedEffect(Unit) { cover.animateTo(0f, TMotion.enter()) }
+    Box(modifier) {
+        content()
+        if (cover.value > 0f) Box(Modifier.fillMaxSize().background(T.colors.appBg.copy(alpha = cover.value)))
     }
 }
 
