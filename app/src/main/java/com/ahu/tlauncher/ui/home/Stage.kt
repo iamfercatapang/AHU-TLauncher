@@ -187,8 +187,11 @@ private fun SpeedBlock(state: HomeUiState, modifier: Modifier, glideKey: Any) {
 @Composable
 private fun Telltales(state: HomeUiState, modifier: Modifier) {
     val d = state.obd.data
-    if (!ObdDisplay.show(state.obd.status)) return
+    val obd = ObdDisplay.show(state.obd.status)
     val items = buildList {
+        // Lights on (head unit ILL wire): green, like the cluster's dipped-beam lamp.
+        if (state.lights.on) add(Triple(com.ahu.tlauncher.ui.components.LowBeamIcon, TELL_GREEN, "Headlights on"))
+        if (!obd) return@buildList
         if (state.obd.status == ObdStatus.CONNECTED) add(Triple(Icons.Rounded.SettingsInputComponent, TELL_GREEN, "OBD connected"))
         d.coolantC?.let {
             if (it < 50) add(Triple(Icons.Rounded.Thermostat, TELL_BLUE, "Engine cold"))

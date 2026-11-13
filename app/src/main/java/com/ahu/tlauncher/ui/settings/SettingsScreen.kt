@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Dock
 import androidx.compose.material.icons.rounded.Info
@@ -75,6 +76,7 @@ enum class Section(val label: String, val icon: ImageVector) {
     NAVIGATION("Navigation", Icons.Rounded.Map),
     OBD("OBD-II", Icons.Rounded.Bluetooth),
     DIAGNOSTICS("Diagnostics", Icons.Rounded.Build),
+    ANDROID_AUTO("Android Auto", Icons.Rounded.PhoneAndroid),
     PERMISSIONS("Permissions", Icons.Rounded.Security),
     ABOUT("About", Icons.Rounded.Info),
 }
@@ -111,6 +113,7 @@ fun SettingsScreen(state: HomeUiState, actions: HomeActions, onClose: () -> Unit
                     Section.NAVIGATION -> NavigationSection(state, actions)
                     Section.OBD -> ObdSection(state, actions)
                     Section.DIAGNOSTICS -> DiagnosticsSection(state, actions)
+                    Section.ANDROID_AUTO -> AndroidAutoSection(state, actions)
                     Section.PERMISSIONS -> PermissionsSection(state, actions)
                     Section.ABOUT -> AboutSection(state, actions)
                 }
@@ -147,6 +150,8 @@ private fun DisplaySection(state: HomeUiState, a: HomeActions) {
     SettingRow("Car panel", "Side of the car next to the map") {
         Segmented(listOf(com.ahu.tlauncher.data.CarSide.LEFT to "Left", com.ahu.tlauncher.data.CarSide.RIGHT to "Right"), s.carSide, a::setCarSide)
     }
+    Divider()
+    HeadlightSetup(state, a)
     Divider()
     SettingRow("Speed") { Segmented(listOf(SpeedUnit.KMH to "km/h", SpeedUnit.MPH to "mph"), s.speedUnit, a::setSpeedUnit) }
     SettingRow("Temperature") { Segmented(listOf(TempUnit.C to "°C", TempUnit.F to "°F"), s.tempUnit, a::setTempUnit) }
@@ -323,6 +328,15 @@ private fun PermissionsSection(state: HomeUiState, a: HomeActions) {
     SettingRow("Location", "Map position and automatic day/night") {
         if (!state.locationPermission) PillButton("Allow", onClick = a::requestLocation) else Text("On", style = TType.button, color = T.colors.muted)
     }
+    Divider()
+    SettingRow("Phone calls", "Answer and end Bluetooth calls from the dashboard") {
+        if (!state.callPermission) PillButton("Allow", onClick = a::requestCallPermission) else Text("On", style = TType.button, color = T.colors.muted)
+    }
+    Text(
+        "Calls are read from the head unit's phone app notification when it has Answer / Hang up buttons, otherwise from Android's call system. " +
+            "Last call notification came from: ${state.callSource ?: "none yet"}.",
+        style = TType.label, color = T.colors.muted, modifier = Modifier.padding(top = 4.dp),
+    )
 }
 
 @Composable

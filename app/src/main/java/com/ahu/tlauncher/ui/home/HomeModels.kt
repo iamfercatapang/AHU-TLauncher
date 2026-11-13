@@ -8,6 +8,16 @@ import com.ahu.tlauncher.obd.ObdState
 import com.ahu.tlauncher.system.VolumeState
 import java.time.LocalDateTime
 
+/** The call shown on the dashboard. */
+data class CallUi(
+    val ringing: Boolean,
+    val caller: String,
+    /** When the call was answered (epoch ms), for the timer. */
+    val startedAtMs: Long?,
+    val muted: Boolean = false,
+    val canSwitchAudio: Boolean = false,
+)
+
 data class HomeUiState(
     val settings: Settings = Settings(),
     val obd: ObdState = ObdState(),
@@ -32,6 +42,16 @@ data class HomeUiState(
     val appVersion: String = "",
     val weather: com.ahu.tlauncher.system.Weather? = null,
     val diag: com.ahu.tlauncher.obd.DiagState = com.ahu.tlauncher.obd.DiagState(),
+    val lights: com.ahu.tlauncher.system.LightsState = com.ahu.tlauncher.system.LightsState(),
+    val call: CallUi? = null,
+    val callPermission: Boolean = false,
+    /** Package that last posted a call notification (Settings readout). */
+    val callSource: String? = null,
+    val aa: com.ahu.tlauncher.system.AaState = com.ahu.tlauncher.system.AaState.Idle,
+    /** Name of the installed Android Auto receiver app, null if none. */
+    val aaReceiver: String? = null,
+    /** "Android Auto ready" prompt dismissed for this network. */
+    val aaDismissed: Boolean = false,
 )
 
 /** Speed shown on screen and used by the map: OBD when it has live data, otherwise GPS. */
@@ -80,6 +100,22 @@ interface HomeActions {
     fun setObdExtended(on: Boolean) {}
     fun readObdCodes() {}
     fun clearObdCodes() {}
+    // headlights (ILL)
+    fun lightsLearnOff() {}
+    /** Returns a message describing the result. */
+    fun lightsLearnOn(): String = ""
+    fun lightsDisable() {}
+    // calls
+    fun answerCall() {}
+    fun endCall() {}
+    fun toggleCallMute() {}
+    fun switchCallAudio() {}
+    fun requestCallPermission() {}
+    // Android Auto
+    fun openAndroidAuto() {}
+    fun dismissAndroidAuto() {}
+    fun setAaDetect(on: Boolean) {}
+    fun getHeadunitReloaded() {}
 }
 
 object NoopActions : HomeActions

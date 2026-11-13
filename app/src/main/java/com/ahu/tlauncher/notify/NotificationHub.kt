@@ -28,6 +28,9 @@ data class MediaInfo(
     val speed: Float,
 )
 
+/** A call notification plus its button intents. */
+data class CallCardState(val info: CallInfo, val intents: Map<CallAction, PendingIntent>, val contentIntent: PendingIntent?, val firstSeenMs: Long)
+
 data class NavCardState(val info: NavInfo, val icon: Bitmap?, val contentIntent: PendingIntent?)
 
 /** Central place for media-session and navigation-notification state. */
@@ -47,6 +50,13 @@ object NotificationHub {
     private var sessionsListenerRegistered = false
     private var listenerComponent: ComponentName? = null
     private val navByKey = LinkedHashMap<String, NavCardState>()
+    private val callByKey = LinkedHashMap<String, CallCardState>()
+
+    private val _call = MutableStateFlow<CallCardState?>(null)
+    val call: StateFlow<CallCardState?> = _call.asStateFlow()
+
+    /** Package of the last app that posted a call notification (shown in Settings to help debugging). */
+    @Volatile var lastCallPackage: String? = null; private set
 
     fun hasAccess(context: Context): Boolean =
         NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
@@ -140,4 +150,24 @@ object NotificationHub {
         _nav.value = navByKey.values.lastOrNull()
     }
     internal fun clearNav() { navByKey.clear(); _nav.value = null }
+
+    // --- call notifications ---
+    internal fun onCallPosted(key: String, state: CallCardState) {
+        lastCallPackage = state.info.packageName
+        val prev = callByKey.remove(key)
+        // Keep the time we first saw the call as answered, for the in-call timer.
+        val keep = if (prev != null && prev.info.phase == state.info.phase) state.copy(firstSeenMs = prev.firstSeenMs) else state
+        callByKey[key] = keep
+        _call.value = keep
+    }
+    internal fun onCallRemoved(key: String) {
+        if (callByKey.remove(key) != null) _call.value = callByKey.values.lastOrNull()
+    }
+    internal fun clearCalls() { callByKey.clear(); _call.value = null }
+
+    /** Presses a button on the call notification. False if it has no such button. */
+    fun callAction(a: CallAction): Boolean {
+        val pi = _call.value?.intents?.get(a) ?: return false
+        return runCatching { pi.send(); true }.getOrDefault(false)
+    }
 }

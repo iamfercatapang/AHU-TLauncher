@@ -36,6 +36,10 @@ data class Settings(
     val carViews: Set<CarView> = CarView.entries.toSet(),
     val navApp: NavApp = NavApp.MAPS,
     val carSide: CarSide = CarSide.LEFT,
+    /** How the head unit reports its ILL (lights-on) wire, see LightsSource.encode(). */
+    val lightsSource: String = "off",
+    /** Look for the phone's Android Auto head unit server on Wi-Fi. */
+    val aaDetect: Boolean = true,
     val onboardingDone: Boolean = false,
     val pinnedSeeded: Boolean = false,
 )
@@ -55,6 +59,8 @@ class Prefs(private val context: Context) {
         val carViews = stringPreferencesKey("car_views")
         val navApp = stringPreferencesKey("nav_app")
         val carSide = stringPreferencesKey("car_side")
+        val lights = stringPreferencesKey("lights_source")
+        val aaDetect = booleanPreferencesKey("aa_detect")
         val onboarding = booleanPreferencesKey("onboarding_done")
         val pinnedSeeded = booleanPreferencesKey("pinned_seeded")
     }
@@ -76,6 +82,8 @@ class Prefs(private val context: Context) {
             ?.ifEmpty { null } ?: CarView.entries.toSet(),
         navApp = enumOr(this[K.navApp], NavApp.MAPS),
         carSide = enumOr(this[K.carSide], CarSide.LEFT),
+        lightsSource = this[K.lights] ?: "off",
+        aaDetect = this[K.aaDetect] ?: true,
         onboardingDone = this[K.onboarding] ?: false,
         pinnedSeeded = this[K.pinnedSeeded] ?: false,
     )
@@ -94,6 +102,8 @@ class Prefs(private val context: Context) {
     }
     suspend fun setCarImage(view: CarView, uri: String) = context.store.edit { it[K.carImage(view)] = uri }
     suspend fun setCarViews(views: Set<CarView>) = context.store.edit { it[K.carViews] = views.joinToString(",") { v -> v.name } }
+    suspend fun setLightsSource(s: String) = context.store.edit { it[K.lights] = s }
+    suspend fun setAaDetect(on: Boolean) = context.store.edit { it[K.aaDetect] = on }
     suspend fun setCarSide(side: CarSide) = context.store.edit { it[K.carSide] = side.name }
     suspend fun setNavApp(a: NavApp) = context.store.edit { it[K.navApp] = a.name }
     suspend fun setOnboardingDone() = context.store.edit { it[K.onboarding] = true }

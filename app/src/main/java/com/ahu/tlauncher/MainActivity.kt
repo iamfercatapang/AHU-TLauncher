@@ -24,6 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -75,6 +76,11 @@ class MainActivity : ComponentActivity(), HomeActions {
             lifecycleScope.launch { app.prefs.setCarImage(view, uri.toString()) }
         }
     }
+    private val phonePermission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { resumeTick++ }
+    private var lightsOffSnapshot: com.ahu.tlauncher.system.LightsSnapshot? = null
+    private var callMuted by mutableStateOf(false)
+    private var callAnsweredAt by mutableStateOf<Long?>(null)
+    private var aaDismissedOn by mutableStateOf<String?>(null)
     private val roleRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { resumeTick++ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -108,12 +114,15 @@ class MainActivity : ComponentActivity(), HomeActions {
         app.location.start()
         app.location.setFast(true)
         app.updater.checkIfStale()
+        app.lights.refresh()
+        app.androidAuto.setActive(true)
         resumeTick++
     }
 
     override fun onPause() {
         super.onPause()
         app.location.setFast(false)
+        app.androidAuto.setActive(false)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -144,6 +153,9 @@ class MainActivity : ComponentActivity(), HomeActions {
         val update by app.updater.state.collectAsState()
         val weather by app.weather.weather.collectAsState()
         val diag by app.obd.diag.collectAsState()
+        val lights by app.lights.state.collectAsState()
+        val notifCall by NotificationHub.call.collectAsState()
+        val aa by app.androidAuto.state.collectAsState()
         val dismissedCode by app.updater.dismissedCode.collectAsState()
         val now by produceState(LocalDateTime.now()) {
             while (true) { value = LocalDateTime.now(); delay(1000 - (System.currentTimeMillis() % 1000)) }
@@ -165,6 +177,24 @@ class MainActivity : ComponentActivity(), HomeActions {
             WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = !dark
         }
 
+        // Calls: the phone app's notification if there is one, else Android's call system (polled each second).
+        val telecom = remember(now) { app.calls.telecomState() }
+        val n = notifCall
+        val ringing = n?.info?.phase == com.ahu.tlauncher.notify.CallPhase.RINGING || (n == null && telecom == com.ahu.tlauncher.system.TelecomCall.RINGING)
+        val callActive = n != null || telecom != com.ahu.tlauncher.system.TelecomCall.NONE
+        LaunchedEffect(callActive, ringing) {
+            if (!callActive) { callAnsweredAt = null; callMuted = false }
+            else if (!ringing && callAnsweredAt == null) callAnsweredAt = n?.info?.chronometerBaseMs ?: System.currentTimeMillis()
+        }
+        val call = if (!callActive) null else com.ahu.tlauncher.ui.home.CallUi(
+            ringing = ringing,
+            caller = n?.info?.caller ?: if (ringing) "Incoming call" else "Call in progress",
+            startedAtMs = if (ringing) null else callAnsweredAt ?: n?.info?.chronometerBaseMs,
+            muted = callMuted,
+            canSwitchAudio = n?.info?.actions?.containsKey(com.ahu.tlauncher.notify.CallAction.AUDIO_SWITCH) == true,
+        )
+        val aaReceiver = remember(tick) { app.androidAuto.receiverPackage()?.let { app.androidAuto.receiverLabel(it) } }
+        val callPerm = remember(tick) { app.calls.hasPermissions() }
         val state = HomeUiState(
             settings = settings, obd = obd, media = media, nav = nav, notificationAccess = access,
             apps = apps, volume = volume, now = now,
@@ -173,6 +203,10 @@ class MainActivity : ComponentActivity(), HomeActions {
             update = update, updateDismissedCode = dismissedCode, appVersion = BuildConfig.VERSION_NAME,
             weather = weather?.takeIf { System.currentTimeMillis() - it.fetchedAtMs < com.ahu.tlauncher.system.WeatherParser.MAX_AGE_MS },
             diag = diag,
+            lights = lights,
+            call = call, callPermission = callPerm, callSource = remember(notifCall) { NotificationHub.lastCallPackage },
+            aa = aa, aaReceiver = aaReceiver,
+            aaDismissed = (aa as? com.ahu.tlauncher.system.AaState.Ready)?.gateway?.let { it == aaDismissedOn } == true,
         )
         TLauncherTheme(dark = dark) { ScaledCanvas { HomeScreen(state, this@MainActivity) } }
     }
@@ -320,6 +354,41 @@ class MainActivity : ComponentActivity(), HomeActions {
             if (next.isNotEmpty()) app.prefs.setCarViews(next)
         }
     }
+    // ---- headlights (ILL)
+    override fun lightsLearnOff() { lightsOffSnapshot = app.lights.snapshot() }
+    override fun lightsLearnOn(): String {
+        val off = lightsOffSnapshot ?: return "Start again: switch the lights off first."
+        val src = com.ahu.tlauncher.system.LightsLogic.learn(off, app.lights.snapshot())
+        lightsOffSnapshot = null
+        if (src == null) return "No signal changed. Your head unit doesn't seem to share the ILL wire with apps."
+        lifecycleScope.launch { app.prefs.setLightsSource(src.encode()) }
+        return "Found: ${src.label()}"
+    }
+    override fun lightsDisable() { lifecycleScope.launch { app.prefs.setLightsSource("off") } }
+
+    // ---- calls
+    override fun answerCall() = app.calls.answer()
+    override fun endCall() = app.calls.end(ringing = NotificationHub.call.value?.info?.phase == com.ahu.tlauncher.notify.CallPhase.RINGING ||
+        (NotificationHub.call.value == null && app.calls.telecomState() == com.ahu.tlauncher.system.TelecomCall.RINGING))
+    override fun toggleCallMute() { callMuted = app.calls.toggleMute(callMuted) }
+    override fun switchCallAudio() { app.calls.switchAudio() }
+    override fun requestCallPermission() {
+        phonePermission.launch(arrayOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.ANSWER_PHONE_CALLS))
+    }
+
+    // ---- Android Auto (Headunit Reloaded)
+    override fun openAndroidAuto() {
+        val pkg = app.androidAuto.receiverPackage() ?: return getHeadunitReloaded()
+        if (app.apps.launchPackage(pkg)) app.androidAuto.reset()
+    }
+    override fun dismissAndroidAuto() { aaDismissedOn = (app.androidAuto.state.value as? com.ahu.tlauncher.system.AaState.Ready)?.gateway }
+    override fun setAaDetect(on: Boolean) { lifecycleScope.launch { app.prefs.setAaDetect(on) } }
+    override fun getHeadunitReloaded() {
+        if (!startSafely(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=gb.xxy.hr")))) {
+            startSafely(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=gb.xxy.hr")))
+        }
+    }
+
     override fun setObdExtended(on: Boolean) = app.obd.setExtended(on)
     override fun readObdCodes() = app.obd.readCodes()
     override fun clearObdCodes() = app.obd.clearCodes()

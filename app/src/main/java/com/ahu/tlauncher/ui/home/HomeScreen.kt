@@ -147,8 +147,30 @@ fun HomeScreen(
                     modifier = Modifier.width(maxWidth * 0.74f).height(maxHeight * 0.8f).padding(bottom = 10.dp),
                 )
             }
+            // Android Auto ready (phone's head unit server found on its hotspot)
             androidx.compose.animation.AnimatedVisibility(
-                visible = showUpdateToast(state.update, state.updateDismissedCode) && overlay == Overlay.NONE,
+                visible = state.aa is com.ahu.tlauncher.system.AaState.Ready && !state.aaDismissed && state.call == null,
+                enter = fadeIn(TMotion.enter()), exit = fadeOut(TMotion.std()),
+                // Over the map (never over the speed); at the bottom when the car is full screen.
+                modifier = if (!mapVisible) Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp)
+                else if (state.settings.carSide == com.ahu.tlauncher.data.CarSide.RIGHT) Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = STATUS_H + 6.dp)
+                else Modifier.align(Alignment.TopEnd).padding(end = 16.dp, top = STATUS_H + 6.dp),
+            ) {
+                AndroidAutoPrompt(state.aaReceiver, actions)
+            }
+            // Calls sit above everything else in the body.
+            androidx.compose.animation.AnimatedVisibility(
+                visible = state.call != null,
+                enter = fadeIn(TMotion.enter()), exit = fadeOut(TMotion.std()),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp),
+            ) {
+                // Keep showing the last call while fading out.
+                val last = remember { arrayOfNulls<CallUi>(1) }
+                if (state.call != null) last[0] = state.call
+                last[0]?.let { CallCard(it, actions) }
+            }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showUpdateToast(state.update, state.updateDismissedCode) && overlay == Overlay.NONE && state.call == null,
                 enter = fadeIn(TMotion.std()), exit = fadeOut(TMotion.std()),
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
             ) {

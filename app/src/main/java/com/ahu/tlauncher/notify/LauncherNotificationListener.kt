@@ -19,10 +19,11 @@ class LauncherNotificationListener : NotificationListenerService() {
     override fun onListenerConnected() {
         NotificationHub.refresh(this)
         NotificationHub.clearNav()
+        NotificationHub.clearCalls()
         runCatching { activeNotifications?.forEach { handle(it) } }
     }
 
-    override fun onListenerDisconnected() { NotificationHub.clearNav() }
+    override fun onListenerDisconnected() { NotificationHub.clearNav(); NotificationHub.clearCalls() }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         handle(sbn)
@@ -33,9 +34,11 @@ class LauncherNotificationListener : NotificationListenerService() {
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         if (sbn.packageName in NavParser.NAV_PACKAGES) NotificationHub.onNavRemoved(sbn.key)
+        NotificationHub.onCallRemoved(sbn.key)
     }
 
     private fun handle(sbn: StatusBarNotification) {
+        handleCall(sbn)
         if (sbn.packageName !in NavParser.NAV_PACKAGES) return
         val n = sbn.notification
         val isNav = n.category == "navigation" || (n.flags and Notification.FLAG_ONGOING_EVENT) != 0
@@ -49,6 +52,24 @@ class LauncherNotificationListener : NotificationListenerService() {
             e.getCharSequence(Notification.EXTRA_BIG_TEXT),
         ) ?: return
         NotificationHub.onNavPosted(sbn.key, NavCardState(info, largeIcon(n), n.contentIntent))
+    }
+
+    private fun handleCall(sbn: StatusBarNotification) {
+        if (sbn.packageName == packageName) return
+        val n = sbn.notification
+        val e = n.extras ?: return
+        val acts = n.actions ?: emptyArray()
+        val info = CallParser.parse(
+            sbn.packageName, n.category,
+            e.getCharSequence(Notification.EXTRA_TITLE), e.getCharSequence(Notification.EXTRA_TEXT),
+            acts.map { it.title },
+            ongoing = (n.flags and Notification.FLAG_ONGOING_EVENT) != 0,
+            usesChronometer = e.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER),
+            whenMs = n.`when`,
+        )
+        if (info == null) { NotificationHub.onCallRemoved(sbn.key); return }
+        val intents = info.actions.mapNotNull { (k, i) -> acts.getOrNull(i)?.actionIntent?.let { k to it } }.toMap()
+        NotificationHub.onCallPosted(sbn.key, CallCardState(info, intents, n.contentIntent, System.currentTimeMillis()))
     }
 
     private fun largeIcon(n: Notification): Bitmap? = runCatching {

@@ -119,5 +119,24 @@ class ScreenshotTest {
             NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.DIAGNOSTICS,
         )
     }
+    @Test fun incomingCall() = shot("call_incoming") {
+        HomeScreen(state().copy(call = com.ahu.tlauncher.ui.home.CallUi(ringing = true, caller = "Maria Santos", startedAtMs = null)), NoopActions)
+    }
+    @Test fun activeCall() = shot("call_active", dark = false) {
+        HomeScreen(state().copy(call = com.ahu.tlauncher.ui.home.CallUi(ringing = false, caller = "+63 917 123 4567", startedAtMs = null, muted = true, canSwitchAudio = true)), NoopActions, initialMapVisible = false)
+    }
+    @Test fun headlightsAndAa() = shot("headlights_android_auto") {
+        HomeScreen(
+            state().copy(
+                obd = ObdState(ObdStatus.DISCONNECTED), gpsSpeedKmh = 38,
+                lights = com.ahu.tlauncher.system.LightsState(on = true),
+                aa = com.ahu.tlauncher.system.AaState.Ready("192.168.43.1"), aaReceiver = "Headunit Reloaded",
+            ),
+            NoopActions,
+        )
+    }
+    @Test fun settingsAndroidAuto() = shot("settings_android_auto") {
+        HomeScreen(state().copy(aa = com.ahu.tlauncher.system.AaState.Searching("192.168.43.1")), NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.ANDROID_AUTO)
+    }
     @Test fun settingsLight() = shot("settings_display_light", dark = false) { HomeScreen(state(), NoopActions, initialOverlay = Overlay.SETTINGS) }
 }
