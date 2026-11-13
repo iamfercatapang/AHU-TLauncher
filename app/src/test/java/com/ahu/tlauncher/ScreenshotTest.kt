@@ -82,6 +82,8 @@ class ScreenshotTest {
         }
     }
 
+    @Test fun carDark() = shot("car_full_dark") { HomeScreen(state(), NoopActions, initialMapVisible = false) }
+    @Test fun carLight() = shot("car_full_light", dark = false) { HomeScreen(state(), NoopActions, initialMapVisible = false) }
     @Test fun homeDark() = shot("home_dark") { HomeScreen(state(), NoopActions) }
     @Test fun homeLight() = shot("home_light", dark = false) { HomeScreen(state(), NoopActions) }
     @Test fun homeNavigatingDark() = shot("home_navigating_dark") { HomeScreen(state(nav = true), NoopActions) }

@@ -1,16 +1,20 @@
 # AHU-TLauncher
 
-A home-screen launcher for Android head units, built with Kotlin and Jetpack Compose. Its look follows a minimal Tesla-inspired design language (see [`docs/DESIGN.md`](docs/DESIGN.md)). It was made for a **2018 Toyota Avanza (manual)** but works in any car.
+A home-screen launcher for Android head units, built with Kotlin and Jetpack Compose. Its look is modelled on Tesla's in-car screen: the car as the hero with a floor reflection and data callouts, a split car/map view, and a dark dock. Colors and type follow [`docs/DESIGN.md`](docs/DESIGN.md). It was made for a **2018 Toyota Avanza (manual)** but works in any car.
 
-| Day | Night | Navigating |
-|---|---|---|
-| ![](app/src/test/snapshots/images/com.ahu.tlauncher_ScreenshotTest_homeLight_home_light.png) | ![](app/src/test/snapshots/images/com.ahu.tlauncher_ScreenshotTest_homeDark_home_dark.png) | ![](app/src/test/snapshots/images/com.ahu.tlauncher_ScreenshotTest_homeNavigatingDark_home_navigating_dark.png) |
+| Car view (day) | Car view (night) |
+|---|---|
+| ![](app/src/test/snapshots/images/com.ahu.tlauncher_ScreenshotTest_carLight_car_full_light.png) | ![](app/src/test/snapshots/images/com.ahu.tlauncher_ScreenshotTest_carDark_car_full_dark.png) |
+| **Car + map** | **Navigating with Google Maps / Waze** |
+| ![](app/src/test/snapshots/images/com.ahu.tlauncher_ScreenshotTest_homeLight_home_light.png) | ![](app/src/test/snapshots/images/com.ahu.tlauncher_ScreenshotTest_homeNavigatingDark_home_navigating_dark.png) |
 
 These screenshots are rendered offline, so they show a placeholder street grid and letter icons. On the device you see the real map and your real app icons.
 
 ## Features
 - **Home launcher**: a dock with up to 6 pinned apps, and a searchable app drawer. Long-press an app in the drawer to pin or unpin it.
-- **Car view**: shows your car photos (side, front and rear) taken from the gallery in *Settings → Display → Car images*. Tap the car to switch views. Plain white photo backgrounds are removed automatically.
+- **Car view**: shows the Avanza photos bundled in the app, with a floor reflection and callouts for engine RPM, coolant temperature and battery voltage. Tap the car to switch between front, side and rear. Drag or tap the handle on the panel edge to switch between the full-screen car and the car + map split.
+- **Warning lights** that appear only when needed: OBD connected, engine cold or overheating, battery voltage out of range.
+- **Your own photos**: you can replace any view from the gallery in *Settings → Display → Car images*. Plain white photo backgrounds are removed automatically.
 - **Engine data from OBD-II**, read through a Bluetooth ELM327 adapter: speed, RPM, coolant temperature and battery voltage. There's no gear or transmission data, since the car is manual. Until you have an adapter, a **Demo** mode simulates driving data.
 - **Music card**: shows and controls whatever is playing in Spotify, YouTube Music, the radio app and so on.
 - **Map**: an OpenStreetMap map with dark and light styles.
@@ -26,7 +30,7 @@ These screenshots are rendered offline, so they show a placeholder street grid a
 4. Grant the permissions:
    - **Location**: for the map and the automatic day/night theme.
    - **Notification access** (*Settings → Permissions*): needed for the music card and the Maps/Waze turn card. Nothing leaves the device.
-5. Add your car photos in *Settings → Display → Car images*.
+5. Optional: replace the car photos in *Settings → Display → Car images*.
 
 ## OBD-II setup (once you have an adapter)
 1. Plug the ELM327 into the OBD port under the dashboard and switch the ignition on.

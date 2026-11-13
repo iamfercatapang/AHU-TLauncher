@@ -43,6 +43,12 @@ import com.ahu.tlauncher.ui.theme.T
 import com.ahu.tlauncher.ui.theme.TShapes
 import com.ahu.tlauncher.ui.theme.TType
 
+/** Launcher popup: always a dark panel above the dock, like the in-car app launcher. */
+private val POP_BG = androidx.compose.ui.graphics.Color(0xF21B1C1E)
+private val POP_FIELD = androidx.compose.ui.graphics.Color(0xFF2A2C30)
+private val POP_FG = androidx.compose.ui.graphics.Color.White
+private val POP_MUTED = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.5f)
+
 @Composable
 fun AppDrawer(
     apps: List<AppEntry>,
@@ -50,38 +56,39 @@ fun AppDrawer(
     onLaunch: (AppEntry) -> Unit,
     onTogglePin: (AppEntry) -> Unit,
     onClose: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var query by remember { mutableStateOf("") }
     val shown = remember(apps, query) {
         if (query.isBlank()) apps else apps.filter { it.label.contains(query.trim(), ignoreCase = true) }
     }
-    Column(Modifier.fillMaxSize().background(T.colors.panel).padding(horizontal = 24.dp, vertical = 16.dp)) {
+    Column(modifier.clip(TShapes.surface).background(POP_BG).padding(horizontal = 22.dp, vertical = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Apps", style = TType.display, color = T.colors.text)
+            Text("Apps", style = TType.title, color = POP_FG)
             Spacer(Modifier.width(16.dp))
             Row(
-                Modifier.weight(1f).height(42.dp).clip(TShapes.inner).background(T.colors.card).padding(horizontal = 12.dp),
+                Modifier.weight(1f).height(40.dp).clip(TShapes.button).background(POP_FIELD).padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Rounded.Search, null, tint = T.colors.muted, modifier = Modifier.size(20.dp))
+                Icon(Icons.Rounded.Search, null, tint = POP_MUTED, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
                 Box(Modifier.weight(1f)) {
-                    if (query.isEmpty()) Text("Search apps", style = TType.body, color = T.colors.muted)
+                    if (query.isEmpty()) Text("Search apps", style = TType.body, color = POP_MUTED)
                     BasicTextField(
                         query, { query = it }, singleLine = true,
-                        textStyle = TType.body.copy(color = T.colors.text), cursorBrush = SolidColor(T.colors.accent),
+                        textStyle = TType.body.copy(color = POP_FG), cursorBrush = SolidColor(T.colors.accent),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
             Spacer(Modifier.width(16.dp))
-            Text("Long-press to pin to dock", style = TType.label, color = T.colors.muted)
+            Text("Long-press to pin to dock", style = TType.label, color = POP_MUTED)
             Spacer(Modifier.width(8.dp))
-            IconButtonT(Icons.Rounded.Close, "Close", size = 40.dp, iconSize = 22.dp, onClick = onClose)
+            IconButtonT(Icons.Rounded.Close, "Close", size = 40.dp, iconSize = 22.dp, tint = POP_FG, onClick = onClose)
         }
         Spacer(Modifier.height(12.dp))
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(108.dp),
+            columns = GridCells.Adaptive(100.dp),
             contentPadding = PaddingValues(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -96,12 +103,12 @@ fun AppDrawer(
                     Box {
                         Image(app.icon, null, modifier = Modifier.size(52.dp).clip(TShapes.inner))
                         if (app.key in pinned) {
-                            Box(Modifier.align(Alignment.TopEnd).size(10.dp).clip(CircleShape).background(T.colors.text))
+                            Box(Modifier.align(Alignment.TopEnd).size(10.dp).clip(CircleShape).background(POP_FG))
                         }
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        app.label, style = TType.label, color = T.colors.text, maxLines = 1,
+                        app.label, style = TType.label, color = POP_FG, maxLines = 1,
                         overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 6.dp),
                     )
                 }

@@ -87,7 +87,7 @@ fun MapPane(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modif
 
         // top-left: live turn-by-turn card while Google Maps / Waze is navigating
         state.nav?.let { nav ->
-            Box(Modifier.align(Alignment.TopStart).padding(12.dp)) { NavCard(nav, onClick = actions::openNavCard) }
+            Box(Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = STATUS_H + 4.dp)) { NavCard(nav, onClick = actions::openNavCard) }
         }
 
         // right edge: map controls
