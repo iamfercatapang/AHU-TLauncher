@@ -17,6 +17,7 @@ class LauncherApp : Application() {
     lateinit var obd: ObdManager; private set
     lateinit var location: LocationTracker; private set
     lateinit var volume: VolumeController; private set
+    lateinit var updater: com.ahu.tlauncher.update.Updater; private set
 
     override fun onCreate() {
         super.onCreate()
@@ -25,5 +26,6 @@ class LauncherApp : Application() {
         obd = ObdManager(appScope, prefs.settings)
         location = LocationTracker(this)
         volume = VolumeController(this)
+        updater = com.ahu.tlauncher.update.Updater(this, appScope).also { it.startPeriodicChecks() }
     }
 }

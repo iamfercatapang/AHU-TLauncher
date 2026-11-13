@@ -1,6 +1,30 @@
 package com.ahu.tlauncher.ui.home
 
+import android.annotation.SuppressLint
+import android.app.ActivityManager
+import android.content.Context
 import android.graphics.Bitmap
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clipToBounds
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import org.maplibre.android.MapLibre
+import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.camera.CameraUpdateFactory
+import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.LocationComponentOptions
+import org.maplibre.android.location.engine.LocationEngineRequest
+import org.maplibre.android.location.modes.CameraMode
+import org.maplibre.android.location.modes.RenderMode
+import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapLibreMapOptions
+import org.maplibre.android.maps.MapView
+import org.maplibre.android.maps.Style
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
@@ -49,40 +73,38 @@ import com.ahu.tlauncher.ui.theme.T
 import com.ahu.tlauncher.ui.theme.TShapes
 import com.ahu.tlauncher.ui.theme.TType
 import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.tilesource.XYTileSource
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
-import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 
-private fun cartoSource(dark: Boolean) = XYTileSource(
-    if (dark) "CartoDark" else "CartoLight", 1, 19, 256, ".png",
-    (if (dark) "dark_all" else "light_all").let { style ->
-        arrayOf("a", "b", "c", "d").map { "https://$it.basemaps.cartocdn.com/$style/" }.toTypedArray()
-    },
-    "© OpenStreetMap contributors © CARTO",
-)
+/** Free vector styles from OpenFreeMap: no API key, no usage limits. */
+private const val STYLE_LIGHT = "https://tiles.openfreemap.org/styles/positron"
+private const val STYLE_DARK = "https://tiles.openfreemap.org/styles/dark"
+private const val DEFAULT_LAT = 14.5995
+private const val DEFAULT_LON = 120.9842
+private const val ATTRIBUTION = "© OpenFreeMap © OpenMapTiles © OpenStreetMap contributors"
 
-private class MapHolder(val map: MapView, val me: MyLocationNewOverlay?)
+/** What the on-map buttons can do, whichever engine is drawing the map. */
+private interface MapControls {
+    fun zoomIn()
+    fun zoomOut()
+    fun recenter()
+}
 
 @Composable
 fun MapPane(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modifier) {
     val dark = T.colors.isDark
     val preview = LocalInspectionMode.current
-    val holder = if (preview) null else rememberMap(state.locationPermission)
+    val ctx = LocalContext.current
+    val vectorCapable = remember { supportsGles3(ctx) }
 
-    Box(modifier.background(T.colors.appBg)) {
-        if (holder == null) {
-            MapPlaceholder(Modifier.fillMaxSize())
-        } else {
-            androidx.compose.runtime.key(holder) { AndroidView(factory = { holder.map }, modifier = Modifier.fillMaxSize(), update = { m ->
-                val name = if (dark) "CartoDark" else "CartoLight"
-                if (m.tileProvider.tileSource.name() != name) m.setTileSource(cartoSource(dark))
-                if (holder.me == null && state.locationLat != null && state.locationLon != null && m.tag == null) {
-                    m.controller.setCenter(GeoPoint(state.locationLat, state.locationLon)); m.tag = "centered"
-                }
-            }) }
+    Box(modifier.clipToBounds().background(T.colors.appBg)) {
+        val controls: MapControls? = when {
+            preview -> { MapPlaceholder(Modifier.fillMaxSize()); null }
+            vectorCapable -> vectorMap(dark, state, Modifier.fillMaxSize())
+            else -> rasterMap(dark, state, Modifier.fillMaxSize())
         }
 
         // top-left: live turn-by-turn card while Google Maps / Waze is navigating
@@ -96,55 +118,181 @@ fun MapPane(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modif
             color = T.colors.frost, shape = TShapes.button,
         ) {
             Column(Modifier.padding(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                IconButtonT(Icons.Rounded.Add, "Zoom in", size = 40.dp, iconSize = 22.dp) { holder?.map?.controller?.zoomIn() }
-                IconButtonT(Icons.Rounded.Remove, "Zoom out", size = 40.dp, iconSize = 22.dp) { holder?.map?.controller?.zoomOut() }
-                IconButtonT(Icons.Rounded.MyLocation, "Recenter", size = 40.dp, iconSize = 20.dp) {
+                IconButtonT(Icons.Rounded.Add, "Zoom in", size = 40.dp, iconSize = 22.dp) { controls?.zoomIn() }
+                IconButtonT(Icons.Rounded.Remove, "Zoom out", size = 40.dp, iconSize = 22.dp) { controls?.zoomOut() }
+                IconButtonT(Icons.Rounded.MyLocation, "Follow my location", size = 40.dp, iconSize = 20.dp) {
                     if (!state.locationPermission) actions.requestLocation()
-                    holder?.me?.let { it.enableFollowLocation(); it.myLocation?.let { p -> holder.map.controller.animateTo(p) } }
+                    controls?.recenter()
                 }
             }
         }
 
         Text(
-            "© OpenStreetMap contributors © CARTO", style = TType.caption, color = T.colors.muted,
+            if (vectorCapable) ATTRIBUTION else "© OpenStreetMap contributors", style = TType.caption, color = T.colors.muted,
             modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp),
         )
     }
 }
 
+private fun supportsGles3(ctx: Context): Boolean = runCatching {
+    val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+    am.deviceConfigurationInfo.reqGlEsVersion >= 0x30000
+}.getOrDefault(false)
+
+/** Forward the screen lifecycle to a classic Android map view. */
 @Composable
-private fun rememberMap(hasLocation: Boolean): MapHolder {
+private fun LifecycleBinding(onStart: () -> Unit, onResume: () -> Unit, onPause: () -> Unit, onStop: () -> Unit, onDestroy: () -> Unit) {
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val obs = LifecycleEventObserver { _, e ->
+            when (e) {
+                Lifecycle.Event.ON_START -> onStart()
+                Lifecycle.Event.ON_RESUME -> onResume()
+                Lifecycle.Event.ON_PAUSE -> onPause()
+                Lifecycle.Event.ON_STOP -> onStop()
+                else -> Unit
+            }
+        }
+        owner.lifecycle.addObserver(obs) // replays ON_START/ON_RESUME if already resumed
+        onDispose {
+            owner.lifecycle.removeObserver(obs)
+            if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) onPause()
+            if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) onStop()
+            onDestroy()
+        }
+    }
+}
+
+// ---------------------------------------------------------------- MapLibre (vector)
+
+private class VectorHandle(val view: MapView) : MapControls {
+    var map: MapLibreMap? = null
+    var locationActive = false
+    var styleUrl = STYLE_LIGHT
+    override fun zoomIn() { map?.animateCamera(CameraUpdateFactory.zoomIn(), 300) }
+    override fun zoomOut() { map?.animateCamera(CameraUpdateFactory.zoomOut(), 300) }
+    override fun recenter() {
+        val lc = map?.locationComponent ?: return
+        if (!locationActive) return
+        lc.cameraMode = CameraMode.TRACKING_GPS
+        lc.zoomWhileTracking(16.0)
+        lc.tiltWhileTracking(45.0)
+    }
+}
+
+@SuppressLint("MissingPermission")
+@Composable
+private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier): MapControls {
     val ctx = LocalContext.current
-    val holder = remember(hasLocation) {
+    val handle = remember {
+        MapLibre.getInstance(ctx)
+        val opts = MapLibreMapOptions.createFromAttributes(ctx)
+            .textureMode(false).attributionEnabled(false).logoEnabled(false).compassEnabled(false)
+            .camera(CameraPosition.Builder().target(LatLng(state.locationLat ?: DEFAULT_LAT, state.locationLon ?: DEFAULT_LON)).zoom(15.0).build())
+        VectorHandle(MapView(ctx, opts).apply { onCreate(null) })
+    }
+    var map by remember { mutableStateOf<MapLibreMap?>(null) }
+    LifecycleBinding(handle.view::onStart, handle.view::onResume, handle.view::onPause, handle.view::onStop, handle.view::onDestroy)
+    DisposableEffect(handle) {
+        handle.view.getMapAsync { m -> handle.map = m; map = m }
+        handle.view.addOnDidFailLoadingMapListener {
+            if (handle.styleUrl == STYLE_DARK) { handle.styleUrl = STYLE_LIGHT; handle.map?.setStyle(Style.Builder().fromUri(STYLE_LIGHT)) }
+        }
+        onDispose { }
+    }
+
+    // Load (or switch) the style; fall back to the light style if the dark one ever fails.
+    val m = map
+    LaunchedEffect(m, dark, state.locationPermission) {
+        if (m == null) return@LaunchedEffect
+        val url = if (dark) STYLE_DARK else STYLE_LIGHT
+        handle.styleUrl = url
+        m.setStyle(Style.Builder().fromUri(url)) { style ->
+            if (state.locationPermission && !handle.locationActive) {
+                runCatching {
+                    val lc = m.locationComponent
+                    lc.activateLocationComponent(
+                        LocationComponentActivationOptions.builder(ctx, style)
+                            .locationComponentOptions(
+                                LocationComponentOptions.builder(ctx)
+                                    .foregroundTintColor(BLUE).bearingTintColor(BLUE).accuracyAlpha(0.12f)
+                                    .pulseEnabled(false).trackingGesturesManagement(true).elevation(0f)
+                                    .build()
+                            )
+                            .useDefaultLocationEngine(true)
+                            .locationEngineRequest(
+                                LocationEngineRequest.Builder(1000).setFastestInterval(500)
+                                    .setPriority(LocationEngineRequest.PRIORITY_HIGH_ACCURACY).build()
+                            )
+                            .build()
+                    )
+                    lc.isLocationComponentEnabled = true
+                    lc.renderMode = RenderMode.GPS
+                    handle.locationActive = true
+                    handle.recenter()
+                }
+            }
+        }
+    }
+    AndroidView(factory = { handle.view }, modifier = modifier.clipToBounds())
+    return handle
+}
+
+private const val BLUE = 0xFF3E6AE1.toInt()
+
+/** Night look for raster OSM tiles: invert, then dim and cool slightly. */
+private val DARK_TILES = android.graphics.ColorMatrixColorFilter(
+    floatArrayOf(
+        -0.75f, 0f, 0f, 0f, 205f,
+        0f, -0.75f, 0f, 0f, 210f,
+        0f, 0f, -0.75f, 0f, 220f,
+        0f, 0f, 0f, 1f, 0f,
+    )
+)
+
+// ---------------------------------------------------------------- osmdroid (raster fallback)
+
+private class RasterHandle(val map: org.osmdroid.views.MapView, val me: MyLocationNewOverlay?) : MapControls {
+    override fun zoomIn() { map.controller.zoomIn() }
+    override fun zoomOut() { map.controller.zoomOut() }
+    override fun recenter() { me?.let { it.enableFollowLocation(); it.myLocation?.let { p -> map.controller.animateTo(p) } } }
+}
+
+@Composable
+private fun rasterMap(dark: Boolean, state: HomeUiState, modifier: Modifier): MapControls {
+    val ctx = LocalContext.current
+    val handle = remember(state.locationPermission) {
         Configuration.getInstance().apply {
             userAgentValue = ctx.packageName
             osmdroidBasePath = ctx.cacheDir.resolve("osmdroid")
             osmdroidTileCache = ctx.cacheDir.resolve("osmdroid/tiles")
             tileFileSystemCacheMaxBytes = 200L * 1024 * 1024
         }
-        val map = MapView(ctx).apply {
+        val map = org.osmdroid.views.MapView(ctx).apply {
+            setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(true)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             isTilesScaledToDpi = true
             minZoomLevel = 3.0
-            controller.setZoom(15.5)
-            controller.setCenter(GeoPoint(14.5995, 120.9842))
+            controller.setZoom(16.0)
+            controller.setCenter(GeoPoint(state.locationLat ?: DEFAULT_LAT, state.locationLon ?: DEFAULT_LON))
         }
-        val me = if (hasLocation) MyLocationNewOverlay(GpsMyLocationProvider(ctx), map).apply {
+        val me = if (state.locationPermission) MyLocationNewOverlay(GpsMyLocationProvider(ctx), map).apply {
             setDirectionIcon(arrowBitmap(ctx.resources.displayMetrics.density))
             setPersonIcon(dotBitmap(ctx.resources.displayMetrics.density))
             setPersonAnchor(0.5f, 0.5f); setDirectionAnchor(0.5f, 0.5f)
             enableMyLocation(); enableFollowLocation()
-            runOnFirstFix { map.post { myLocation?.let { map.controller.animateTo(it) } } }
             map.overlays.add(this)
         } else null
-        MapHolder(map, me)
+        RasterHandle(map, me)
     }
-    DisposableEffect(holder) {
-        holder.map.onResume()
-        onDispose { holder.me?.disableMyLocation(); holder.map.onPause(); holder.map.onDetach() }
+    LifecycleBinding({}, handle.map::onResume, handle.map::onPause, {}, { handle.me?.disableMyLocation(); handle.map.onDetach() })
+    androidx.compose.runtime.key(handle) {
+        AndroidView(factory = { handle.map }, modifier = modifier.clipToBounds(), update = { m ->
+            m.overlayManager.tilesOverlay.setColorFilter(if (dark) DARK_TILES else null)
+        })
     }
-    return holder
+    return handle
 }
 
 private fun dotBitmap(d: Float): Bitmap {

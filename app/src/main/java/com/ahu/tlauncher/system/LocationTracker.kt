@@ -19,6 +19,7 @@ class LocationTracker(private val context: Context) {
     private var started = false
     private val lm get() = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
     private val listener = LocationListener { _location.value = it }
+    private var fast = false
 
     fun hasPermission() = ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
         ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -30,9 +31,24 @@ class LocationTracker(private val context: Context) {
         val providers = lm.getProviders(true)
         providers.mapNotNull { runCatching { lm.getLastKnownLocation(it) }.getOrNull() }
             .maxByOrNull { it.time }?.let { _location.value = it }
-        for (p in providers) {
+        request()
+    }
+
+    /** 1 s GPS updates while the launcher is on screen (for GPS speed); slow updates otherwise. */
+    fun setFast(on: Boolean) {
+        if (fast == on) return
+        fast = on
+        if (started) request()
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun request() {
+        if (!hasPermission()) return
+        runCatching { lm.removeUpdates(listener) }
+        for (p in lm.getProviders(true)) {
             if (p == LocationManager.PASSIVE_PROVIDER) continue
-            runCatching { lm.requestLocationUpdates(p, 60_000L, 200f, listener, Looper.getMainLooper()) }
+            val (interval, distance) = if (fast && p == LocationManager.GPS_PROVIDER) 1_000L to 0f else 60_000L to 200f
+            runCatching { lm.requestLocationUpdates(p, interval, distance, listener, Looper.getMainLooper()) }
         }
     }
 }

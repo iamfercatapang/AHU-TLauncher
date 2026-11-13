@@ -2,11 +2,8 @@ package com.ahu.tlauncher.ui.home
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -22,7 +19,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bluetooth
+import androidx.compose.material.icons.rounded.BluetoothConnected
 import androidx.compose.material.icons.rounded.BluetoothDisabled
+import androidx.compose.material.icons.rounded.NetworkWifi1Bar
+import androidx.compose.material.icons.rounded.NetworkWifi2Bar
+import androidx.compose.material.icons.rounded.NetworkWifi3Bar
+import androidx.compose.material.icons.rounded.SignalWifi0Bar
+import androidx.compose.material.icons.rounded.SignalWifi4Bar
+import androidx.compose.material.icons.rounded.WifiOff
+import com.ahu.tlauncher.system.BtStatus
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -72,7 +77,8 @@ fun HomeScreen(
     // Bring the map back when Maps/Waze starts guiding.
     LaunchedEffect(state.nav != null) { if (state.nav != null) mapVisible = true }
     val toggle = { o: Overlay -> overlay = if (overlay == o) Overlay.NONE else o }
-    val stageFraction by animateFloatAsState(if (mapVisible) SPLIT_FRACTION else 1f, TMotion.std(), label = "split")
+    // Instant switch: animating the width would re-layout the map every frame (janky on head units).
+    val stageFraction = if (mapVisible) SPLIT_FRACTION else 1f
 
     Column(Modifier.fillMaxSize().background(T.colors.appBg)) {
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
@@ -89,8 +95,8 @@ fun HomeScreen(
             // overlays inside the body area
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.SETTINGS,
-                enter = slideInVertically(TMotion.std()) { it / 8 } + fadeIn(TMotion.std()),
-                exit = slideOutVertically(TMotion.std()) { it / 8 } + fadeOut(TMotion.std()),
+                enter = fadeIn(TMotion.std()),
+                exit = fadeOut(TMotion.std()),
                 modifier = Modifier.align(Alignment.BottomEnd),
             ) {
                 com.ahu.tlauncher.ui.settings.SettingsScreen(
@@ -100,16 +106,16 @@ fun HomeScreen(
             }
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.MUSIC,
-                enter = slideInVertically(TMotion.std()) { it } + fadeIn(TMotion.std()),
-                exit = slideOutVertically(TMotion.std()) { it } + fadeOut(TMotion.std()),
+                enter = fadeIn(TMotion.std()),
+                exit = fadeOut(TMotion.std()),
                 modifier = Modifier.align(Alignment.BottomEnd),
             ) {
                 MusicPanel(state, actions, onClose = { overlay = Overlay.NONE }, modifier = Modifier.width(maxWidth * (1 - SPLIT_FRACTION)).padding(12.dp))
             }
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.APPS,
-                enter = slideInVertically(TMotion.std()) { it / 6 } + fadeIn(TMotion.std()),
-                exit = slideOutVertically(TMotion.std()) { it / 6 } + fadeOut(TMotion.std()),
+                enter = fadeIn(TMotion.std()),
+                exit = fadeOut(TMotion.std()),
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
                 AppDrawer(
@@ -124,6 +130,13 @@ fun HomeScreen(
                     onClose = { overlay = Overlay.NONE },
                     modifier = Modifier.width(maxWidth * 0.74f).height(maxHeight * 0.8f).padding(bottom = 10.dp),
                 )
+            }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showUpdateToast(state.update, state.updateDismissedCode) && overlay == Overlay.NONE,
+                enter = fadeIn(TMotion.std()), exit = fadeOut(TMotion.std()),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+            ) {
+                UpdateToast(state.update, actions)
             }
             androidx.compose.animation.AnimatedVisibility(
                 visible = toast != null, enter = fadeIn(TMotion.std()), exit = fadeOut(TMotion.std()),
@@ -151,16 +164,33 @@ fun HomeScreen(
 private fun StatusBar(state: HomeUiState, modifier: Modifier) {
     val time = state.now.format(DateTimeFormatter.ofPattern(if (is24h()) "HH:mm" else "h:mma", Locale.US)).lowercase()
     Box(modifier.padding(horizontal = 20.dp)) {
-        ObdBadge(state.obd.status, Modifier.align(Alignment.CenterStart))
-        Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
+        if (com.ahu.tlauncher.obd.ObdDisplay.show(state.obd.status)) ObdBadge(state.obd.status, Modifier.align(Alignment.CenterStart))
+        Text(state.now.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())), style = TType.button, color = T.colors.text, modifier = Modifier.align(Alignment.Center))
+        // right: Bluetooth · time · Wi-Fi
+        Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
+            val (btIcon, btDesc) = when (state.bluetooth) {
+                BtStatus.CONNECTED -> Icons.Rounded.BluetoothConnected to "Bluetooth connected"
+                BtStatus.ON -> Icons.Rounded.Bluetooth to "Bluetooth on"
+                BtStatus.OFF -> Icons.Rounded.BluetoothDisabled to "Bluetooth off"
+            }
+            Icon(btIcon, btDesc, tint = if (state.bluetooth == BtStatus.OFF) T.colors.secondary else T.colors.text, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(12.dp))
+            Text(time, style = TType.title, color = T.colors.text)
+            Spacer(Modifier.width(12.dp))
+            val w = state.wifi
+            val wifiIcon = when {
+                !w.enabled -> Icons.Rounded.WifiOff
+                !w.connected -> Icons.Rounded.SignalWifi0Bar
+                w.level >= 4 -> Icons.Rounded.SignalWifi4Bar
+                w.level == 3 -> Icons.Rounded.NetworkWifi3Bar
+                w.level == 2 -> Icons.Rounded.NetworkWifi2Bar
+                else -> Icons.Rounded.NetworkWifi1Bar
+            }
             Icon(
-                if (state.bluetoothOn) Icons.Rounded.Bluetooth else Icons.Rounded.BluetoothDisabled, "Bluetooth",
-                tint = T.colors.text, modifier = Modifier.size(18.dp),
+                wifiIcon, if (w.connected) "Wi-Fi connected" else if (w.enabled) "Wi-Fi not connected" else "Wi-Fi off",
+                tint = if (w.connected) T.colors.text else T.colors.secondary, modifier = Modifier.size(20.dp),
             )
-            Spacer(Modifier.width(10.dp))
-            Text(state.now.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())), style = TType.button, color = T.colors.text)
         }
-        Text(time, style = TType.title, color = T.colors.text, modifier = Modifier.align(Alignment.CenterEnd))
     }
 }
 

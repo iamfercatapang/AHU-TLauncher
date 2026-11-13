@@ -80,7 +80,10 @@ import com.ahu.tlauncher.R
 import com.ahu.tlauncher.data.SpeedUnit
 import com.ahu.tlauncher.data.TempUnit
 import com.ahu.tlauncher.notify.MediaInfo
+import com.ahu.tlauncher.obd.ObdDisplay
 import com.ahu.tlauncher.obd.ObdStatus
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawscope.scale
 import com.ahu.tlauncher.ui.components.IconButtonT
 import com.ahu.tlauncher.ui.components.pressable
 import com.ahu.tlauncher.ui.theme.T
@@ -147,12 +150,17 @@ fun CarStage(
 
 @Composable
 private fun SpeedBlock(state: HomeUiState, modifier: Modifier) {
-    val d = state.obd.data
+    val obdSpeed = if (ObdDisplay.show(state.obd.status)) state.obd.data.speedKmh else null
+    val kmh = obdSpeed ?: state.gpsSpeedKmh
+    if (kmh == null) { Spacer(modifier.height(12.dp)); return }
     val mph = state.settings.speedUnit == SpeedUnit.MPH
-    val speed = d.speedKmh?.let { if (mph) (it * 0.621371).roundToInt() else it }
+    val speed = if (mph) (kmh * 0.621371).roundToInt() else kmh
     Column(modifier.padding(top = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(speed?.toString() ?: "--", style = TType.speed, color = T.colors.text, textAlign = TextAlign.Center)
-        Text(if (mph) "mph" else "km/h", style = TType.label, color = T.colors.muted, modifier = Modifier.offset(y = (-6).dp))
+        Text(speed.toString(), style = TType.speed, color = T.colors.text, textAlign = TextAlign.Center)
+        Text(
+            (if (mph) "mph" else "km/h") + if (obdSpeed == null) " · GPS" else "",
+            style = TType.label, color = T.colors.muted, modifier = Modifier.offset(y = (-6).dp),
+        )
     }
 }
 
@@ -160,6 +168,7 @@ private fun SpeedBlock(state: HomeUiState, modifier: Modifier) {
 @Composable
 private fun Telltales(state: HomeUiState, modifier: Modifier) {
     val d = state.obd.data
+    if (!ObdDisplay.show(state.obd.status)) return
     val items = buildList {
         if (state.obd.status == ObdStatus.CONNECTED) add(Triple(Icons.Rounded.SettingsInputComponent, TELL_GREEN, "OBD connected"))
         d.coolantC?.let {
@@ -192,51 +201,47 @@ private fun CarHero(state: HomeUiState, modifier: Modifier) {
     var index by remember(views) { mutableIntStateOf(0) }
     val src = views.getOrNull(index % views.size.coerceAtLeast(1)) ?: CarSource.Illustration
 
-    val dark = T.colors.isDark
+    val showObd = ObdDisplay.show(state.obd.status)
     val d = state.obd.data
     val f = state.settings.tempUnit == TempUnit.F
-    val callouts = listOf(
-        Callout(0.2f, "Engine", d.rpm?.let { "%,d rpm".format(it) } ?: "-- rpm"),
-        Callout(0.5f, "Coolant", d.coolantC?.let { "${if (f) (it * 9 / 5.0 + 32).roundToInt() else it}°${if (f) "F" else "C"}" } ?: "--", alert = (d.coolantC ?: 0) >= 105),
-        Callout(0.82f, "Battery", d.batteryV?.let { "%.1f V".format(it) } ?: "-- V", alert = d.batteryV?.let { it < 11.8 || it > 15.2 } ?: false),
+    val callouts = if (!showObd) emptyList() else listOfNotNull(
+        d.rpm?.let { Callout(0.2f, "Engine", "%,d rpm".format(it)) },
+        d.coolantC?.let { Callout(0.5f, "Coolant", "${if (f) (it * 9 / 5.0 + 32).roundToInt() else it}°${if (f) "F" else "C"}", alert = it >= 105) },
+        d.batteryV?.let { Callout(0.82f, "Battery", "%.1f V".format(it), alert = it < 11.8 || it > 15.2) },
     )
+    val shadowColor = if (T.colors.isDark) Color.Black.copy(alpha = 0.55f) else Color.Black.copy(alpha = 0.22f)
 
     BoxWithConstraints(modifier.pressable(enabled = views.size > 1) { index = (index + 1) % views.size }) {
         Crossfade(src, animationSpec = TMotion.std(), label = "car") { s ->
             val painter = rememberCarPainter(s) ?: return@Crossfade
             val ratio = painter.intrinsicSize.let { if (it.isSpecified() && it.height > 0) it.width / it.height else 2f }
-            // Layout: callout zone on top, car, then reflection; cards overlap the reflection.
-            val calloutH = 56.dp
-            val maxImgH = (maxHeight - calloutH) * 0.56f
+            // Callout zone on top (only with OBD data), then the car on a soft ground shadow.
+            // The bottom cards overlap the space under the car.
+            val calloutH = if (callouts.isEmpty()) 8.dp else 56.dp
+            val maxImgH = (maxHeight - calloutH) * (if (callouts.isEmpty()) 0.64f else 0.56f)
             val imgW = min(maxWidth - 32.dp, maxImgH * ratio)
             val imgH = imgW / ratio
-            val reflH = imgH * 0.45f
+            val shadowH = imgH * 0.16f
             Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.width(imgW).height(calloutH + imgH)) {
+                Box(Modifier.width(imgW).height(calloutH + imgH + shadowH * 0.4f)) {
+                    // ground shadow, centred under the wheels
+                    Box(
+                        Modifier.offset(x = imgW * 0.04f, y = calloutH + imgH - shadowH * 0.6f).size(imgW * 0.92f, shadowH)
+                            .drawBehind {
+                                scale(scaleX = 1f, scaleY = size.height / size.width, pivot = center) {
+                                    drawCircle(Brush.radialGradient(listOf(shadowColor, Color.Transparent), center, size.width / 2), size.width / 2, center)
+                                }
+                            },
+                    )
                     callouts.forEach { c -> CalloutView(c, imgW, calloutH, imgH) }
                     Image(painter, "My car", contentScale = ContentScale.Fit, modifier = Modifier.offset(y = calloutH).size(imgW, imgH))
                 }
-                // reflection (view dots sit on the "floor")
-                Box(Modifier.width(imgW).height(reflH).clipToBounds()) {
-                    if (views.size > 1) {
-                        Row(Modifier.align(Alignment.TopCenter).zIndex(1f).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                            views.indices.forEach { i ->
-                                Box(Modifier.size(5.dp).clip(CircleShape).background(if (i == index % views.size) T.colors.text else T.colors.secondary.copy(alpha = 0.4f)))
-                            }
+                if (views.size > 1) {
+                    Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        views.indices.forEach { i ->
+                            Box(Modifier.size(5.dp).clip(CircleShape).background(if (i == index % views.size) T.colors.text else T.colors.secondary.copy(alpha = 0.4f)))
                         }
                     }
-                    Image(
-                        painter, null, contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(imgW, imgH)
-                            .graphicsLayer { scaleY = -1f; alpha = if (dark) 0.38f else 0.3f; compositingStrategy = CompositingStrategy.Offscreen }
-                            .drawWithContent {
-                                drawContent()
-                                drawRect(
-                                    Brush.verticalGradient(0f to Color.Transparent, 0.35f to Color.Transparent, 1f to Color.Black),
-                                    blendMode = BlendMode.DstIn,
-                                )
-                            },
-                    )
                 }
             }
         }

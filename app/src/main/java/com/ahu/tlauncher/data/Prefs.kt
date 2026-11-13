@@ -25,7 +25,7 @@ data class Settings(
     val pinnedApps: List<String> = emptyList(),
     val homeAddress: String = "",
     val workAddress: String = "",
-    val obdSource: ObdSourceType = ObdSourceType.DEMO,
+    val obdSource: ObdSourceType = ObdSourceType.BLUETOOTH,
     val obdDeviceAddress: String = "",
     val obdDeviceName: String = "",
     /** User-chosen photo per view (content:// URI); empty = built-in image. */
@@ -61,7 +61,7 @@ class Prefs(private val context: Context) {
         pinnedApps = this[K.pinned]?.split('\n')?.filter { it.isNotBlank() } ?: emptyList(),
         homeAddress = this[K.home] ?: "",
         workAddress = this[K.work] ?: "",
-        obdSource = enumOr(this[K.obdSource], ObdSourceType.DEMO),
+        obdSource = enumOr(this[K.obdSource], ObdSourceType.BLUETOOTH),
         obdDeviceAddress = this[K.obdAddr] ?: "",
         obdDeviceName = this[K.obdName] ?: "",
         carImages = CarView.entries.mapNotNull { v -> this[K.carImage(v)]?.takeIf { it.isNotBlank() }?.let { v to it } }.toMap(),

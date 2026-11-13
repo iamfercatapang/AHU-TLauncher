@@ -251,7 +251,7 @@ private fun AddressField(label: String, value: String, onSave: (String) -> Unit)
 @Composable
 private fun ObdSection(state: HomeUiState, a: HomeActions) {
     val s = state.settings
-    SettingRow("Data source", "Demo shows simulated engine data until you have an ELM327 adapter") {
+    SettingRow("Data source", "Without a connected adapter, engine data is hidden and speed comes from GPS. Demo shows simulated data.") {
         Segmented(listOf(ObdSourceType.DEMO to "Demo", ObdSourceType.BLUETOOTH to "Bluetooth"), s.obdSource, a::setObdSource)
     }
     SettingRow("Status", state.obd.message) { ObdBadge(state.obd.status) }
@@ -309,10 +309,23 @@ private fun PermissionsSection(state: HomeUiState, a: HomeActions) {
 
 @Composable
 private fun AboutSection(state: HomeUiState, a: HomeActions) {
-    SettingRow("TLauncher", "Version ${BuildConfig.VERSION_NAME}") {}
+    val u = state.update
+    val status = when (u) {
+        is com.ahu.tlauncher.update.UpdateState.Checking -> "Checking for updates…"
+        is com.ahu.tlauncher.update.UpdateState.UpToDate -> "You have the latest version"
+        is com.ahu.tlauncher.update.UpdateState.Available -> "Version ${u.version.versionName} is available"
+        is com.ahu.tlauncher.update.UpdateState.Downloading -> "Downloading ${(u.progress * 100).toInt()}%"
+        is com.ahu.tlauncher.update.UpdateState.Installing -> "Installing…"
+        is com.ahu.tlauncher.update.UpdateState.Failed -> u.message
+        else -> "Checks GitHub for new versions every 6 hours"
+    }
+    SettingRow("TLauncher ${BuildConfig.VERSION_NAME}", status) {
+        if (u is com.ahu.tlauncher.update.UpdateState.Available) PillButton("Update", kind = com.ahu.tlauncher.ui.components.ButtonKind.PRIMARY, onClick = a::startUpdate)
+        else PillButton("Check for updates", onClick = a::checkForUpdates)
+    }
     Divider()
     Text(
-        "Map tiles © OpenStreetMap contributors © CARTO. Inter typeface © The Inter Project Authors (SIL OFL 1.1). " +
+        "Map data © OpenStreetMap contributors, tiles by OpenFreeMap / OpenMapTiles. Inter typeface © The Inter Project Authors (SIL OFL 1.1). " +
             "Design language inspired by minimalist in-car displays; not affiliated with any car maker.",
         style = TType.label, color = T.colors.muted, modifier = Modifier.padding(vertical = 10.dp),
     )

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
@@ -69,7 +70,7 @@ fun Dock(
             IconButtonT(Icons.Rounded.KeyboardArrowLeft, "Volume down", size = 36.dp, iconSize = 22.dp, tint = DOCK_MUTED) { actions.volumeStep(false) }
             Row(Modifier.fillMaxHeight().pressable { actions.toggleMute() }.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(if (v.muted || v.level == 0) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp, "Mute", tint = DOCK_FG, modifier = Modifier.size(28.dp))
-                Text(if (v.muted) " 0" else " ${v.level}", style = TType.title, color = DOCK_FG, modifier = Modifier.width(30.dp))
+                Text(if (v.muted) " 0" else " ${v.level}", style = TType.title, color = DOCK_FG, maxLines = 1, softWrap = false, modifier = Modifier.widthIn(min = 30.dp))
             }
             IconButtonT(Icons.Rounded.KeyboardArrowRight, "Volume up", size = 36.dp, iconSize = 22.dp, tint = DOCK_MUTED) { actions.volumeStep(true) }
         }

@@ -13,8 +13,23 @@ android {
         applicationId = "com.ahu.tlauncher"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // CI sets GITHUB_RUN_NUMBER, so every published build has a higher versionCode (used by the updater).
+        val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = run
+        versionName = "1.0.$run"
+    }
+
+    // Release key comes from CI secrets (see README). Local builds fall back to the debug key.
+    val keystorePath = System.getenv("TLAUNCHER_KEYSTORE")
+    signingConfigs {
+        if (keystorePath != null && file(keystorePath).exists()) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("TLAUNCHER_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("TLAUNCHER_KEY_ALIAS")
+                keyPassword = System.getenv("TLAUNCHER_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -22,8 +37,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Signed with the debug key so the release APK can be sideloaded directly.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 
@@ -31,7 +45,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
     testOptions { unitTests.isReturnDefaultValues = true }
     lint { abortOnError = false }
@@ -50,9 +63,14 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    implementation("org.osmdroid:osmdroid-android:6.1.20")
+    implementation("org.maplibre.gl:android-sdk:13.7.1")
+    implementation("org.osmdroid:osmdroid-android:6.1.20") // fallback for GPUs without OpenGL ES 3
     implementation("io.coil-kt:coil-compose:2.7.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
+}
+
+kotlin {
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
 }

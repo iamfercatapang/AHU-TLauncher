@@ -1,2 +1,4 @@
 -dontwarn org.osmdroid.**
 -keep class org.osmdroid.** { *; }
+-keep class org.maplibre.** { *; }
+-dontwarn org.maplibre.**

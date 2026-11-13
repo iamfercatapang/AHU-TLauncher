@@ -20,8 +20,16 @@ data class HomeUiState(
     val locationLat: Double? = null,
     val locationLon: Double? = null,
     val locationPermission: Boolean = false,
+    /** Speed from GPS (km/h), null without a fresh fix. Used when no OBD adapter is connected. */
+    val gpsSpeedKmh: Int? = null,
     val bluetoothOn: Boolean = false,
+    val bluetooth: com.ahu.tlauncher.system.BtStatus = com.ahu.tlauncher.system.BtStatus.OFF,
+    val wifi: com.ahu.tlauncher.system.WifiStatus = com.ahu.tlauncher.system.WifiStatus(false, false, 0),
     val isDefaultLauncher: Boolean = true,
+    val update: com.ahu.tlauncher.update.UpdateState = com.ahu.tlauncher.update.UpdateState.Idle,
+    /** Update toast hidden for this versionCode (user tapped Later). */
+    val updateDismissedCode: Int = 0,
+    val appVersion: String = "",
 )
 
 /** Everything the UI can ask for. Default no-ops keep previews and screenshot tests simple. */
@@ -45,6 +53,9 @@ interface HomeActions {
     fun requestLocation() {}
     fun setDefaultLauncher() {}
     fun openAndroidSettings() {}
+    fun startUpdate() {}
+    fun dismissUpdate() {}
+    fun checkForUpdates() {}
     // settings
     fun setTheme(mode: com.ahu.tlauncher.ui.theme.ThemeMode) {}
     fun setSpeedUnit(u: com.ahu.tlauncher.data.SpeedUnit) {}

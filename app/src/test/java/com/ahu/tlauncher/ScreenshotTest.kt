@@ -72,6 +72,8 @@ class ScreenshotTest {
         now = LocalDateTime.of(2026, 11, 13, 21, 41),
         locationPermission = true,
         bluetoothOn = true,
+        bluetooth = com.ahu.tlauncher.system.BtStatus.CONNECTED,
+        wifi = com.ahu.tlauncher.system.WifiStatus(true, true, 3),
     )
 
     private fun shot(name: String, dark: Boolean = true, content: @Composable () -> Unit) {
@@ -84,6 +86,11 @@ class ScreenshotTest {
 
     @Test fun carDark() = shot("car_full_dark") { HomeScreen(state(), NoopActions, initialMapVisible = false) }
     @Test fun carLight() = shot("car_full_light", dark = false) { HomeScreen(state(), NoopActions, initialMapVisible = false) }
+    @Test fun noObdGps() = shot("no_obd_gps_speed") { HomeScreen(state().copy(obd = ObdState(ObdStatus.DISCONNECTED), gpsSpeedKmh = 47), NoopActions) }
+    @Test fun noObdNoFix() = shot("no_obd_no_fix", dark = false) { HomeScreen(state().copy(obd = ObdState(ObdStatus.DISCONNECTED), gpsSpeedKmh = null), NoopActions, initialMapVisible = false) }
+    @Test fun updateToast() = shot("update_available") {
+        HomeScreen(state().copy(update = com.ahu.tlauncher.update.UpdateState.Available(com.ahu.tlauncher.update.RemoteVersion(12, "1.0.12"))), NoopActions)
+    }
     @Test fun homeDark() = shot("home_dark") { HomeScreen(state(), NoopActions) }
     @Test fun homeLight() = shot("home_light", dark = false) { HomeScreen(state(), NoopActions) }
     @Test fun homeNavigatingDark() = shot("home_navigating_dark") { HomeScreen(state(nav = true), NoopActions) }

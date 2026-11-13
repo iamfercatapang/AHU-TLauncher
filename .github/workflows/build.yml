@@ -12,6 +12,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      HAS_KEY: ${{ secrets.TLAUNCHER_KEYSTORE_B64 != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -22,10 +24,20 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Restore release signing key
+        if: env.HAS_KEY == 'true'
+        run: |
+          echo "${{ secrets.TLAUNCHER_KEYSTORE_B64 }}" | base64 -d > "$RUNNER_TEMP/tlauncher.jks"
+          echo "TLAUNCHER_KEYSTORE=$RUNNER_TEMP/tlauncher.jks" >> "$GITHUB_ENV"
+
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --console=plain
 
       - name: Build APKs
+        env:
+          TLAUNCHER_KEYSTORE_PASSWORD: ${{ secrets.TLAUNCHER_KEYSTORE_PASSWORD }}
+          TLAUNCHER_KEY_ALIAS: ${{ secrets.TLAUNCHER_KEY_ALIAS }}
+          TLAUNCHER_KEY_PASSWORD: ${{ secrets.TLAUNCHER_KEY_PASSWORD }}
         run: ./gradlew assembleDebug assembleRelease --console=plain
 
       - uses: actions/upload-artifact@v4
@@ -35,14 +47,20 @@ jobs:
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/debug/app-debug.apk
 
+      # Only builds signed with the permanent key are published, so in-app updates always install cleanly.
       - name: Publish to the "latest" release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.HAS_KEY == 'true'
         run: |
           cp app/build/outputs/apk/release/app-release.apk TLauncher.apk
+          printf '{"versionCode": %s, "versionName": "1.0.%s", "apk": "TLauncher.apk"}\n' "$GITHUB_RUN_NUMBER" "$GITHUB_RUN_NUMBER" > version.json
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest TLauncher.apk \
-            --title "TLauncher (latest build)" \
-            --notes "Built from ${GITHUB_SHA::7}. Download **TLauncher.apk** below and open it on the head unit to install." \
+          gh release create latest TLauncher.apk version.json \
+            --title "TLauncher 1.0.${GITHUB_RUN_NUMBER}" \
+            --notes "Built from ${GITHUB_SHA::7}. Download **TLauncher.apk** below and open it on the head unit to install. Installed copies update themselves from here." \
             --latest
         env:
           GH_TOKEN: ${{ github.token }}
+
+      - name: Signing key missing
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.HAS_KEY != 'true'
+        run: echo "::warning::TLAUNCHER_KEYSTORE_B64 secret not set - release not published (see README, 'Signing key')."

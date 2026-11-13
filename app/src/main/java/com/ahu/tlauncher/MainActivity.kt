@@ -106,7 +106,14 @@ class MainActivity : ComponentActivity(), HomeActions {
         hideSystemBars()
         NotificationHub.refresh(this)
         app.location.start()
+        app.location.setFast(true)
+        app.updater.checkIfStale()
         resumeTick++
+    }
+
+    override fun onPause() {
+        super.onPause()
+        app.location.setFast(false)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -134,11 +141,20 @@ class MainActivity : ComponentActivity(), HomeActions {
         val apps by app.apps.apps.collectAsState()
         val volume by app.volume.state.collectAsState()
         val location by app.location.location.collectAsState()
+        val update by app.updater.state.collectAsState()
+        val dismissedCode by app.updater.dismissedCode.collectAsState()
         val now by produceState(LocalDateTime.now()) {
             while (true) { value = LocalDateTime.now(); delay(1000 - (System.currentTimeMillis() % 1000)) }
         }
         val tick = resumeTick
         val btOn = remember(tick, now.minute) { bluetoothEnabled() }
+        // Bluetooth / Wi-Fi indicators refresh every 5 s (and on resume).
+        val bt = remember(tick, now.second / 5, now.minute) { com.ahu.tlauncher.system.Connectivity.bluetooth(this) }
+        val wifi = remember(tick, now.second / 5, now.minute) { com.ahu.tlauncher.system.Connectivity.wifi(this) }
+        val gpsSpeed = location?.let { l ->
+            val age = (android.os.SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos) / 1_000_000
+            com.ahu.tlauncher.obd.GpsSpeed.kmh(l.hasSpeed(), l.speed, age)
+        }
         val isDefault = remember(tick) { isDefaultLauncher() }
         val locPerm = remember(tick) { app.location.hasPermission() }
 
@@ -150,8 +166,9 @@ class MainActivity : ComponentActivity(), HomeActions {
         val state = HomeUiState(
             settings = settings, obd = obd, media = media, nav = nav, notificationAccess = access,
             apps = apps, volume = volume, now = now,
-            locationLat = location?.latitude, locationLon = location?.longitude, locationPermission = locPerm,
-            bluetoothOn = btOn, isDefaultLauncher = isDefault,
+            locationLat = location?.latitude, locationLon = location?.longitude, locationPermission = locPerm, gpsSpeedKmh = gpsSpeed,
+            bluetoothOn = btOn, bluetooth = bt, wifi = wifi, isDefaultLauncher = isDefault,
+            update = update, updateDismissedCode = dismissedCode, appVersion = BuildConfig.VERSION_NAME,
         )
         TLauncherTheme(dark = dark) { ScaledCanvas { HomeScreen(state, this@MainActivity) } }
     }
@@ -254,6 +271,9 @@ class MainActivity : ComponentActivity(), HomeActions {
     }
 
     override fun openAndroidSettings() { startSafely(Intent(AndroidSettings.ACTION_SETTINGS)) }
+    override fun startUpdate() = app.updater.install()
+    override fun dismissUpdate() = app.updater.dismiss()
+    override fun checkForUpdates() { lifecycleScope.launch { app.updater.check(manual = true) } }
 
     override fun setTheme(mode: ThemeMode) { lifecycleScope.launch { app.prefs.setTheme(mode) } }
     override fun setSpeedUnit(u: SpeedUnit) { lifecycleScope.launch { app.prefs.setSpeedUnit(u) } }
