@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Original side-view illustration of a compact 7-seat MPV (no brand marks). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="400dp" android:height="160dp"
+    android:viewportWidth="400" android:viewportHeight="160">
+    <!-- ground shadow -->
+    <path android:fillColor="#33000000"
+        android:pathData="M200,146m-186,0a186,9 0 1,0 372,0a186,9 0 1,0 -372,0" />
+    <!-- body -->
+    <path android:fillColor="#D9DCE0"
+        android:pathData="M18,112 L18,96 Q20,84 34,80 L96,70 L138,30 Q144,24 154,24 L330,22 Q346,22 352,32 L372,80 L378,104 Q378,116 366,118 L332,118 A34,34 0 0,0 264,118 L130,118 A34,34 0 0,0 62,118 L30,118 Q18,118 18,112 Z" />
+    <!-- lower body shade -->
+    <path android:fillColor="#B9BDC3"
+        android:pathData="M18,104 L378,104 Q378,116 366,118 L332,118 A34,34 0 0,0 264,118 L130,118 A34,34 0 0,0 62,118 L30,118 Q18,118 18,112 Z" />
+    <!-- glasshouse -->
+    <path android:fillColor="#1B1E22"
+        android:pathData="M110,70 L144,34 Q148,30 156,30 L322,29 Q336,29 340,36 L356,72 Z" />
+    <!-- pillars -->
+    <path android:fillColor="#D9DCE0" android:pathData="M198,30 L207,30 L207,72 L198,72 Z" />
+    <path android:fillColor="#D9DCE0" android:pathData="M282,29 L290,29 L292,72 L284,72 Z" />
+    <!-- shoulder crease + door cuts -->
+    <path android:strokeColor="#9EA3AA" android:strokeWidth="1.5" android:fillColor="#00000000"
+        android:pathData="M40,90 L370,88" />
+    <path android:strokeColor="#9EA3AA" android:strokeWidth="1.2" android:fillColor="#00000000"
+        android:pathData="M202,72 L202,116 M288,72 L290,104" />
+    <!-- door handles -->
+    <path android:fillColor="#8A8F96" android:pathData="M176,80 h14 v3 h-14 Z M262,80 h14 v3 h-14 Z" />
+    <!-- mirror -->
+    <path android:fillColor="#1B1E22" android:pathData="M112,62 L126,60 L128,68 L114,70 Z" />
+    <!-- head + tail lights -->
+    <path android:fillColor="#F4F7FA" android:pathData="M26,88 L62,80 L60,88 L28,94 Z" />
+    <path android:fillColor="#E0303A" android:pathData="M364,56 L370,56 L376,86 L370,86 Z" />
+    <!-- wheels -->
+    <path android:fillColor="#111214" android:pathData="M96,118m-28,0a28,28 0 1,0 56,0a28,28 0 1,0 -56,0" />
+    <path android:fillColor="#8A8F96" android:pathData="M96,118m-16,0a16,16 0 1,0 32,0a16,16 0 1,0 -32,0" />
+    <path android:fillColor="#3A3D42" android:pathData="M96,118m-5,0a5,5 0 1,0 10,0a5,5 0 1,0 -10,0" />
+    <path android:fillColor="#111214" android:pathData="M298,118m-28,0a28,28 0 1,0 56,0a28,28 0 1,0 -56,0" />
+    <path android:fillColor="#8A8F96" android:pathData="M298,118m-16,0a16,16 0 1,0 32,0a16,16 0 1,0 -32,0" />
+    <path android:fillColor="#3A3D42" android:pathData="M298,118m-5,0a5,5 0 1,0 10,0a5,5 0 1,0 -10,0" />
+</vector>
