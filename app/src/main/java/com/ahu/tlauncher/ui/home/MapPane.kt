@@ -1,5 +1,11 @@
 package com.ahu.tlauncher.ui.home
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.ahu.tlauncher.ui.components.TIcons
 import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.content.Context
@@ -94,6 +100,10 @@ internal interface MapControls {
     fun zoomIn()
     fun zoomOut()
     fun recenter()
+    /** Map rotation in degrees (0 = north up), for the compass. */
+    val bearing: Float get() = 0f
+    /** Compass tap: turn the map back to north-up. */
+    fun northUp() {}
 }
 
 @Composable
@@ -116,30 +126,75 @@ fun MapPane(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modif
         // route preview / trip cards (route search needs the Google map)
         if (useGoogle || preview) RouteOverlays(state, actions, Modifier.fillMaxSize())
 
-        // top-left: live turn-by-turn card while Google Maps / Waze is navigating
-        state.nav?.let { nav ->
-            Box(Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = STATUS_H + 4.dp)) { NavCard(nav, onClick = actions::openNavCard) }
+        // top-left: live turn-by-turn card while Google Maps / Waze is navigating; otherwise the Navigate pill
+        val side = if (controlsOnLeft) Alignment.TopEnd else Alignment.TopStart
+        val nav = state.nav
+        if (nav != null) {
+            Box(Modifier.align(side).padding(horizontal = 12.dp).padding(top = STATUS_H + 4.dp)) { NavCard(nav, onClick = actions::openNavCard) }
+        } else if (state.route?.phase != com.ahu.tlauncher.route.RoutePhase.ACTIVE) {
+            NavigatePill(actions::openNavApp, Modifier.align(side).padding(horizontal = 12.dp).padding(top = STATUS_H + 4.dp))
         }
 
-        // right edge: map controls
-        TCard(
-            if (controlsOnLeft) Modifier.align(Alignment.CenterStart).padding(start = 12.dp) else Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
-            color = T.colors.frost, shape = TShapes.button,
+        // right edge, like the prototype: compass, zoom pill and follow-me at the top, settings at the bottom
+        val edge = if (controlsOnLeft) Alignment.TopStart else Alignment.TopEnd
+        Column(
+            Modifier.align(edge).padding(horizontal = 10.dp).padding(top = STATUS_H + 4.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Column(Modifier.padding(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                IconButtonT(Icons.Rounded.Add, "Zoom in", size = 40.dp, iconSize = 22.dp) { controls?.zoomIn() }
-                IconButtonT(Icons.Rounded.Remove, "Zoom out", size = 40.dp, iconSize = 22.dp) { controls?.zoomOut() }
-                IconButtonT(Icons.Rounded.MyLocation, "Follow my location", size = 40.dp, iconSize = 20.dp) {
-                    if (!state.locationPermission) actions.requestLocation()
-                    controls?.recenter()
-                }
+            Compass(controls?.bearing ?: 0f) { controls?.northUp() }
+            Column(Modifier.width(44.dp).clip(RoundedCornerShape(22.dp)).background(T.colors.chrome)) {
+                MapRound(TIcons.Plus, "Zoom in", plain = true) { controls?.zoomIn() }
+                MapRound(TIcons.Minus, "Zoom out", plain = true) { controls?.zoomOut() }
+            }
+            MapRound(TIcons.Locate, "Follow my location") {
+                if (!state.locationPermission) actions.requestLocation()
+                controls?.recenter()
             }
         }
+        MapRound(
+            TIcons.Gear, "Map settings",
+            modifier = Modifier.align(if (controlsOnLeft) Alignment.BottomStart else Alignment.BottomEnd).padding(10.dp).padding(bottom = 14.dp),
+            onClick = actions::openMapSettings,
+        )
 
         if (!useGoogle) Text(
             if (vectorCapable) ATTRIBUTION else "© OpenStreetMap contributors", style = TType.caption, color = T.colors.muted,
             modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp),
         )
+    }
+}
+
+/** Round dark map button (prototype: 80 px circles at 90 % black). */
+@Composable
+private fun MapRound(icon: ImageVector, desc: String, modifier: Modifier = Modifier, plain: Boolean = false, onClick: () -> Unit) {
+    Box(
+        modifier.size(44.dp).clip(CircleShape).then(if (plain) Modifier else Modifier.background(T.colors.chrome)).pressable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, desc, tint = if (T.colors.isDark) Color.White.copy(alpha = 0.75f) else T.colors.text, modifier = Modifier.size(20.dp)) }
+}
+
+/** Compass disc with an "N" and a small north arrow; rotates with the map. Tap to turn north-up. */
+@Composable
+private fun Compass(bearing: Float, onClick: () -> Unit) {
+    Box(Modifier.size(44.dp).clip(CircleShape).background(T.colors.chrome).pressable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(28.dp).graphicsLayer { rotationZ = -bearing }.clip(CircleShape).background(T.colors.muted), contentAlignment = Alignment.Center) {
+            Text("N", style = TType.caption, color = Color.White)
+            Icon(TIcons.ChevronUp, null, tint = Color.White, modifier = Modifier.align(Alignment.TopCenter).size(10.dp))
+        }
+    }
+}
+
+/** "Navigate ›" pill at the map's top-left (prototype's navigation entry). Opens destination search. */
+@Composable
+private fun NavigatePill(onClick: () -> Unit, modifier: Modifier) {
+    Row(
+        modifier.width(210.dp).height(44.dp).clip(RoundedCornerShape(22.dp)).background(T.colors.chrome).pressable(onClick = onClick).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(TIcons.Navigate, null, tint = T.colors.muted, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(14.dp))
+        Text("Navigate", style = TType.body, color = T.colors.muted, modifier = Modifier.weight(1f))
+        Icon(TIcons.ChevronRight, null, tint = T.colors.muted, modifier = Modifier.size(16.dp))
     }
 }
 
@@ -175,6 +230,9 @@ internal fun LifecycleBinding(onStart: () -> Unit, onResume: () -> Unit, onPause
 // ---------------------------------------------------------------- MapLibre (vector)
 
 private class VectorHandle(val view: MapView) : MapControls {
+    val bearingState = androidx.compose.runtime.mutableFloatStateOf(0f)
+    override val bearing: Float get() = bearingState.floatValue
+    override fun northUp() { following = false; map?.animateCamera(CameraUpdateFactory.bearingTo(0.0), 500) }
     var map: MapLibreMap? = null
     var locationActive = false
     var styleUrl = STYLE_LIGHT
@@ -239,6 +297,7 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier): Ma
     DisposableEffect(handle) {
         handle.view.getMapAsync { m ->
             handle.map = m; map = m
+            m.addOnCameraMoveListener { handle.bearingState.floatValue = m.cameraPosition.bearing.toFloat() }
             m.addOnCameraMoveStartedListener { reason ->
                 if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) handle.lastTouch = SystemClock.elapsedRealtime()
             }
@@ -326,6 +385,8 @@ private val DARK_TILES = android.graphics.ColorMatrixColorFilter(
 // ---------------------------------------------------------------- osmdroid (raster fallback)
 
 private class RasterHandle(val map: org.osmdroid.views.MapView, val me: MyLocationNewOverlay?) : MapControls {
+    override val bearing: Float get() = -map.mapOrientation
+    override fun northUp() { map.mapOrientation = 0f }
     override fun zoomIn() { map.controller.zoomIn() }
     override fun zoomOut() { map.controller.zoomOut() }
     override fun recenter() { me?.let { it.enableFollowLocation(); it.myLocation?.let { p -> map.controller.animateTo(p) } } }

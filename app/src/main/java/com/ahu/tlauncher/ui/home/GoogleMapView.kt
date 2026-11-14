@@ -53,7 +53,11 @@ private class GoogleHandle(val view: MapView) : MapControls {
     var lastTouch = 0L
     var lat: Double? = null
     var lon: Double? = null
-    var bearing: Float? = null
+    var gpsBearing: Float? = null
+    /** Map rotation for the compass. */
+    val bearingState = androidx.compose.runtime.mutableFloatStateOf(0f)
+    override val bearing: Float get() = bearingState.floatValue
+    override fun northUp() { val m = map ?: return; following = false; m.animateCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder(m.cameraPosition).bearing(0f).tilt(0f).build()), 500, null) }
     var speedKmh: Int? = null
     val routeShapes = ArrayList<Any>() // Polylines + destination Marker
     var fittedRoute: Any? = null
@@ -68,7 +72,7 @@ private class GoogleHandle(val view: MapView) : MapControls {
         if (!following) return
         val target = LatLng(lat ?: return, lon ?: return)
         val pos = if (mode == DriveCamera.Mode.DRIVE) {
-            CameraPosition(target, DriveCamera.zoomFor(speedKmh ?: 30).toFloat(), DriveCamera.DRIVE_TILT.toFloat(), bearing ?: m.cameraPosition.bearing)
+            CameraPosition(target, DriveCamera.zoomFor(speedKmh ?: 30).toFloat(), DriveCamera.DRIVE_TILT.toFloat(), gpsBearing ?: m.cameraPosition.bearing)
         } else {
             CameraPosition(target, DriveCamera.PARK_ZOOM.toFloat(), DriveCamera.PARK_TILT.toFloat(), 0f)
         }
@@ -95,6 +99,7 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
             handle.map = m; map = m
             m.uiSettings.isMyLocationButtonEnabled = false
             m.uiSettings.isRotateGesturesEnabled = true
+            m.setOnCameraMoveListener { handle.bearingState.floatValue = m.cameraPosition.bearing }
             m.setOnCameraMoveStartedListener { reason ->
                 if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
                     handle.following = false
@@ -113,7 +118,7 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
     val speed = state.displaySpeedKmh
     LaunchedEffect(m, state.locationLat, state.locationLon, state.locationBearing, speed) {
         handle.lat = state.locationLat; handle.lon = state.locationLon
-        if ((speed ?: 0) >= 5) state.locationBearing?.let { handle.bearing = it } // GPS course is noise when crawling
+        if ((speed ?: 0) >= 5) state.locationBearing?.let { handle.gpsBearing = it } // GPS course is noise when crawling
         handle.speedKmh = speed
         val next = DriveCamera.nextMode(handle.mode, speed)
         if (next != handle.mode) {

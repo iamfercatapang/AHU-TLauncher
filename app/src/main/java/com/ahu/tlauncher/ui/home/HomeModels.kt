@@ -121,6 +121,8 @@ interface HomeActions {
     fun navigateHome() {}
     fun navigateWork() {}
     fun openNavCard() {}
+    /** Gear on the map: Settings → Navigation (handled by the home screen). */
+    fun openMapSettings() {}
     fun volumeStep(up: Boolean) {}
     fun setVolume(level: Int) {}
     fun toggleMute() {}

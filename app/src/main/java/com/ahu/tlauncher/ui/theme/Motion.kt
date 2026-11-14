@@ -33,5 +33,10 @@ object TMotion {
 
     fun <T> enter() = tween<T>(ENTER_MS, easing = EaseOut)
     fun <T> move() = tween<T>(MOVE_MS, easing = EaseInOut)
+    /** Prototype press feedback: 150 ms ease-out. */
+    fun <T> press() = tween<T>(150, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+    /** Prototype panel entrance: 220 ms ease-out, rising 18 dp. */
+    const val PANEL_MS = 220
+    fun <T> panel() = tween<T>(PANEL_MS, easing = EaseOut)
     fun <T> count() = tween<T>(COUNT_MS, easing = EaseOut)
 }

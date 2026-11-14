@@ -17,6 +17,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,6 +66,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -108,7 +110,8 @@ import kotlin.math.roundToInt
 /** Studio backdrop behind the car: soft vertical fade towards a "floor". */
 @Composable
 private fun stageBrush(): Brush = if (T.colors.isDark) {
-    Brush.verticalGradient(0f to Color(0xFF4A4C50), 0.62f to Color(0xFF2C2D30), 1f to Color(0xFF141517))
+    // Prototype: near-black side panel.
+    Brush.verticalGradient(0f to Color(0xFF0E0E0E), 1f to Color(0xFF0E0E0E))
 } else {
     Brush.verticalGradient(0f to Color(0xFFFFFFFF), 0.6f to Color(0xFFF1F1F1), 0.75f to Color(0xFFE6E6E6), 1f to Color(0xFFF7F7F7))
 }
@@ -126,12 +129,27 @@ fun CarStage(
     modifier: Modifier = Modifier,
     handleOnLeft: Boolean = false,
 ) {
-    Box(modifier.background(stageBrush()).clipToBounds()) {
+    val dark = T.colors.isDark
+    Box(
+        modifier.background(stageBrush()).clipToBounds().drawBehind {
+            // Night: a soft pool of light behind the car, like the prototype's lit stage.
+            if (dark) drawCircle(
+                Brush.radialGradient(listOf(Color.White.copy(alpha = 0.09f), Color.Transparent), center = Offset(size.width / 2, size.height * 0.5f), radius = size.minDimension * 0.55f),
+                radius = size.minDimension * 0.55f, center = Offset(size.width / 2, size.height * 0.5f),
+            )
+        },
+    ) {
         Column(Modifier.fillMaxSize().padding(top = STATUS_H)) {
             SpeedBlock(state, Modifier.fillMaxWidth(), glideKey = expanded)
             CarHero(state, Modifier.fillMaxWidth().weight(1f), glideKey = expanded)
         }
         Telltales(state, Modifier.align(Alignment.TopStart).padding(start = 18.dp, top = STATUS_H + 8.dp))
+        // Lights-on tell-tale sits at the panel's top-right corner, in the status row (as in the prototype).
+        if (state.lights.on) Icon(
+            com.ahu.tlauncher.ui.components.LowBeamIcon, "Headlights on", tint = TELL_GREEN,
+            modifier = Modifier.align(if (handleOnLeft || expanded) Alignment.TopStart else Alignment.TopEnd)
+                .padding(start = if (expanded) 150.dp else 18.dp, end = 18.dp, top = 9.dp).size(22.dp),
+        )
 
         // bottom cards overlap the reflection, as in the reference layout
         Box(Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 10.dp)) {
@@ -168,38 +186,62 @@ fun CarStage(
 
 @Composable
 private fun SpeedBlock(state: HomeUiState, modifier: Modifier, glideKey: Any) {
-    val obdSpeed = if (ObdDisplay.show(state.obd.status)) state.obd.data.speedKmh else null
+    val obd = ObdDisplay.show(state.obd.status)
+    val obdSpeed = if (obd) state.obd.data.speedKmh else null
     // No OBD and no GPS fix yet (e.g. parked indoors): show 0 rather than nothing.
     val kmh = state.displaySpeedKmh ?: 0
     val mph = state.settings.speedUnit == SpeedUnit.MPH
     val target = if (mph) (kmh * 0.621371).roundToInt() else kmh
     // Count to the new value instead of jumping (tabular figures keep the width steady).
     val speed by animateIntAsState(target, TMotion.count(), label = "speed")
+    // Laid out like the prototype's speed card: number, then a row with the source where gears would be,
+    // the unit in the middle and a battery-style fuel gauge on the right, then a thin RPM line.
     Column(modifier.padding(top = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(speed.toString(), modifier = Modifier.glideOnChange(glideKey), style = TType.speed, color = T.colors.text, textAlign = TextAlign.Center)
-        Text(
-            (if (mph) "mph" else "km/h") + if (obdSpeed == null) " · GPS" else "",
-            style = TType.label, color = T.colors.muted, modifier = Modifier.offset(y = (-6).dp),
-        )
-        val fuel = if (ObdDisplay.show(state.obd.status)) state.obd.data.fuelPct else null
-        if (fuel != null) FuelBar(fuel, state.fuel.rangeKm, mph, Modifier.offset(y = (-2).dp))
+        Column(Modifier.widthIn(max = 380.dp).fillMaxWidth().padding(horizontal = 14.dp).offset(y = (-6).dp)) {
+            Box(Modifier.fillMaxWidth().height(20.dp)) {
+                Row(Modifier.align(Alignment.CenterStart), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    listOf("OBD" to (obdSpeed != null), "GPS" to (obdSpeed == null)).forEach { (label, on) ->
+                        Text(label, style = TType.label, color = if (on) T.colors.text else T.colors.muted)
+                    }
+                }
+                Text(if (mph) "mph" else "km/h", style = TType.label, color = T.colors.muted, modifier = Modifier.align(Alignment.Center))
+                val fuel = if (obd) state.obd.data.fuelPct else null
+                if (fuel != null) FuelGauge(fuel, state.fuel.rangeKm, mph, Modifier.align(Alignment.CenterEnd))
+            }
+            Spacer(Modifier.height(8.dp))
+            RpmLine(if (obd) state.obd.data.rpm else null, Modifier.fillMaxWidth())
+        }
     }
 }
 
-/** Slim tank-level bar with "62% · 310 km", like Tesla's battery bar. Amber when low. */
+/** Battery-style fuel gauge ("62% · 335 km" + shell with green fill). Amber when low. */
 @Composable
-private fun FuelBar(pct: Int, rangeKm: Int?, mph: Boolean, modifier: Modifier) {
+private fun FuelGauge(pct: Int, rangeKm: Int?, mph: Boolean, modifier: Modifier) {
     val level by animateFloatAsState(pct.coerceIn(0, 100) / 100f, TMotion.count(), label = "fuel")
     val low = pct < com.ahu.tlauncher.obd.FuelMath.LOW_FUEL_PCT
+    val fill = if (low) TELL_AMBER else T.colors.green
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Rounded.LocalGasStation, "Fuel", tint = if (low) TELL_AMBER else T.colors.muted, modifier = Modifier.size(14.dp))
-        Spacer(Modifier.width(6.dp))
-        Box(Modifier.width(72.dp).height(6.dp).clip(CircleShape).background(T.colors.secondary.copy(alpha = 0.3f))) {
-            Box(Modifier.fillMaxHeight().fillMaxWidth(level).clip(CircleShape).background(if (low) TELL_AMBER else T.colors.text))
-        }
-        Spacer(Modifier.width(8.dp))
         val range = rangeKm?.let { if (mph) " · ${(it * 0.621371).roundToInt()} mi" else " · $it km" } ?: ""
-        Text("$pct%$range", style = TType.caption, color = if (low) TELL_AMBER else T.colors.muted, maxLines = 1)
+        Text("$pct%$range", style = TType.label, color = if (low) TELL_AMBER else T.colors.muted, maxLines = 1)
+        Spacer(Modifier.width(8.dp))
+        Box(Modifier.width(32.dp).height(12.dp).border(1.dp, T.colors.muted, androidx.compose.foundation.shape.RoundedCornerShape(1.dp)).padding(2.dp)) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(level).background(fill))
+        }
+        Box(Modifier.padding(start = 1.dp).width(2.dp).height(5.dp).background(T.colors.muted))
+    }
+}
+
+/** Thin track with a green marker that moves with engine RPM (the prototype's power line). */
+@Composable
+private fun RpmLine(rpm: Int?, modifier: Modifier) {
+    val frac by animateFloatAsState(((rpm ?: 0) / 7000f).coerceIn(0f, 1f), TMotion.count(), label = "rpm")
+    BoxWithConstraints(modifier.height(4.dp)) {
+        Box(Modifier.align(Alignment.Center).fillMaxWidth().height(1.dp).background(T.colors.muted))
+        if (rpm != null) {
+            val w = 22.dp
+            Box(Modifier.offset(x = (maxWidth - w) * frac).width(w).height(4.dp).clip(CircleShape).background(T.colors.green))
+        }
     }
 }
 
@@ -210,7 +252,6 @@ private fun Telltales(state: HomeUiState, modifier: Modifier) {
     val obd = ObdDisplay.show(state.obd.status)
     val items = buildList {
         // Lights on (head unit ILL wire): green, like the cluster's dipped-beam lamp.
-        if (state.lights.on) add(Triple(com.ahu.tlauncher.ui.components.LowBeamIcon, TELL_GREEN, "Headlights on"))
         if (!obd) return@buildList
         if (state.obd.status == ObdStatus.CONNECTED) add(Triple(Icons.Rounded.SettingsInputComponent, TELL_GREEN, "OBD connected"))
         d.coolantC?.let {
@@ -225,7 +266,7 @@ private fun Telltales(state: HomeUiState, modifier: Modifier) {
     }
 }
 
-private val TELL_GREEN = Color(0xFF25CB55)
+private val TELL_GREEN = Color(0xFF25CB55) // prototype vehicle green
 private val TELL_BLUE = Color(0xFF3E6AE1)
 private val TELL_RED = Color(0xFFE5484D)
 private val TELL_AMBER = Color(0xFFF5A623)
@@ -359,7 +400,7 @@ private fun CalloutView(c: Callout, imgW: Dp, calloutH: Dp, imgH: Dp, line: Bool
 // ---------------------------------------------------------------- cards
 
 @Composable
-private fun cardColor() = if (T.colors.isDark) Color(0xFF26282C).copy(alpha = 0.94f) else Color.White.copy(alpha = 0.96f)
+private fun cardColor() = if (T.colors.isDark) T.colors.card else Color.White.copy(alpha = 0.96f)
 
 @Composable
 private fun CardPager(state: HomeUiState, actions: HomeActions) {

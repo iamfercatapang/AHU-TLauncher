@@ -1,44 +1,50 @@
 package com.ahu.tlauncher.ui.home
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.VolumeOff
-import androidx.compose.material.icons.automirrored.rounded.VolumeUp
-import androidx.compose.material.icons.rounded.Apps
-import androidx.compose.material.icons.rounded.KeyboardArrowLeft
-import androidx.compose.material.icons.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.rounded.LightMode
-import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.ahu.tlauncher.launcher.AppEntry
-import com.ahu.tlauncher.ui.components.IconButtonT
+import com.ahu.tlauncher.ui.components.TIcons
 import com.ahu.tlauncher.ui.components.pressable
+import com.ahu.tlauncher.ui.theme.TMotion
 import com.ahu.tlauncher.ui.theme.TShapes
 import com.ahu.tlauncher.ui.theme.TType
 
-/** The dock is always dark, in both themes, like the in-car reference. */
-private val DOCK_BG = Color(0xFF0C0D0E)
+/** The dock is always black, in both themes, like the in-car reference. */
+private val DOCK_BG = Color.Black
 private val DOCK_FG = Color.White
-private val DOCK_MUTED = Color.White.copy(alpha = 0.45f)
-private val DOCK_ACTIVE = Color.White.copy(alpha = 0.12f)
+private val DOCK_MUTED = Color.White.copy(alpha = 0.6f)
+/** Prototype's active tint (#c5d8ee12) and underline (#b9cbdd). */
+private val ACTIVE_BG = Color(0x12C5D8EE)
+private val ACTIVE_LINE = Color(0xFFB9CBDD)
 
+/**
+ * Laid out like the prototype's control bar: car on the left, then (where climate sits there) your
+ * pinned apps, music, "…" for all apps, brightness, and a vertical volume control on the right.
+ */
 @Composable
 fun Dock(
     state: HomeUiState,
@@ -48,43 +54,59 @@ fun Dock(
     onToggleApps: () -> Unit,
     onToggleMusic: () -> Unit,
     onLaunch: (AppEntry) -> Unit,
-    onToggleBrightness: () -> Unit = {},
     modifier: Modifier = Modifier,
+    onToggleBrightness: () -> Unit = {},
 ) {
     val pinned = state.settings.pinnedApps.mapNotNull { key -> state.apps.firstOrNull { it.key == key } }.take(6)
-    Box(modifier.background(DOCK_BG).padding(horizontal = 18.dp)) {
-        DockIcon(com.ahu.tlauncher.ui.components.MpvFrontIcon, "Vehicle & settings", overlay == Overlay.SETTINGS, onOpenSettings, Modifier.align(Alignment.CenterStart))
-
-        // centre: pinned apps in full colour, then music + launcher
-        Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            pinned.forEach { app ->
-                Box(Modifier.size(48.dp).pressable { onLaunch(app) }, contentAlignment = Alignment.Center) {
-                    Image(app.icon, app.label, modifier = Modifier.size(38.dp).clip(TShapes.button))
-                }
+    Row(
+        modifier.background(DOCK_BG).padding(horizontal = 22.dp),
+        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically,
+    ) {
+        DockButton(com.ahu.tlauncher.ui.components.MpvFrontIcon, "Vehicle & settings", overlay == Overlay.SETTINGS, onOpenSettings)
+        pinned.forEach { app ->
+            Box(Modifier.size(46.dp).pressable { onLaunch(app) }, contentAlignment = Alignment.Center) {
+                Image(app.icon, app.label, modifier = Modifier.size(34.dp).clip(TShapes.button))
             }
-            DockIcon(Icons.Rounded.MusicNote, "Music", overlay == Overlay.MUSIC, onToggleMusic)
-            DockIcon(Icons.Rounded.Apps, "All apps", overlay == Overlay.APPS, onToggleApps)
         }
-
-        // right: volume
-        val v = state.volume
-        Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
-            DockIcon(Icons.Rounded.LightMode, "Brightness", overlay == Overlay.BRIGHTNESS, onToggleBrightness)
-            Spacer(Modifier.width(10.dp))
-            IconButtonT(Icons.Rounded.KeyboardArrowLeft, "Volume down", size = 36.dp, iconSize = 22.dp, tint = DOCK_MUTED) { actions.volumeStep(false) }
-            Row(Modifier.fillMaxHeight().pressable { actions.toggleMute() }.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(if (v.muted || v.level == 0) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp, "Mute", tint = DOCK_FG, modifier = Modifier.size(28.dp))
-                Text(if (v.muted) " 0" else " ${v.level}", style = TType.title, color = DOCK_FG, maxLines = 1, softWrap = false, modifier = Modifier.widthIn(min = 30.dp))
-            }
-            IconButtonT(Icons.Rounded.KeyboardArrowRight, "Volume up", size = 36.dp, iconSize = 22.dp, tint = DOCK_MUTED) { actions.volumeStep(true) }
-        }
+        DockButton(TIcons.Music, "Music", overlay == Overlay.MUSIC, onToggleMusic)
+        DockButton(TIcons.More, "All apps", overlay == Overlay.APPS, onToggleApps)
+        DockButton(TIcons.Sun, "Brightness", overlay == Overlay.BRIGHTNESS, onToggleBrightness)
+        VolumeControl(state, actions)
     }
 }
 
+/** Icon button with the prototype's active state: soft tinted square plus a short underline. */
 @Composable
-private fun DockIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, active: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Box(
-        modifier.size(48.dp).clip(TShapes.button).background(if (active) DOCK_ACTIVE else Color.Transparent).pressable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) { Icon(icon, desc, tint = DOCK_FG, modifier = Modifier.size(30.dp)) }
+private fun DockButton(icon: ImageVector, desc: String, active: Boolean, onClick: () -> Unit) {
+    val a by animateFloatAsState(if (active) 1f else 0f, TMotion.panel(), label = "dockActive")
+    Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(46.dp).graphicsLayer { alpha = a }.clip(TShapes.surface).background(ACTIVE_BG))
+        Box(Modifier.size(46.dp).clip(TShapes.surface).pressable(onClick = onClick), contentAlignment = Alignment.Center) {
+            Icon(icon, desc, tint = DOCK_FG, modifier = Modifier.size(28.dp))
+        }
+        // underline grows in from the centre
+        Box(
+            Modifier.align(Alignment.BottomCenter).offset(y = 4.dp).width(14.dp).height(2.dp)
+                .graphicsLayer { alpha = a; scaleX = a }.clip(TShapes.button).background(ACTIVE_LINE),
+        )
+    }
+}
+
+/** Vertical volume like the prototype: up, speaker with level, down. Tap the speaker to mute. */
+@Composable
+private fun VolumeControl(state: HomeUiState, actions: HomeActions) {
+    val v = state.volume
+    Column(Modifier.width(56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(width = 44.dp, height = 16.dp).pressable { actions.volumeStep(true) }, contentAlignment = Alignment.Center) {
+            Icon(TIcons.ChevronUp, "Volume up", tint = DOCK_MUTED, modifier = Modifier.size(16.dp))
+        }
+        Row(Modifier.height(28.dp).pressable { actions.toggleMute() }, verticalAlignment = Alignment.CenterVertically) {
+            Icon(if (v.muted || v.level == 0) TIcons.SpeakerOff else TIcons.Speaker, "Mute", tint = DOCK_FG, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(2.dp))
+            Text(if (v.muted) "0" else "${v.level}", style = TType.label.copy(fontSize = 13.sp), color = DOCK_FG, maxLines = 1, softWrap = false)
+        }
+        Box(Modifier.size(width = 44.dp, height = 16.dp).pressable { actions.volumeStep(false) }, contentAlignment = Alignment.Center) {
+            Icon(TIcons.ChevronDown, "Volume down", tint = DOCK_MUTED, modifier = Modifier.size(16.dp))
+        }
+    }
 }

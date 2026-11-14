@@ -36,30 +36,37 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.onSizeChanged
 import com.ahu.tlauncher.ui.theme.T
 import com.ahu.tlauncher.ui.theme.TMotion
 import com.ahu.tlauncher.ui.theme.TShapes
 import com.ahu.tlauncher.ui.theme.TType
 
 /**
- * Press feedback is opacity-only (no scale/translate), using the standard 0.33s transition.
- * `pressedScale` is accepted for call-site compatibility but ignored.
+ * Press feedback like the prototype: the control shrinks while pressed (150 ms, ease-out) and springs back.
+ * Buttons shrink to 90 %; anything wider than ~200 dp (rows, cards) only to 97 % so big areas don't jump.
+ * [pressedScale] overrides the automatic choice. Disabled controls are drawn at 30 %.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun Modifier.pressable(
     enabled: Boolean = true,
-    @Suppress("UNUSED_PARAMETER") pressedScale: Float = 1f,
+    pressedScale: Float = 0f,
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ): Modifier {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val alpha by animateFloatAsState(
-        when { !enabled -> 0.3f; pressed -> 0.55f; else -> 1f }, TMotion.std(), label = "press",
-    )
+    var wide by remember { mutableStateOf(false) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val target = if (pressedScale > 0f) pressedScale else if (wide) 0.97f else 0.9f
+    val scale by animateFloatAsState(if (pressed && enabled) target else 1f, TMotion.press(), label = "press")
+    val alpha = if (enabled) 1f else 0.3f
     return this
-        .graphicsLayer { this.alpha = alpha }
+        .onSizeChanged { wide = with(density) { it.width.toDp() } > 200.dp }
+        .graphicsLayer { this.alpha = alpha; scaleX = scale; scaleY = scale }
         .combinedClickable(
             interactionSource = source, indication = null, enabled = enabled,
             onLongClick = onLongClick, onClick = onClick,

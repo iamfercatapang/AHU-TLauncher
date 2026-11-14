@@ -79,7 +79,8 @@ fun MusicPanel(state: HomeUiState, actions: HomeActions, onClose: () -> Unit, mo
     val live = state.media != null
     val m = state.media ?: state.lastMedia
     val rows = state.media?.let { UpNext.rows(it.queue, it.activeQueueId) }.orEmpty()
-    Column(modifier.fillMaxWidth().clip(TShapes.surface).background(T.colors.panel).padding(start = 22.dp, end = 18.dp, top = 14.dp, bottom = 18.dp)) {
+    // Prototype music drawer: #22252b, 20 dp corners (light theme keeps DESIGN.md white).
+    Column(modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp)).background(if (T.colors.isDark) androidx.compose.ui.graphics.Color(0xFF22252B) else T.colors.panel).padding(start = 22.dp, end = 18.dp, top = 14.dp, bottom = 18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Music", style = TType.title, color = T.colors.text)
             Spacer(Modifier.width(10.dp))

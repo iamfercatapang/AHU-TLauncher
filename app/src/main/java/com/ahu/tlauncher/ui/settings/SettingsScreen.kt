@@ -86,13 +86,14 @@ enum class Section(val label: String, val icon: ImageVector) {
 @Composable
 fun SettingsScreen(state: HomeUiState, actions: HomeActions, onClose: () -> Unit, modifier: Modifier = Modifier, initial: Section = Section.DISPLAY) {
     var section by rememberSaveable(initial) { mutableStateOf(initial) }
-    Row(modifier.clip(TShapes.surface).background(T.colors.panel)) {
-        Column(Modifier.width(168.dp).fillMaxHeight().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    // Prototype settings: navigation list on its own surface, content on a darker sheet.
+    Row(modifier.clip(TShapes.surface).background(T.colors.sheet)) {
+        Column(Modifier.width(168.dp).fillMaxHeight().background(if (T.colors.isDark) T.colors.card else T.colors.panel).padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Section.entries.forEach { s ->
                 val sel = s == section
                 Row(
                     Modifier.fillMaxWidth().height(42.dp).clip(TShapes.card)
-                        .background(if (sel) T.colors.card else androidx.compose.ui.graphics.Color.Transparent)
+                        .background(if (sel) (if (T.colors.isDark) androidx.compose.ui.graphics.Color(0xFF6E6E6E).copy(alpha = 0.45f) else T.colors.card) else androidx.compose.ui.graphics.Color.Transparent)
                         .pressable(pressedScale = 0.97f) { section = s }.padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

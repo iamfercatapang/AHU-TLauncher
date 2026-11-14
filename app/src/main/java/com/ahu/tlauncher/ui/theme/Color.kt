@@ -27,9 +27,13 @@ data class TColors(
     val onAccent: Color,
     val danger: Color,      // in-car safety exception: critical engine alerts only
     val scrim: Color,       // modal overlay
+    /** "OK / energy" colour: the prototype's vehicle green at night; plain text by day (DESIGN.md has no semantic colours). */
+    val green: Color,
+    /** Round map buttons, Navigate pill, toasts. */
+    val chrome: Color,
+    /** Settings content area. */
+    val sheet: Color,
 ) {
-    // Spec has no semantic colours: "ok" states are just the primary text colour.
-    val green: Color get() = text
     val warning: Color get() = text
 }
 
@@ -62,26 +66,47 @@ val LightColors = TColors(
     accent = Palette.ElectricBlue,
     onAccent = Palette.PureWhite,
     danger = Palette.AlertRed,
-    scrim = Color(0xA6808080),
+    scrim = Color(0x66808080),
+    green = Palette.CarbonDark,
+    chrome = Palette.LightAsh.copy(alpha = 0.96f),
+    sheet = Palette.PureWhite,
 )
+
+/** Night theme: the Tesla UI prototype's tokens (near-black surfaces, black dock, blue accent, vehicle green). */
+object NightPalette {
+    val AppBg = Color(0xFF1A1A1A)
+    val Sidebar = Color(0xFF0E0E0E)
+    val NavTree = Color(0xFF161616)
+    val SettingsPanel = Color(0xFF090909)
+    val ControlBar = Color(0xFF000000)
+    val SwitchOn = Color(0xFF007BE4)
+    val VehicleGreen = Color(0xFF25CB55)
+    val Muted = Color.White.copy(alpha = 0.4f)
+    val Secondary = Color(0xFF7F7F7F)
+    val Divider = Color(0x33797979)
+    val Toast = Color.Black.copy(alpha = 0.9f)
+}
 
 val DarkColors = TColors(
     isDark = true,
-    appBg = Palette.CarbonDark,
-    panel = Palette.CarbonDark,
-    card = Color(0xFF23262D),
-    cardPressed = Color(0xFF2E323A),
-    dock = Color(0xFF111317),
-    frost = Palette.CarbonDark.copy(alpha = 0.75f),
+    appBg = NightPalette.AppBg,
+    panel = NightPalette.Sidebar,
+    card = NightPalette.NavTree,
+    cardPressed = Color(0xFF242424),
+    dock = NightPalette.ControlBar,
+    frost = NightPalette.Toast,
     text = Palette.PureWhite,
-    body = Palette.PaleSilver,
-    muted = Color(0xFFA2A4A8),
-    secondary = Palette.SilverFog,
-    divider = Palette.Graphite,
-    accent = Palette.ElectricBlue,
+    body = Color.White.copy(alpha = 0.8f),
+    muted = NightPalette.Muted,
+    secondary = NightPalette.Secondary,
+    divider = NightPalette.Divider,
+    accent = NightPalette.SwitchOn,
     onAccent = Palette.PureWhite,
     danger = Palette.AlertRed,
-    scrim = Color(0xA6000000),
+    scrim = Color(0x66080B10),
+    green = NightPalette.VehicleGreen,
+    chrome = NightPalette.Toast,
+    sheet = NightPalette.SettingsPanel,
 )
 
 val LocalTColors = staticCompositionLocalOf { LightColors }

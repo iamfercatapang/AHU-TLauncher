@@ -22,7 +22,7 @@ private const val TNUM = "tnum"
  */
 object TType {
     /** In-car exception: glanceable speed readout. */
-    val speed = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 72.sp, lineHeight = 78.sp, fontFeatureSettings = TNUM)
+    val speed = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Normal, fontSize = 72.sp, lineHeight = 78.sp, fontFeatureSettings = TNUM)
     val hero = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 40.sp, lineHeight = 48.sp, fontFeatureSettings = TNUM)
     val display = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Medium, fontSize = 28.sp, lineHeight = 34.sp, fontFeatureSettings = TNUM)
     val promo = TextStyle(fontFamily = Inter, fontWeight = FontWeight.Normal, fontSize = 22.sp, lineHeight = 26.sp, fontFeatureSettings = TNUM)

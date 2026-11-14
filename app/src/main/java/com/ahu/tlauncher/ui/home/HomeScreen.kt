@@ -96,8 +96,9 @@ fun HomeScreen(
     // With the Google map, "Navigate" opens the dashboard's own search (route drawn here, voice by Maps/Waze).
     val routesOn = state.routesEnabled
     val actions = remember(rawActions, routesOn) {
-        if (!routesOn) rawActions else object : HomeActions by rawActions {
-            override fun openNavApp() { mapVisible = true; overlay = Overlay.SEARCH }
+        object : HomeActions by rawActions {
+            override fun openNavApp() { if (routesOn) { mapVisible = true; overlay = Overlay.SEARCH } else rawActions.openNavApp() }
+            override fun openMapSettings() { settingsStart = com.ahu.tlauncher.ui.settings.Section.NAVIGATION; overlay = Overlay.SETTINGS }
         }
     }
     val toggle = { o: Overlay -> overlay = if (overlay == o) Overlay.NONE else o }
@@ -119,9 +120,18 @@ fun HomeScreen(
             }
             StatusBar(
                 state, Modifier.fillMaxWidth().height(STATUS_H),
+                mapSpan = if (!mapVisible) null else if (carRight) (0.dp to maxWidth - stageW) else (stageW to maxWidth),
                 onObdClick = { settingsStart = com.ahu.tlauncher.ui.settings.Section.DIAGNOSTICS; overlay = Overlay.SETTINGS },
             )
 
+            // Prototype motion: panels rise 18 dp while fading in over a dimmed backdrop.
+            val rise = with(androidx.compose.ui.platform.LocalDensity.current) { 18.dp.roundToPx() }
+            val panelIn = fadeIn(TMotion.panel()) + androidx.compose.animation.slideInVertically(TMotion.panel()) { rise }
+            val panelOut = fadeOut(androidx.compose.animation.core.tween(150))
+            androidx.compose.animation.AnimatedVisibility(
+                visible = overlay != Overlay.NONE && overlay != Overlay.BRIGHTNESS,
+                enter = fadeIn(TMotion.panel()), exit = panelOut,
+            ) { Box(Modifier.fillMaxSize().background(T.colors.scrim)) }
             // Tap anywhere outside an open panel to close it (that tap does nothing else).
             if (overlay != Overlay.NONE) {
                 Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { overlay = Overlay.NONE } })
@@ -130,7 +140,7 @@ fun HomeScreen(
             // brightness slider, above the dock's sun button
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.BRIGHTNESS,
-                enter = fadeIn(TMotion.enter()), exit = fadeOut(TMotion.std()),
+                enter = panelIn, exit = panelOut,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 10.dp),
             ) {
                 BrightnessPopup(state, actions)
@@ -139,8 +149,7 @@ fun HomeScreen(
             // overlays inside the body area
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.SETTINGS,
-                enter = fadeIn(TMotion.std()),
-                exit = fadeOut(TMotion.std()),
+                enter = panelIn, exit = panelOut,
                 modifier = Modifier.align(Alignment.BottomEnd),
             ) {
                 com.ahu.tlauncher.ui.settings.SettingsScreen(
@@ -150,16 +159,14 @@ fun HomeScreen(
             }
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.MUSIC,
-                enter = fadeIn(TMotion.std()),
-                exit = fadeOut(TMotion.std()),
+                enter = panelIn, exit = panelOut,
                 modifier = Modifier.align(Alignment.BottomEnd),
             ) {
                 MusicPanel(state, actions, onClose = { overlay = Overlay.NONE }, modifier = Modifier.width(maxWidth * (1 - SPLIT_FRACTION)).height(maxHeight - STATUS_H).padding(10.dp))
             }
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.APPS,
-                enter = fadeIn(TMotion.std()),
-                exit = fadeOut(TMotion.std()),
+                enter = panelIn, exit = panelOut,
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
                 AppDrawer(
@@ -180,7 +187,7 @@ fun HomeScreen(
             // destination search, over the map
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.SEARCH,
-                enter = fadeIn(TMotion.enter()), exit = fadeOut(TMotion.std()),
+                enter = panelIn, exit = panelOut,
                 modifier = Modifier.align(if (carRight) Alignment.TopStart else Alignment.TopEnd).padding(top = STATUS_H + 4.dp),
             ) {
                 SearchPanel(state, actions, onClose = { overlay = Overlay.NONE }, modifier = Modifier.width(maxWidth * (1 - SPLIT_FRACTION)).padding(horizontal = 14.dp))
@@ -254,49 +261,66 @@ private fun MapReveal(modifier: Modifier, content: @Composable () -> Unit) {
 
 /** Full-width status row floating over the stage and map: link status · date · time. */
 @Composable
-private fun StatusBar(state: HomeUiState, modifier: Modifier, onObdClick: () -> Unit = {}) {
-    val time = state.now.format(DateTimeFormatter.ofPattern(if (is24h()) "HH:mm" else "h:mma", Locale.US)).lowercase()
-    Box(modifier.padding(horizontal = 20.dp)) {
+private fun StatusBar(
+    state: HomeUiState,
+    modifier: Modifier,
+    onObdClick: () -> Unit = {},
+    /** Map area (start, end) when the map is visible; null when the car fills the screen. */
+    mapSpan: Pair<androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp>? = null,
+) {
+    val time = state.now.format(DateTimeFormatter.ofPattern(if (is24h()) "HH:mm" else "h:mm a", Locale.US))
+    BoxWithConstraints(modifier) {
+        // car panel, top-left: OBD badge
         if (com.ahu.tlauncher.obd.ObdDisplay.show(state.obd.status)) {
-            ObdBadge(state.obd.status, Modifier.align(Alignment.CenterStart).pressable(onClick = onObdClick))
+            val obdX = if (mapSpan != null && mapSpan.first.value == 0f) mapSpan.second + 20.dp else 20.dp
+            ObdBadge(state.obd.status, Modifier.align(Alignment.CenterStart).padding(start = obdX).pressable(onClick = onObdClick))
         }
-        // right: weather · date
-        Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
-            state.weather?.let { w ->
-                val f = state.settings.tempUnit == com.ahu.tlauncher.data.TempUnit.F
-                val t = if (f) w.tempC * 9 / 5 + 32 else w.tempC
-                Icon(weatherIcon(w), w.kind.name.lowercase().replace('_', ' '), tint = T.colors.text, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("${Math.round(t)}°", style = TType.button, color = T.colors.text)
-                Spacer(Modifier.width(14.dp))
+        val links = @Composable { Connectivity(state) }
+        val clock = @Composable {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                state.weather?.let { w ->
+                    val f = state.settings.tempUnit == com.ahu.tlauncher.data.TempUnit.F
+                    val t = if (f) w.tempC * 9 / 5 + 32 else w.tempC
+                    Icon(weatherIcon(w), w.kind.name.lowercase().replace('_', ' '), tint = T.colors.text, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("${Math.round(t)} °${if (f) "F" else "C"}", style = TType.button, color = T.colors.text)
+                    Spacer(Modifier.width(20.dp))
+                }
+                Text(state.now.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())), style = TType.button, color = T.colors.muted)
+                Spacer(Modifier.width(12.dp))
+                Text(time, style = TType.button, color = T.colors.text)
             }
-            Text(state.now.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())), style = TType.button, color = T.colors.text)
         }
-        // centre: Bluetooth · time · Wi-Fi
-        Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically) {
-            val (btIcon, btDesc) = when (state.bluetooth) {
-                BtStatus.CONNECTED -> Icons.Rounded.BluetoothConnected to "Bluetooth connected"
-                BtStatus.ON -> Icons.Rounded.Bluetooth to "Bluetooth on"
-                BtStatus.OFF -> Icons.Rounded.BluetoothDisabled to "Bluetooth off"
+        if (mapSpan != null) {
+            // prototype: Bluetooth · Wi-Fi at the map's top-left, temperature + time at its top-right
+            Box(Modifier.align(Alignment.CenterStart).padding(start = mapSpan.first + 20.dp)) { links() }
+            Box(Modifier.align(Alignment.CenterEnd).padding(end = maxWidth - mapSpan.second + 20.dp)) { clock() }
+        } else {
+            Row(Modifier.align(Alignment.CenterEnd).padding(end = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                links(); Spacer(Modifier.width(24.dp)); clock()
             }
-            Icon(btIcon, btDesc, tint = if (state.bluetooth == BtStatus.OFF) T.colors.secondary else T.colors.text, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(12.dp))
-            Text(time, style = TType.title, color = T.colors.text)
-            Spacer(Modifier.width(12.dp))
-            val w = state.wifi
-            val wifiIcon = when {
-                !w.enabled -> Icons.Rounded.WifiOff
-                !w.connected -> Icons.Rounded.SignalWifi0Bar
-                w.level >= 4 -> Icons.Rounded.SignalWifi4Bar
-                w.level == 3 -> Icons.Rounded.NetworkWifi3Bar
-                w.level == 2 -> Icons.Rounded.NetworkWifi2Bar
-                else -> Icons.Rounded.NetworkWifi1Bar
-            }
-            Icon(
-                wifiIcon, if (w.connected) "Wi-Fi connected" else if (w.enabled) "Wi-Fi not connected" else "Wi-Fi off",
-                tint = if (w.connected) T.colors.text else T.colors.secondary, modifier = Modifier.size(20.dp),
-            )
         }
+    }
+}
+
+/** Bluetooth and Wi-Fi status icons (TLauncher's own line icons). */
+@Composable
+private fun Connectivity(state: HomeUiState) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        val (btIcon, btDesc) = when (state.bluetooth) {
+            BtStatus.CONNECTED -> com.ahu.tlauncher.ui.components.TIcons.Bluetooth to "Bluetooth connected"
+            BtStatus.ON -> com.ahu.tlauncher.ui.components.TIcons.Bluetooth to "Bluetooth on"
+            BtStatus.OFF -> com.ahu.tlauncher.ui.components.TIcons.BluetoothOff to "Bluetooth off"
+        }
+        Icon(btIcon, btDesc, tint = if (state.bluetooth == BtStatus.CONNECTED) T.colors.text else T.colors.muted, modifier = Modifier.size(20.dp))
+        val w = state.wifi
+        val icon = when {
+            !w.enabled -> com.ahu.tlauncher.ui.components.TIcons.WifiOff
+            !w.connected -> com.ahu.tlauncher.ui.components.TIcons.wifi(0)
+            else -> com.ahu.tlauncher.ui.components.TIcons.wifi(w.level.coerceIn(1, 4).let { if (it >= 3) 3 else it })
+        }
+        Icon(icon, if (w.connected) "Wi-Fi connected" else if (w.enabled) "Wi-Fi not connected" else "Wi-Fi off",
+            tint = if (w.connected) T.colors.text else T.colors.muted, modifier = Modifier.size(20.dp))
     }
 }
 
