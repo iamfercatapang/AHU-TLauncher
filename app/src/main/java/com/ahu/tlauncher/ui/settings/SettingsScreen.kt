@@ -162,21 +162,18 @@ private fun DisplaySection(state: HomeUiState, a: HomeActions) {
     Divider()
     SmallTitle("Car images")
     Text(
-        "Choose which views appear on the dashboard; tap the car there to switch between them. Plain white photo backgrounds are removed automatically.",
+        "Split view shows the front of the car; full screen turns it to the 3/4 view. Plain white photo backgrounds are removed automatically.",
         style = TType.label, color = T.colors.muted,
     )
     Spacer(Modifier.height(8.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        CarView.entries.forEach { v ->
-            val on = v in s.carViews
-            // The last ticked view can't be turned off.
-            CarSlot(v, s.carImages[v], a, Modifier.weight(1f), shown = on, canToggle = !on || s.carViews.size > 1)
-        }
+        CarSlot(CarView.FRONT, s.carImages[CarView.FRONT], a, Modifier.weight(1f), title = "Front · split view")
+        CarSlot(CarView.SIDE, s.carImages[CarView.SIDE], a, Modifier.weight(1f), title = "3/4 · full screen")
     }
 }
 
 @Composable
-private fun CarSlot(view: CarView, customUri: String?, a: HomeActions, modifier: Modifier, shown: Boolean = true, canToggle: Boolean = true) {
+private fun CarSlot(view: CarView, customUri: String?, a: HomeActions, modifier: Modifier, title: String = view.label) {
     val ctx = LocalContext.current
     val preview = androidx.compose.ui.platform.LocalInspectionMode.current
     val src = remember(customUri) {
@@ -201,15 +198,9 @@ private fun CarSlot(view: CarView, customUri: String?, a: HomeActions, modifier:
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(view.label, style = TType.button, color = T.colors.text)
-                Text(if (customUri != null) "Custom photo" else if (src == null) "Optional" else "Built-in", style = TType.label, color = T.colors.muted)
-            }
-            com.ahu.tlauncher.ui.components.TSwitch(
-                shown, { if (canToggle) a.setCarViewShown(view, it) },
-                Modifier.alpha(if (canToggle) 1f else 0.4f),
-            )
+        Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            Text(title, style = TType.button, color = T.colors.text)
+            Text(if (customUri != null) "Custom photo" else if (src == null) "Optional" else "Built-in", style = TType.label, color = T.colors.muted)
         }
         Spacer(Modifier.height(8.dp))
         PillButton("Change", height = 34.dp, modifier = Modifier.fillMaxWidth(), onClick = { a.pickCarImage(view) })

@@ -285,18 +285,18 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, glideKey: Any) {
     val ctx = LocalContext.current
     val preview = LocalInspectionMode.current
     val custom = state.settings.carImages
-    val shown = state.settings.carViews
-    val views = remember(custom, shown) {
-        val all = if (preview) listOf(
-            com.ahu.tlauncher.data.CarView.SIDE to CarSource.Bundled(R.drawable.car_side),
-            com.ahu.tlauncher.data.CarView.FRONT to CarSource.Bundled(R.drawable.car_front),
-            com.ahu.tlauncher.data.CarView.REAR to CarSource.Bundled(R.drawable.car_rear),
-        ) else CarImages.available(ctx, custom)
-        // Only the views ticked in Settings; fall back to all if none of the ticked ones has an image.
-        (all.filter { it.first in shown }.ifEmpty { all.take(1) }).map { it.second }
+    // Split view shows the front of the car, full screen the 3/4 view (your own photos when set).
+    val frontSrc = remember(custom) {
+        if (preview) CarSource.Bundled(R.drawable.car_front)
+        else CarImages.source(ctx, com.ahu.tlauncher.data.CarView.FRONT, custom) ?: CarImages.source(ctx, com.ahu.tlauncher.data.CarView.SIDE, custom) ?: CarSource.Illustration
     }
-    var index by remember(views) { mutableIntStateOf(0) }
-    val src = views.getOrNull(index % views.size.coerceAtLeast(1)) ?: CarSource.Illustration
+    val sideSrc = remember(custom) {
+        if (preview) CarSource.Bundled(R.drawable.car_side) else CarImages.source(ctx, com.ahu.tlauncher.data.CarView.SIDE, custom) ?: CarSource.Illustration
+    }
+    val expanded = glideKey == true
+    // 0 = front, 1 = 3/4. Like the prototype's turntable: the car swings round on a vertical axis.
+    val turn = remember { androidx.compose.animation.core.Animatable(if (expanded) 1f else 0f) }
+    LaunchedEffect(expanded) { turn.animateTo(if (expanded) 1f else 0f, tween(CAR_TURN_MS, easing = TMotion.EaseInOut)) }
 
     val showObd = ObdDisplay.show(state.obd.status)
     val d = state.obd.data
@@ -312,61 +312,62 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, glideKey: Any) {
     )
     val shadowColor = if (T.colors.isDark) Color.Black.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.32f)
 
-    // With a single view there's nothing to cycle: no tap target (and no dimmed "disabled" look).
-    val tap = if (views.size > 1) Modifier.pressable { index = (index + 1) % views.size } else Modifier
-    BoxWithConstraints(modifier.then(tap)) {
-        // Turntable-style view switch: the current view eases out to the left while the next
-        // comes in from the right (transforms + opacity only; a new tap retargets mid-way).
-        AnimatedContent(
-            src,
-            transitionSpec = {
-                val enter = slideInHorizontally(TMotion.enter()) { it / 10 } + fadeIn(TMotion.enter()) + scaleIn(TMotion.enter(), initialScale = 0.97f)
-                val exit = slideOutHorizontally(tween(160, easing = TMotion.EaseOut)) { -it / 10 } + fadeOut(tween(160, easing = TMotion.EaseOut))
-                (enter togetherWith exit).using(SizeTransform(clip = false) { _, _ -> snap() }) // no per-frame re-layout
-            },
-            label = "car",
-        ) { s ->
-            val painter = rememberCarPainter(s) ?: return@AnimatedContent
-            val ratio = painter.intrinsicSize.let { if (it.isSpecified() && it.height > 0) it.width / it.height else 2f }
-            // Callout zone on top (only with OBD data), then the car on a soft ground shadow.
-            // The bottom cards overlap the space under the car.
-            val calloutH = if (callouts.isEmpty()) 8.dp else 56.dp
-            val maxImgH = (maxHeight - calloutH) * (if (callouts.isEmpty()) 0.64f else 0.56f)
-            val imgW = min(maxWidth - 32.dp, maxImgH * ratio) * CAR_SCALE
-            val imgH = imgW / ratio
-            // Contact shadow: spans the bottom 14% of the photo (where the tyres meet the floor) so the
-            // densest part sits under the car body and only a soft edge shows around the wheels.
-            val shadowH = imgH * 0.14f
-            // Narrow views (front/rear) still get readable callouts: they spread over a wider row,
-            // without leader lines, since most of them wouldn't point at the car.
-            val rowW = if (callouts.isEmpty()) imgW else androidx.compose.ui.unit.max(imgW, min(maxWidth - 16.dp, CALLOUT_MIN_W))
-            val carX = (rowW - imgW) / 2
-            val lines = rowW == imgW
-            Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.glideOnChange(glideKey).width(rowW).height(calloutH + imgH)) {
-                    // ground shadow, drawn behind the car and anchored to the tyre line
-                    Box(
-                        Modifier.offset(x = carX + imgW * 0.06f, y = calloutH + imgH - shadowH).size(imgW * 0.88f, shadowH)
-                            .drawBehind {
-                                scale(scaleX = 1f, scaleY = size.height / size.width, pivot = center) {
-                                    drawCircle(Brush.radialGradient(listOf(shadowColor, Color.Transparent), center, size.width / 2), size.width / 2, center)
-                                }
+    val front = rememberCarPainter(frontSrc)
+    val side = rememberCarPainter(sideSrc)
+    BoxWithConstraints(modifier) {
+        fun ratioOf(p: Painter?) = p?.intrinsicSize?.let { if (it.isSpecified() && it.height > 0) it.width / it.height else null } ?: 2f
+        // Callout zone on top (only with OBD data), then the car on a soft ground shadow.
+        val calloutH = if (callouts.isEmpty()) 8.dp else 56.dp
+        val maxImgH = (maxHeight - calloutH) * (if (callouts.isEmpty()) 0.64f else 0.56f)
+        fun widthFor(r: Float) = min(maxWidth - 32.dp, maxImgH * r) * CAR_SCALE
+        val target = if (expanded) side else front
+        val tRatio = ratioOf(target)
+        val imgW = widthFor(tRatio)
+        val imgH = imgW / tRatio
+        val shadowH = imgH * 0.14f
+        // Narrow views (front) still get readable callouts: they spread over a wider row, without leader lines.
+        val rowW = if (callouts.isEmpty()) imgW else androidx.compose.ui.unit.max(imgW, min(maxWidth - 16.dp, CALLOUT_MIN_W))
+        val carX = (rowW - imgW) / 2
+        val lines = rowW == imgW
+        val density = androidx.compose.ui.platform.LocalDensity.current.density
+        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.glideOnChange(glideKey).width(rowW).height(calloutH + imgH)) {
+                Box(
+                    Modifier.offset(x = carX + imgW * 0.06f, y = calloutH + imgH - shadowH).size(imgW * 0.88f, shadowH)
+                        .drawBehind {
+                            scale(scaleX = 1f, scaleY = size.height / size.width, pivot = center) {
+                                drawCircle(Brush.radialGradient(listOf(shadowColor, Color.Transparent), center, size.width / 2), size.width / 2, center)
+                            }
+                        },
+                )
+                callouts.forEach { c -> CalloutView(c, rowW, calloutH, imgH, lines) }
+                // Both photos sit on the same ground line; the turn swaps them mid-way.
+                val p = turn.value
+                listOf(front to (1f - p), side to p).forEach { (painter, weight) ->
+                    if (painter == null || weight <= 0.001f) return@forEach
+                    val r = ratioOf(painter)
+                    val w = widthFor(r); val h = w / r
+                    val isFront = painter === front
+                    Image(
+                        painter, "My car", contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .offset(x = (rowW - w) / 2, y = calloutH + imgH - h)
+                            .size(w, h)
+                            .graphicsLayer {
+                                // front swings away to the left; the 3/4 view swings in from the right
+                                rotationY = if (isFront) -60f * p else 60f * (1f - p)
+                                cameraDistance = 14f * density
+                                alpha = ((weight - 0.25f) / 0.5f).coerceIn(0f, 1f)
                             },
                     )
-                    callouts.forEach { c -> CalloutView(c, rowW, calloutH, imgH, lines) }
-                    Image(painter, "My car", contentScale = ContentScale.Fit, modifier = Modifier.offset(x = carX, y = calloutH).size(imgW, imgH))
-                }
-                if (views.size > 1) {
-                    Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        views.indices.forEach { i ->
-                            Box(Modifier.size(5.dp).clip(CircleShape).background(if (i == index % views.size) T.colors.text else T.colors.secondary.copy(alpha = 0.4f)))
-                        }
-                    }
                 }
             }
         }
     }
 }
+
+/** Length of the front ↔ 3/4 car turn (prototype's card transitions are ~0.6 s). */
+private const val CAR_TURN_MS = 600
 
 @Composable
 private fun rememberCarPainter(src: CarSource): Painter? {
