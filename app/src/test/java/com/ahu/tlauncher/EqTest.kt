@@ -30,3 +30,9 @@ class EqTest {
         assertEquals(EqSettings(), EqMath.decode(null))
     }
 }
+
+class EqLabelTest {
+    @Test fun freqLabels() {
+        org.junit.Assert.assertEquals(listOf("31", "176", "1K", "2.4K", "14K"), listOf(31, 176, 1000, 2400, 14000).map { EqMath.freqLabel(it) })
+    }
+}

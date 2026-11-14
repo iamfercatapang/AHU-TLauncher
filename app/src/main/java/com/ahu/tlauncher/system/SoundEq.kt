@@ -57,6 +57,13 @@ object EqMath {
         }.let { Math.round(it * 2) / 2f } // half-dB steps
     }
 
+    /** "31", "176", "1K", "2.4K", "14K". */
+    fun freqLabel(hz: Int): String = when {
+        hz < 1000 -> "$hz"
+        hz % 1000 == 0 || hz >= 10_000 -> "${Math.round(hz / 1000.0)}K"
+        else -> "%.1fK".format(java.util.Locale.US, hz / 1000.0)
+    }
+
     fun encode(s: EqSettings): String = JSONObject()
         .put("on", s.enabled).put("preset", s.preset).put("gains", JSONArray(s.gainsDb.map { it.toDouble() }))
         .put("bass", s.bass).put("loud", s.loudness)

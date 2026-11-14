@@ -27,6 +27,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -74,16 +78,17 @@ internal fun SoundSection(state: HomeUiState, a: HomeActions) {
                 Text("Custom", style = TType.label, color = T.colors.onAccent)
             }
         }
-        // bands
-        caps.freqsHz.forEachIndexed { i, f ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (f >= 1000) "${"%.1f".format(f / 1000.0).removeSuffix(".0")} kHz" else "$f Hz", style = TType.label, color = T.colors.muted, modifier = Modifier.width(64.dp))
-                Slider(
-                    value = gains[i], valueRange = caps.minDb..caps.maxDb,
-                    onValueChange = { v -> update(eq.copy(enabled = true, preset = "Custom", gainsDb = gains.toMutableList().also { it[i] = Math.round(v * 2) / 2f })) },
-                    colors = sliderColors(), modifier = Modifier.weight(1f).height(32.dp),
-                )
-                Text("%+.1f dB".format(gains[i]), style = TType.label, color = T.colors.text, modifier = Modifier.width(64.dp))
+        // bands: vertical sliders, value and frequency underneath
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+            caps.freqsHz.forEachIndexed { i, f ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    VerticalBand(gains[i], caps.minDb, caps.maxDb) { v ->
+                        update(eq.copy(enabled = true, preset = "Custom", gainsDb = gains.toMutableList().also { it[i] = v }))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("%.1f".format(gains[i]), style = TType.caption, color = T.colors.muted)
+                    Text(EqMath.freqLabel(f), style = TType.caption, color = T.colors.text)
+                }
             }
         }
         // save / delete your own preset
@@ -105,6 +110,43 @@ internal fun SoundSection(state: HomeUiState, a: HomeActions) {
 
     Divider()
     UnitEq(state, a)
+}
+
+/**
+ * One EQ band as a tall, thin vertical slider: light track, filled from the bottom up to a round
+ * thumb (drag or tap anywhere on it). Half-dB steps.
+ */
+@Composable
+private fun VerticalBand(value: Float, min: Float, max: Float, onChange: (Float) -> Unit) {
+    val track = T.colors.divider
+    val fill = T.colors.text
+    val thumb = T.colors.panel
+    val ring = T.colors.secondary
+    val latest = androidx.compose.runtime.rememberUpdatedState(onChange)
+    androidx.compose.foundation.Canvas(
+        Modifier.width(36.dp).height(180.dp)
+            .pointerInput(min, max) {
+                fun at(y: Float): Float {
+                    val pad = 12.dp.toPx()
+                    val t = 1f - ((y - pad) / (size.height - 2 * pad)).coerceIn(0f, 1f)
+                    return Math.round((min + t * (max - min)) * 2) / 2f
+                }
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    latest.value(at(down.position.y))
+                    drag(down.id) { c -> c.consume(); latest.value(at(c.position.y)) }
+                }
+            },
+    ) {
+        val pad = 12.dp.toPx()
+        val cx = size.width / 2
+        val w = 3.dp.toPx()
+        val y = pad + (1f - (value - min) / (max - min)) * (size.height - 2 * pad)
+        drawLine(track, androidx.compose.ui.geometry.Offset(cx, pad), androidx.compose.ui.geometry.Offset(cx, size.height - pad), w, androidx.compose.ui.graphics.StrokeCap.Round)
+        drawLine(fill, androidx.compose.ui.geometry.Offset(cx, y), androidx.compose.ui.geometry.Offset(cx, size.height - pad), w, androidx.compose.ui.graphics.StrokeCap.Round)
+        drawCircle(ring, 9.dp.toPx(), androidx.compose.ui.geometry.Offset(cx, y))
+        drawCircle(thumb, 8.dp.toPx(), androidx.compose.ui.geometry.Offset(cx, y))
+    }
 }
 
 @Composable
