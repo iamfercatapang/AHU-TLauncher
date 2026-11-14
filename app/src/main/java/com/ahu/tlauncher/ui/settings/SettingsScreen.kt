@@ -356,6 +356,10 @@ private fun PermissionsSection(state: HomeUiState, a: HomeActions) {
         if (!state.locationPermission) PillButton("Allow", onClick = a::requestLocation) else Text("On", style = TType.button, color = T.colors.muted)
     }
     Divider()
+    SettingRow("Return to dashboard", "After Start opens Google Maps for a trip, come back to the dashboard automatically (Android calls this \"Display over other apps\")") {
+        if (!state.returnPermission) PillButton("Allow", onClick = a::requestReturnPermission) else Text("On", style = TType.button, color = T.colors.muted)
+    }
+    Divider()
     SettingRow("Phone calls", "Answer and end Bluetooth calls from the dashboard") {
         if (!state.callPermission) PillButton("Allow", onClick = a::requestCallPermission) else Text("On", style = TType.button, color = T.colors.muted)
     }

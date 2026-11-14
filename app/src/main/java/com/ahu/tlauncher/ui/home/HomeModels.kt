@@ -49,6 +49,8 @@ data class HomeUiState(
     val lights: com.ahu.tlauncher.system.LightsState = com.ahu.tlauncher.system.LightsState(),
     val call: CallUi? = null,
     val callPermission: Boolean = false,
+    /** "Display over other apps": lets the dashboard come back after Start opens Google Maps. */
+    val returnPermission: Boolean = false,
     /** Package that last posted a call notification (Settings readout). */
     val callSource: String? = null,
     val aa: com.ahu.tlauncher.system.AaState = com.ahu.tlauncher.system.AaState.Idle,
@@ -129,6 +131,7 @@ interface HomeActions {
     fun pickSuggestion(s: com.ahu.tlauncher.route.Suggestion) {}
     fun previewPlace(p: com.ahu.tlauncher.route.Place) {}
     fun startRoute() {}
+    fun requestReturnPermission() {}
     fun endRoute() {}
     fun toggleFavourite(p: com.ahu.tlauncher.route.Place) {}
     fun refreshEtas() {}

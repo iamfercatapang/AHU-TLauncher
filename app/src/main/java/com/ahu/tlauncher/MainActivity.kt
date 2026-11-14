@@ -118,6 +118,8 @@ class MainActivity : ComponentActivity(), HomeActions {
         app.lights.refresh()
         app.androidAuto.setActive(true)
         resumeTick++
+        // Back from the "Display over other apps" page: carry on with the trip.
+        if (pendingRouteStart) { pendingRouteStart = false; launchRoute() }
     }
 
     override fun onPause() {
@@ -211,6 +213,7 @@ class MainActivity : ComponentActivity(), HomeActions {
         )
         val aaReceiver = remember(tick) { app.androidAuto.receiverPackage()?.let { app.androidAuto.receiverLabel(it) } }
         val callPerm = remember(tick) { app.calls.hasPermissions() }
+        val returnPerm = remember(tick) { canReturnToFront() }
         val state = HomeUiState(
             settings = settings, obd = obd, media = media, nav = nav, notificationAccess = access,
             apps = apps, volume = volume, now = now,
@@ -223,7 +226,7 @@ class MainActivity : ComponentActivity(), HomeActions {
             diag = diag, fuel = fuel,
             route = route, search = search, recents = recents, favourites = favourites, etaMin = etaMin,
             lights = lights,
-            call = call, callPermission = callPerm, callSource = remember(notifCall) { NotificationHub.lastCallPackage },
+            call = call, callPermission = callPerm, returnPermission = returnPerm, callSource = remember(notifCall) { NotificationHub.lastCallPackage },
             aa = aa, aaReceiver = aaReceiver,
             aaDismissed = (aa as? com.ahu.tlauncher.system.AaState.Ready)?.gateway?.let { it == aaDismissedOn } == true,
         )
@@ -315,6 +318,27 @@ class MainActivity : ComponentActivity(), HomeActions {
 
     /** Start: voice guidance in Google Maps / Waze, then bring the dashboard (with the route) back to the front. */
     override fun startRoute() {
+        // Android only lets an app return to the front from the background with "Display over other apps".
+        // Ask once; if the user declines, the trip still starts and they press Home to come back.
+        if (!canReturnToFront() && !overlayAsked) {
+            overlayAsked = true
+            pendingRouteStart = true
+            android.widget.Toast.makeText(this, "Turn on \"Display over other apps\" so TLauncher can come back after Google Maps starts", android.widget.Toast.LENGTH_LONG).show()
+            if (startSafely(Intent(AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))) return
+            pendingRouteStart = false
+        }
+        launchRoute()
+    }
+
+    private var overlayAsked = false
+    private var pendingRouteStart = false
+    private fun canReturnToFront() = AndroidSettings.canDrawOverlays(this)
+
+    override fun requestReturnPermission() {
+        startSafely(Intent(AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+    }
+
+    private fun launchRoute() {
         val p = app.routes.start() ?: return
         lifecycleScope.launch {
             val nav = app.prefs.settings.first().navApp
@@ -325,6 +349,10 @@ class MainActivity : ComponentActivity(), HomeActions {
             }
             if (!startSafely(intent)) {
                 android.widget.Toast.makeText(this@MainActivity, "Couldn't open ${if (nav == NavApp.WAZE) "Waze" else "Google Maps"} for voice guidance", android.widget.Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            if (!canReturnToFront()) {
+                android.widget.Toast.makeText(this@MainActivity, "Press Home to see the route on the dashboard", android.widget.Toast.LENGTH_LONG).show()
                 return@launch
             }
             // Give the navigation app time to start guiding, then return (it keeps talking in the background).
