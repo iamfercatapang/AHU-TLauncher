@@ -5,6 +5,12 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material.icons.rounded.BrightnessLow
+import androidx.compose.material.icons.rounded.BrightnessHigh
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -68,7 +74,7 @@ val DOCK_H = 64.dp
 val STATUS_H = 40.dp
 private const val SPLIT_FRACTION = 0.36f
 
-enum class Overlay { NONE, APPS, SETTINGS, MUSIC, SEARCH }
+enum class Overlay { NONE, APPS, SETTINGS, MUSIC, SEARCH, BRIGHTNESS }
 
 @Composable
 fun HomeScreen(
@@ -116,6 +122,20 @@ fun HomeScreen(
                 onObdClick = { settingsStart = com.ahu.tlauncher.ui.settings.Section.DIAGNOSTICS; overlay = Overlay.SETTINGS },
             )
 
+            // Tap anywhere outside an open panel to close it (that tap does nothing else).
+            if (overlay != Overlay.NONE) {
+                Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { overlay = Overlay.NONE } })
+            }
+
+            // brightness slider, above the dock's sun button
+            androidx.compose.animation.AnimatedVisibility(
+                visible = overlay == Overlay.BRIGHTNESS,
+                enter = fadeIn(TMotion.enter()), exit = fadeOut(TMotion.std()),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 10.dp),
+            ) {
+                BrightnessPopup(state, actions)
+            }
+
             // overlays inside the body area
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.SETTINGS,
@@ -152,6 +172,8 @@ fun HomeScreen(
                         toast = if (wasPinned) "${app.label} removed from dock" else "${app.label} pinned to dock"
                     },
                     onClose = { overlay = Overlay.NONE },
+                    onAppInfo = { overlay = Overlay.NONE; actions.appInfo(it) },
+                    onUninstall = actions::uninstallApp,
                     modifier = Modifier.width(maxWidth * 0.74f).height(maxHeight * 0.8f).padding(bottom = 10.dp),
                 )
             }
@@ -207,6 +229,7 @@ fun HomeScreen(
             onOpenSettings = { settingsStart = com.ahu.tlauncher.ui.settings.Section.DISPLAY; toggle(Overlay.SETTINGS) },
             onToggleApps = { toggle(Overlay.APPS) },
             onToggleMusic = { toggle(Overlay.MUSIC) },
+            onToggleBrightness = { toggle(Overlay.BRIGHTNESS) },
             onLaunch = { app: AppEntry -> overlay = Overlay.NONE; actions.launch(app) },
             modifier = Modifier.fillMaxWidth().height(DOCK_H),
         )
@@ -285,6 +308,45 @@ private fun weatherIcon(w: com.ahu.tlauncher.system.Weather) = when (w.kind) {
     com.ahu.tlauncher.system.WeatherKind.DRIZZLE, com.ahu.tlauncher.system.WeatherKind.RAIN -> Icons.Rounded.Umbrella
     com.ahu.tlauncher.system.WeatherKind.SNOW -> Icons.Rounded.AcUnit
     com.ahu.tlauncher.system.WeatherKind.STORM -> Icons.Rounded.Thunderstorm
+}
+
+/** Screen brightness for the current time of day (day level / night level). */
+@Composable
+private fun BrightnessPopup(state: HomeUiState, actions: HomeActions) {
+    var value by remember(state.brightness) { mutableStateOf(state.brightness.toFloat()) }
+    Column(Modifier.width(360.dp).clip(TShapes.surface).background(Palette.CarbonDark).padding(horizontal = 18.dp, vertical = 14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Brightness", style = TType.button, color = androidx.compose.ui.graphics.Color.White)
+            Spacer(Modifier.width(8.dp))
+            Text(if (state.brightnessNight) "Night level" else "Day level", style = TType.label, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f))
+            Spacer(Modifier.weight(1f))
+            Text("${value.toInt()}%", style = TType.button, color = androidx.compose.ui.graphics.Color.White)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.BrightnessLow, null, tint = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
+            androidx.compose.material3.Slider(
+                value = value, onValueChange = { value = it; actions.setBrightness(it.toInt()) }, valueRange = 1f..100f,
+                enabled = state.brightnessAllowed,
+                colors = androidx.compose.material3.SliderDefaults.colors(
+                    thumbColor = androidx.compose.ui.graphics.Color.White, activeTrackColor = androidx.compose.ui.graphics.Color.White,
+                    inactiveTrackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.2f),
+                ),
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            )
+            Icon(Icons.Rounded.BrightnessHigh, null, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(22.dp))
+        }
+        if (!state.brightnessAllowed) {
+            Row(
+                Modifier.fillMaxWidth().clip(TShapes.button).background(androidx.compose.ui.graphics.Color(0xFF3E6AE1)).pressable(onClick = actions::requestBrightnessPermission).padding(10.dp),
+                horizontalArrangement = Arrangement.Center,
+            ) { Text("Allow TLauncher to change brightness", style = TType.button, color = androidx.compose.ui.graphics.Color.White) }
+        } else {
+            Text(
+                if (state.brightnessNight) "Used from sunset to sunrise. The day level comes back in the morning." else "Used during the day. Set a separate level after sunset.",
+                style = TType.caption, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f),
+            )
+        }
+    }
 }
 
 @Composable

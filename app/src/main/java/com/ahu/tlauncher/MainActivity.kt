@@ -81,6 +81,9 @@ class MainActivity : ComponentActivity(), HomeActions {
     private var callMuted by mutableStateOf(false)
     private var callAnsweredAt by mutableStateOf<Long?>(null)
     private var navSeenDuringTrip = false
+    private var brightnessNow by mutableStateOf(50)
+    private var brightnessIsNight = false
+    private var brightSaveJob: kotlinx.coroutines.Job? = null
     private var aaDismissedOn by mutableStateOf<String?>(null)
     private val roleRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { resumeTick++ }
 
@@ -216,6 +219,15 @@ class MainActivity : ComponentActivity(), HomeActions {
         val aaReceiver = remember(tick) { app.androidAuto.receiverPackage()?.let { app.androidAuto.receiverLabel(it) } }
         val callPerm = remember(tick) { app.calls.hasPermissions() }
         val returnPerm = remember(tick) { canReturnToFront() }
+        // Brightness: one level for day, one for night (sunset to sunrise, same as the auto dark theme).
+        val brightAllowed = remember(tick) { app.brightness.canWrite() }
+        val night = DayNight.isDark(ThemeMode.AUTO, ZonedDateTime.now(), location?.latitude, location?.longitude)
+        LaunchedEffect(night, brightAllowed, settings.brightDay, settings.brightNight) {
+            val level = if (night) settings.brightNight else settings.brightDay
+            if (brightAllowed && level > 0 && level != brightnessNow) { app.brightness.set(level); brightnessNow = level }
+        }
+        LaunchedEffect(tick) { brightnessNow = app.brightness.get() }
+        brightnessIsNight = night
         val state = HomeUiState(
             settings = settings, obd = obd, media = media, nav = nav, notificationAccess = access,
             apps = apps, volume = volume, now = now,
@@ -229,7 +241,8 @@ class MainActivity : ComponentActivity(), HomeActions {
             lastMedia = if (media == null) lastMedia else null, resumingMedia = resumingMedia,
             route = route, search = search, recents = recents, favourites = favourites, etaMin = etaMin,
             lights = lights,
-            call = call, callPermission = callPerm, returnPermission = returnPerm, callSource = remember(notifCall) { NotificationHub.lastCallPackage },
+            call = call, callPermission = callPerm, returnPermission = returnPerm,
+            brightness = brightnessNow, brightnessNight = night, brightnessAllowed = brightAllowed, callSource = remember(notifCall) { NotificationHub.lastCallPackage },
             aa = aa, aaReceiver = aaReceiver,
             aaDismissed = (aa as? com.ahu.tlauncher.system.AaState.Ready)?.gateway?.let { it == aaDismissedOn } == true,
         )
@@ -240,6 +253,32 @@ class MainActivity : ComponentActivity(), HomeActions {
 
     override fun launch(app: AppEntry) {
         if (!this.app.apps.launch(app)) toastMissing(app.label)
+    }
+
+    override fun setBrightness(percent: Int) {
+        if (!app.brightness.canWrite()) { requestBrightnessPermission(); return }
+        brightnessNow = percent
+        app.brightness.set(percent)
+        // Remember it as the level for the current time of day (saved once the slider settles).
+        val night = brightnessIsNight
+        brightSaveJob?.cancel()
+        brightSaveJob = lifecycleScope.launch { delay(600); app.prefs.setBrightness(night, percent) }
+    }
+
+    override fun requestBrightnessPermission() {
+        android.widget.Toast.makeText(this, "Turn on \"Modify system settings\" so TLauncher can change the brightness", android.widget.Toast.LENGTH_LONG).show()
+        startSafely(Intent(AndroidSettings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName")))
+    }
+
+    override fun appInfo(app: AppEntry) {
+        startSafely(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${app.packageName}")))
+    }
+
+    /** Android shows its own "Do you want to uninstall this app?" confirmation. */
+    override fun uninstallApp(app: AppEntry) {
+        @Suppress("DEPRECATION")
+        val i = Intent(Intent.ACTION_UNINSTALL_PACKAGE, Uri.parse("package:${app.packageName}"))
+        if (!startSafely(i)) startSafely(Intent(Intent.ACTION_DELETE, Uri.parse("package:${app.packageName}")))
     }
 
     override fun togglePin(app: AppEntry) {
@@ -317,7 +356,16 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun clearSearch() = app.routes.clearSearch()
     override fun pickSuggestion(s: com.ahu.tlauncher.route.Suggestion) = app.routes.pick(s)
     override fun previewPlace(p: com.ahu.tlauncher.route.Place) = app.routes.preview(p)
-    override fun endRoute() = app.routes.end()
+    /** End: clear the dashboard route and stop Google Maps / Waze too (via its "Exit navigation" button). */
+    override fun endRoute() {
+        val wasActive = app.routes.route.value?.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE
+        app.routes.end()
+        if (!wasActive) return // Cancel on the preview: nothing is navigating yet
+        val name = NotificationHub.nav.value?.info?.appLabel ?: "Google Maps"
+        if (NotificationHub.nav.value != null && !NotificationHub.exitNavigation()) {
+            android.widget.Toast.makeText(this, "Stop navigation in $name too", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
     override fun toggleFavourite(p: com.ahu.tlauncher.route.Place) = app.routes.toggleFavourite(p)
     override fun refreshEtas() {
         lifecycleScope.launch { val s = app.prefs.settings.first(); app.routes.refreshEtas(listOf(s.homeAddress, s.workAddress)) }

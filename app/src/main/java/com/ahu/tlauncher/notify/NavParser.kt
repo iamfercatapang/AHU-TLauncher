@@ -21,6 +21,11 @@ object NavParser {
     const val WAZE = "com.waze"
     val NAV_PACKAGES = setOf(MAPS, WAZE)
 
+    private val exitAction = Regex("""\b(exit|stop|end)\b|salir|detener|terminar|finalizar|退出|结束""", RegexOption.IGNORE_CASE)
+
+    /** Index of the "Exit navigation" / "Stop" button among a navigation notification's actions, or -1. */
+    fun exitActionIndex(titles: List<CharSequence?>): Int = titles.indexOfFirst { it != null && exitAction.containsMatchIn(it) }
+
     private val distanceOnly = Regex("""^\s*(\d+(?:[.,]\d+)?\s?(?:m|km|ft|mi|yd|yards|feet|miles?|meters?|metres?))\s*$""", RegexOption.IGNORE_CASE)
     private val distanceLead = Regex("""^\s*(?:in\s+)?(\d+(?:[.,]\d+)?\s?(?:m|km|ft|mi|yd))\b[\s,·:-]*""", RegexOption.IGNORE_CASE)
     private val etaHint = Regex("""\b(ETA|arrival|arrive|min|hr|h\b)|\d{1,2}:\d{2}""", RegexOption.IGNORE_CASE)

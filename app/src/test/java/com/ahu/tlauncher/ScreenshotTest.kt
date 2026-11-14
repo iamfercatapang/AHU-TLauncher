@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.asImageBitmap
 import app.cash.paparazzi.DeviceConfig
 import app.cash.paparazzi.Paparazzi
@@ -185,6 +187,14 @@ class ScreenshotTest {
     @Test fun lastPlayed() = shot("music_last_played") {
         val st = state()
         HomeScreen(st.copy(media = null, lastMedia = st.media!!.copy(packageName = "com.google.android.apps.youtube.music", isPlaying = false)), NoopActions)
+    }
+    @Test fun brightness() = shot("brightness_popup") { HomeScreen(state().copy(brightness = 72), NoopActions, initialOverlay = Overlay.BRIGHTNESS) }
+    @Test fun appMenu() = shot("app_drawer_menu") {
+        com.ahu.tlauncher.ui.home.AppDrawer(
+            apps = apps.map { it.copy(removable = true) }, pinned = listOf(apps[0].key), onLaunch = {}, onTogglePin = {}, onClose = {},
+            initialMenu = apps[2].copy(removable = true),
+            modifier = androidx.compose.ui.Modifier.size(760.dp, 430.dp),
+        )
     }
     @Test fun settingsLight() = shot("settings_display_light", dark = false) { HomeScreen(state(), NoopActions, initialOverlay = Overlay.SETTINGS) }
 }

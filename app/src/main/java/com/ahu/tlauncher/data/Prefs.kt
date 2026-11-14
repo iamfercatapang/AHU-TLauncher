@@ -47,6 +47,9 @@ data class Settings(
     /** Google is used when available (key + Play services); OpenFreeMap otherwise. */
     val mapEngine: MapEngine = MapEngine.GOOGLE,
     val mapTraffic: Boolean = true,
+    /** Screen brightness % for day and night (sunset to sunrise); -1 = not set yet. */
+    val brightDay: Int = -1,
+    val brightNight: Int = -1,
     /** Engine size in cc (1.3 = 1329, 1.5 = 1496); only used when the car has no MAF sensor. */
     val engineCc: Int = 1496,
     val onboardingDone: Boolean = false,
@@ -73,6 +76,8 @@ class Prefs(private val context: Context) {
         val mapEngine = stringPreferencesKey("map_engine")
         val mapTraffic = booleanPreferencesKey("map_traffic")
         val recents = stringPreferencesKey("recent_places")
+        val brightDay = androidx.datastore.preferences.core.intPreferencesKey("bright_day")
+        val brightNight = androidx.datastore.preferences.core.intPreferencesKey("bright_night")
         val favourites = stringPreferencesKey("favourite_places")
         val tankL = androidx.datastore.preferences.core.intPreferencesKey("tank_l")
         val engineCc = androidx.datastore.preferences.core.intPreferencesKey("engine_cc")
@@ -104,6 +109,8 @@ class Prefs(private val context: Context) {
         tankL = this[K.tankL] ?: 43,
         mapEngine = enumOr(this[K.mapEngine], MapEngine.GOOGLE),
         mapTraffic = this[K.mapTraffic] ?: true,
+        brightDay = this[K.brightDay] ?: -1,
+        brightNight = this[K.brightNight] ?: -1,
         engineCc = this[K.engineCc] ?: 1496,
         onboardingDone = this[K.onboarding] ?: false,
         pinnedSeeded = this[K.pinnedSeeded] ?: false,
@@ -132,6 +139,7 @@ class Prefs(private val context: Context) {
         override suspend fun saveRecents(list: List<com.ahu.tlauncher.route.Place>) { context.store.edit { it[K.recents] = com.ahu.tlauncher.route.RouteMath.encodePlaces(list) } }
         override suspend fun saveFavourites(list: List<com.ahu.tlauncher.route.Place>) { context.store.edit { it[K.favourites] = com.ahu.tlauncher.route.RouteMath.encodePlaces(list) } }
     }
+    suspend fun setBrightness(night: Boolean, percent: Int) = context.store.edit { if (night) it[K.brightNight] = percent else it[K.brightDay] = percent }
     suspend fun setMapEngine(e: MapEngine) = context.store.edit { it[K.mapEngine] = e.name }
     suspend fun setMapTraffic(on: Boolean) = context.store.edit { it[K.mapTraffic] = on }
     suspend fun setTankL(l: Int) = context.store.edit { it[K.tankL] = l.coerceIn(20, 120) }

@@ -26,6 +26,8 @@ data class AppEntry(
     val packageName: String,
     val component: ComponentName,
     val icon: ImageBitmap,
+    /** User-installed (not part of the firmware), so it can be uninstalled. */
+    val removable: Boolean = false,
 )
 
 class AppRepository(private val context: Context, private val scope: CoroutineScope) {
@@ -69,6 +71,7 @@ class AppRepository(private val context: Context, private val scope: CoroutineSc
                     packageName = cn.packageName,
                     component = cn,
                     icon = ri.loadIcon(pm).toBitmap(sizePx).asImageBitmap(),
+                    removable = (ri.activityInfo.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0,
                 )
             }
             .distinctBy { it.key }

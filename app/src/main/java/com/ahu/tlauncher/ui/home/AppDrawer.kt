@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -57,12 +58,18 @@ fun AppDrawer(
     onTogglePin: (AppEntry) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    onAppInfo: (AppEntry) -> Unit = {},
+    onUninstall: (AppEntry) -> Unit = {},
+    initialMenu: AppEntry? = null,
 ) {
     var query by remember { mutableStateOf("") }
+    // Long-press menu for one app: Pin / App info / Uninstall.
+    var menuFor by remember { mutableStateOf(initialMenu) }
     val shown = remember(apps, query) {
         if (query.isBlank()) apps else apps.filter { it.label.contains(query.trim(), ignoreCase = true) }
     }
-    Column(modifier.clip(TShapes.surface).background(POP_BG).padding(horizontal = 22.dp, vertical = 16.dp)) {
+    Box(modifier.clip(TShapes.surface).background(POP_BG)) {
+    Column(Modifier.padding(horizontal = 22.dp, vertical = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Apps", style = TType.title, color = POP_FG)
             Spacer(Modifier.width(16.dp))
@@ -82,7 +89,7 @@ fun AppDrawer(
                 }
             }
             Spacer(Modifier.width(16.dp))
-            Text("Long-press to pin to dock", style = TType.label, color = POP_MUTED)
+            Text("Long-press for more options", style = TType.label, color = POP_MUTED)
             Spacer(Modifier.width(8.dp))
             IconButtonT(Icons.Rounded.Close, "Close", size = 40.dp, iconSize = 22.dp, tint = POP_FG, onClick = onClose)
         }
@@ -96,7 +103,8 @@ fun AppDrawer(
         ) {
             items(shown, key = { it.key }) { app ->
                 Column(
-                    Modifier.clip(TShapes.surface).pressable( onLongClick = { onTogglePin(app) }) { onLaunch(app) }
+                    Modifier.clip(TShapes.surface).background(if (menuFor?.key == app.key) POP_FIELD else androidx.compose.ui.graphics.Color.Transparent)
+                        .pressable(onLongClick = { menuFor = app }) { if (menuFor != null) menuFor = null else onLaunch(app) }
                         .padding(vertical = 10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
@@ -115,4 +123,28 @@ fun AppDrawer(
             }
         }
     }
+    menuFor?.let { app ->
+        val pinnedNow = app.key in pinned
+        Row(
+            Modifier.align(Alignment.BottomCenter).padding(16.dp).clip(TShapes.surface).background(POP_FIELD).padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Image(app.icon, null, modifier = Modifier.size(36.dp).clip(TShapes.inner))
+            Text(app.label, style = TType.button, color = POP_FG, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 200.dp))
+            Spacer(Modifier.width(8.dp))
+            MenuButton(if (pinnedNow) "Unpin from dock" else "Pin to dock") { onTogglePin(app); menuFor = null }
+            MenuButton("App info") { onAppInfo(app); menuFor = null }
+            if (app.removable) MenuButton("Uninstall", danger = true) { onUninstall(app); menuFor = null }
+            IconButtonT(Icons.Rounded.Close, "Close menu", size = 36.dp, iconSize = 18.dp, tint = POP_MUTED) { menuFor = null }
+        }
+    }
+    }
+}
+
+@Composable
+private fun MenuButton(label: String, danger: Boolean = false, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(TShapes.button).background(if (danger) androidx.compose.ui.graphics.Color(0xFFE5484D) else androidx.compose.ui.graphics.Color(0xFF3A3D44))
+            .pressable(onClick = onClick).padding(horizontal = 14.dp, vertical = 9.dp),
+    ) { Text(label, style = TType.button, color = androidx.compose.ui.graphics.Color.White) }
 }

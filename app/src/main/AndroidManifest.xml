@@ -25,6 +25,11 @@
     <!-- Lets TLauncher come back to the front after handing a trip to Google Maps (Android blocks
          background activity starts otherwise). Nothing is drawn over other apps. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Uninstall apps from the app drawer (Android still asks the user to confirm). -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <!-- Screen brightness slider in the dock ("Modify system settings"). -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />

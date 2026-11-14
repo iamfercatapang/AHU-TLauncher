@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -16,6 +17,7 @@ import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -46,6 +48,7 @@ fun Dock(
     onToggleApps: () -> Unit,
     onToggleMusic: () -> Unit,
     onLaunch: (AppEntry) -> Unit,
+    onToggleBrightness: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val pinned = state.settings.pinnedApps.mapNotNull { key -> state.apps.firstOrNull { it.key == key } }.take(6)
@@ -66,6 +69,8 @@ fun Dock(
         // right: volume
         val v = state.volume
         Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
+            DockIcon(Icons.Rounded.LightMode, "Brightness", overlay == Overlay.BRIGHTNESS, onToggleBrightness)
+            Spacer(Modifier.width(10.dp))
             IconButtonT(Icons.Rounded.KeyboardArrowLeft, "Volume down", size = 36.dp, iconSize = 22.dp, tint = DOCK_MUTED) { actions.volumeStep(false) }
             Row(Modifier.fillMaxHeight().pressable { actions.toggleMute() }.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(if (v.muted || v.level == 0) Icons.AutoMirrored.Rounded.VolumeOff else Icons.AutoMirrored.Rounded.VolumeUp, "Mute", tint = DOCK_FG, modifier = Modifier.size(28.dp))

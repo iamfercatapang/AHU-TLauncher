@@ -47,7 +47,13 @@ data class QueueEntry(
 /** A call notification plus its button intents. */
 data class CallCardState(val info: CallInfo, val intents: Map<CallAction, PendingIntent>, val contentIntent: PendingIntent?, val firstSeenMs: Long)
 
-data class NavCardState(val info: NavInfo, val icon: Bitmap?, val contentIntent: PendingIntent?)
+data class NavCardState(
+    val info: NavInfo,
+    val icon: Bitmap?,
+    val contentIntent: PendingIntent?,
+    /** The notification's "Exit navigation" / "Stop" button, if it has one. */
+    val exitIntent: PendingIntent? = null,
+)
 
 /** Central place for media-session and navigation-notification state. */
 object NotificationHub {
@@ -249,6 +255,12 @@ object NotificationHub {
         navByKey.remove(key)
         _nav.value = navByKey.values.lastOrNull()
     }
+    /** Presses Google Maps' / Waze's "Exit navigation" button. False if there's none. */
+    fun exitNavigation(): Boolean {
+        val pi = _nav.value?.exitIntent ?: return false
+        return runCatching { pi.send(); true }.getOrDefault(false)
+    }
+
     internal fun clearNav() { navByKey.clear(); _nav.value = null }
 
     // --- call notifications ---

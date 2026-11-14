@@ -51,7 +51,9 @@ class LauncherNotificationListener : NotificationListenerService() {
             e.getCharSequence(Notification.EXTRA_SUB_TEXT),
             e.getCharSequence(Notification.EXTRA_BIG_TEXT),
         ) ?: return
-        NotificationHub.onNavPosted(sbn.key, NavCardState(info, largeIcon(n), n.contentIntent))
+        val acts = n.actions ?: emptyArray()
+        val exit = NavParser.exitActionIndex(acts.map { it.title }).takeIf { it >= 0 }?.let { acts[it].actionIntent }
+        NotificationHub.onNavPosted(sbn.key, NavCardState(info, largeIcon(n), n.contentIntent, exit))
     }
 
     private fun handleCall(sbn: StatusBarNotification) {

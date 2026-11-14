@@ -55,6 +55,10 @@ data class HomeUiState(
     val callPermission: Boolean = false,
     /** "Display over other apps": lets the dashboard come back after Start opens Google Maps. */
     val returnPermission: Boolean = false,
+    /** Current screen brightness %, whether it's the night level, and whether TLauncher may change it. */
+    val brightness: Int = 50,
+    val brightnessNight: Boolean = false,
+    val brightnessAllowed: Boolean = true,
     /** Package that last posted a call notification (Settings readout). */
     val callSource: String? = null,
     val aa: com.ahu.tlauncher.system.AaState = com.ahu.tlauncher.system.AaState.Idle,
@@ -96,6 +100,10 @@ val HomeUiState.displaySpeedKmh: Int?
 interface HomeActions {
     fun launch(app: AppEntry) {}
     fun togglePin(app: AppEntry) {}
+    fun appInfo(app: AppEntry) {}
+    fun setBrightness(percent: Int) {}
+    fun requestBrightnessPermission() {}
+    fun uninstallApp(app: AppEntry) {}
     fun movePin(key: String, delta: Int) {}
     fun playPause() {}
     fun next() {}
