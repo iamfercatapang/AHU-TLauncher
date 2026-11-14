@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BatteryAlert
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.LocalGasStation
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Pause
@@ -180,6 +181,25 @@ private fun SpeedBlock(state: HomeUiState, modifier: Modifier, glideKey: Any) {
             (if (mph) "mph" else "km/h") + if (obdSpeed == null) " · GPS" else "",
             style = TType.label, color = T.colors.muted, modifier = Modifier.offset(y = (-6).dp),
         )
+        val fuel = if (ObdDisplay.show(state.obd.status)) state.obd.data.fuelPct else null
+        if (fuel != null) FuelBar(fuel, state.fuel.rangeKm, mph, Modifier.offset(y = (-2).dp))
+    }
+}
+
+/** Slim tank-level bar with "62% · 310 km", like Tesla's battery bar. Amber when low. */
+@Composable
+private fun FuelBar(pct: Int, rangeKm: Int?, mph: Boolean, modifier: Modifier) {
+    val level by animateFloatAsState(pct.coerceIn(0, 100) / 100f, TMotion.count(), label = "fuel")
+    val low = pct < com.ahu.tlauncher.obd.FuelMath.LOW_FUEL_PCT
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Rounded.LocalGasStation, "Fuel", tint = if (low) TELL_AMBER else T.colors.muted, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(6.dp))
+        Box(Modifier.width(72.dp).height(6.dp).clip(CircleShape).background(T.colors.secondary.copy(alpha = 0.3f))) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(level).clip(CircleShape).background(if (low) TELL_AMBER else T.colors.text))
+        }
+        Spacer(Modifier.width(8.dp))
+        val range = rangeKm?.let { if (mph) " · ${(it * 0.621371).roundToInt()} mi" else " · $it km" } ?: ""
+        Text("$pct%$range", style = TType.caption, color = if (low) TELL_AMBER else T.colors.muted, maxLines = 1)
     }
 }
 
@@ -198,6 +218,7 @@ private fun Telltales(state: HomeUiState, modifier: Modifier) {
             if (it >= 105) add(Triple(Icons.Rounded.Thermostat, TELL_RED, "Engine hot"))
         }
         d.batteryV?.let { if (it < 11.8 || it > 15.2) add(Triple(Icons.Rounded.BatteryAlert, TELL_RED, "Battery voltage")) }
+        d.fuelPct?.let { if (it < com.ahu.tlauncher.obd.FuelMath.LOW_FUEL_PCT) add(Triple(Icons.Rounded.LocalGasStation, TELL_AMBER, "Low fuel")) }
     }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         items.forEach { (icon, color, desc) -> Icon(icon, desc, tint = color, modifier = Modifier.size(28.dp)) }
@@ -207,6 +228,7 @@ private fun Telltales(state: HomeUiState, modifier: Modifier) {
 private val TELL_GREEN = Color(0xFF25CB55)
 private val TELL_BLUE = Color(0xFF3E6AE1)
 private val TELL_RED = Color(0xFFE5484D)
+private val TELL_AMBER = Color(0xFFF5A623)
 
 /** The car is drawn a bit smaller than the space allows, leaving air around it. */
 private const val CAR_SCALE = 0.85f

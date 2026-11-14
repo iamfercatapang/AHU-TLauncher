@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.ahu.tlauncher.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.store by preferencesDataStore("launcher_prefs")
@@ -40,6 +41,10 @@ data class Settings(
     val lightsSource: String = "off",
     /** Look for the phone's Android Auto head unit server on Wi-Fi. */
     val aaDetect: Boolean = true,
+    /** Fuel tank capacity in litres (2018 Avanza: 43 L), for the range estimate. */
+    val tankL: Int = 43,
+    /** Engine size in cc (1.3 = 1329, 1.5 = 1496); only used when the car has no MAF sensor. */
+    val engineCc: Int = 1496,
     val onboardingDone: Boolean = false,
     val pinnedSeeded: Boolean = false,
 )
@@ -61,6 +66,10 @@ class Prefs(private val context: Context) {
         val carSide = stringPreferencesKey("car_side")
         val lights = stringPreferencesKey("lights_source")
         val aaDetect = booleanPreferencesKey("aa_detect")
+        val tankL = androidx.datastore.preferences.core.intPreferencesKey("tank_l")
+        val engineCc = androidx.datastore.preferences.core.intPreferencesKey("engine_cc")
+        val fuelKm = androidx.datastore.preferences.core.doublePreferencesKey("fuel_long_km")
+        val fuelL = androidx.datastore.preferences.core.doublePreferencesKey("fuel_long_l")
         val onboarding = booleanPreferencesKey("onboarding_done")
         val pinnedSeeded = booleanPreferencesKey("pinned_seeded")
     }
@@ -84,6 +93,8 @@ class Prefs(private val context: Context) {
         carSide = enumOr(this[K.carSide], CarSide.LEFT),
         lightsSource = this[K.lights] ?: "off",
         aaDetect = this[K.aaDetect] ?: true,
+        tankL = this[K.tankL] ?: 43,
+        engineCc = this[K.engineCc] ?: 1496,
         onboardingDone = this[K.onboarding] ?: false,
         pinnedSeeded = this[K.pinnedSeeded] ?: false,
     )
@@ -104,6 +115,13 @@ class Prefs(private val context: Context) {
     suspend fun setCarViews(views: Set<CarView>) = context.store.edit { it[K.carViews] = views.joinToString(",") { v -> v.name } }
     suspend fun setLightsSource(s: String) = context.store.edit { it[K.lights] = s }
     suspend fun setAaDetect(on: Boolean) = context.store.edit { it[K.aaDetect] = on }
+    suspend fun setTankL(l: Int) = context.store.edit { it[K.tankL] = l.coerceIn(20, 120) }
+    suspend fun setEngineCc(cc: Int) = context.store.edit { it[K.engineCc] = cc }
+    /** Long-term fuel totals (km, litres). */
+    val fuelStore = object : com.ahu.tlauncher.obd.FuelStore {
+        override suspend fun load(): Pair<Double, Double> = context.store.data.first().let { (it[K.fuelKm] ?: 0.0) to (it[K.fuelL] ?: 0.0) }
+        override suspend fun save(km: Double, litres: Double) { context.store.edit { it[K.fuelKm] = km; it[K.fuelL] = litres } }
+    }
     suspend fun setCarSide(side: CarSide) = context.store.edit { it[K.carSide] = side.name }
     suspend fun setNavApp(a: NavApp) = context.store.edit { it[K.navApp] = a.name }
     suspend fun setOnboardingDone() = context.store.edit { it[K.onboarding] = true }

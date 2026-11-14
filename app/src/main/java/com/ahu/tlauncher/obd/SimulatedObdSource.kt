@@ -75,6 +75,8 @@ class SimulatedObdSource(private val tickMs: Long = 250) : ObdSource {
                         timingDeg = if (gear == 0) 8.0 else 18.0 + (rpm / 500.0).roundToInt(),
                         stftPct = (Random.nextDouble(-3.0, 3.0) * 10).roundToInt() / 10.0,
                         ltftPct = 4.7,
+                        fuelPct = max(8.0, 62 - t / 60.0).roundToInt(),
+                        sampleAtMs = System.currentTimeMillis(),
                     ),
                 )
             )

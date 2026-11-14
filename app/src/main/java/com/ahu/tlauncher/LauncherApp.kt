@@ -22,6 +22,8 @@ class LauncherApp : Application() {
     lateinit var lights: com.ahu.tlauncher.system.LightsMonitor; private set
     lateinit var calls: com.ahu.tlauncher.system.CallControl; private set
     lateinit var androidAuto: com.ahu.tlauncher.system.AndroidAutoDetector; private set
+    lateinit var fuel: com.ahu.tlauncher.obd.FuelTracker; private set
+    @Volatile private var fuelSettings = com.ahu.tlauncher.data.Settings()
     lateinit var updater: com.ahu.tlauncher.update.Updater; private set
 
     override fun onCreate() {
@@ -35,8 +37,12 @@ class LauncherApp : Application() {
         lights = com.ahu.tlauncher.system.LightsMonitor(this)
         calls = com.ahu.tlauncher.system.CallControl(this)
         androidAuto = com.ahu.tlauncher.system.AndroidAutoDetector(this, appScope)
+        fuel = com.ahu.tlauncher.obd.FuelTracker(
+            appScope, obd.state, tankL = { fuelSettings.tankL }, displacementL = { fuelSettings.engineCc / 1000.0 }, store = prefs.fuelStore,
+        )
         appScope.launch {
             prefs.settings.collect { s ->
+                fuelSettings = s
                 lights.setSource(com.ahu.tlauncher.system.LightsSource.decode(s.lightsSource))
                 androidAuto.enabled = s.aaDetect
             }

@@ -62,6 +62,12 @@ object ElmParser {
     /** PID 06 / 07: short / long term fuel trim bank 1, % = A × 100 / 128 − 100. */
     fun fuelTrimPct(raw: String, pid: String): Double? = dataBytes(raw, pid)?.getOrNull(0)?.let { Math.round((it * 100 / 128.0 - 100) * 10) / 10.0 }
 
+    /** PID 2F: fuel tank level % = A × 100 / 255. */
+    fun fuelLevelPct(raw: String): Int? = dataBytes(raw, "2F")?.getOrNull(0)?.let { Math.round(it * 100 / 255f) }
+
+    /** PID 0B: intake manifold absolute pressure, kPa = A. */
+    fun mapKpa(raw: String): Int? = dataBytes(raw, "0B")?.getOrNull(0)
+
     /** True when the ECU says it doesn't support the request. */
     fun noData(raw: String): Boolean = raw.uppercase().let { "NO DATA" in it || "UNABLE" in it || "?" in it }
 

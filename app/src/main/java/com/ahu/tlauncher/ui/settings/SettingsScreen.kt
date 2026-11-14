@@ -309,6 +309,18 @@ private fun ObdSection(state: HomeUiState, a: HomeActions) {
             PillButton("Bluetooth settings", onClick = a::openAndroidSettings)
         }
     }
+    Divider()
+    SmallTitle("Fuel")
+    SettingRow("Tank size", "For the range estimate. 2018 Avanza: 43 L") {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PillButton("−", height = 34.dp, onClick = { a.setTankL(s.tankL - 1) })
+            Text("${s.tankL} L", style = TType.button, color = T.colors.text, modifier = Modifier.width(44.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            PillButton("+", height = 34.dp, onClick = { a.setTankL(s.tankL + 1) })
+        }
+    }
+    SettingRow("Engine", "Only used for consumption if the car has no air-flow sensor") {
+        Segmented(listOf(1329 to "1.3 L", 1496 to "1.5 L"), s.engineCc, a::setEngineCc)
+    }
     Text(
         "Shown: speed, engine RPM, coolant temperature, battery voltage (standard OBD-II PIDs supported by petrol cars from ~2008). Trouble codes and more live data are under Diagnostics.",
         style = TType.label, color = T.colors.muted, modifier = Modifier.padding(top = 12.dp),

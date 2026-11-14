@@ -87,6 +87,10 @@ internal fun DiagnosticsSection(state: HomeUiState, a: HomeActions) {
     d.pending?.let { CodeList("Pending", "Seen once but not confirmed yet. An early warning.", it, AMBER) }
     Divider()
 
+    // -------- fuel
+    FuelBlock(state, a)
+    Divider()
+
     // -------- live data
     SmallTitle("Live data")
     LiveGrid(state.obd.data, state.settings.tempUnit == TempUnit.F, state.settings.speedUnit == com.ahu.tlauncher.data.SpeedUnit.MPH, live)
@@ -94,6 +98,31 @@ internal fun DiagnosticsSection(state: HomeUiState, a: HomeActions) {
         "Values the car's computer doesn't report show as \"Not supported\".",
         style = TType.label, color = T.colors.muted, modifier = Modifier.padding(top = 8.dp),
     )
+}
+
+@Composable
+private fun FuelBlock(state: HomeUiState, a: HomeActions) {
+    val f = state.fuel
+    val d = state.obd.data
+    val mph = state.settings.speedUnit == com.ahu.tlauncher.data.SpeedUnit.MPH
+    fun dist(km: Double) = if (mph) "%.1f mi".format(km * 0.621371) else "%.1f km".format(km)
+    fun kpl(v: Double?) = v?.let { "%.1f km/L".format(it) } ?: "Not enough data yet"
+    SmallTitle("Fuel")
+    SettingRow(
+        "Tank level",
+        when {
+            d.fuelPct != null -> "${d.fuelPct}% of ${state.settings.tankL} L" + (f.rangeKm?.let { " · about $it km left" } ?: "")
+            "2F" in d.unsupported -> "Your car doesn't report the tank level over OBD, so the fuel bar is hidden"
+            else -> "Waiting for the car…"
+        },
+    ) {}
+    SettingRow("This trip", "${dist(f.tripKm)} · ${"%.2f".format(f.tripLitres)} L · ${kpl(f.tripKmPerL)}") {
+        PillButton("Reset trip", onClick = a::resetTrip)
+    }
+    SettingRow("Average", "${kpl(f.avgKmPerL)} (recent driving, used for the range)") {}
+    if ("10" in d.unsupported && d.mapKpa == null) {
+        Text("This car reports neither air flow nor manifold pressure, so consumption can't be calculated.", style = TType.label, color = RED)
+    }
 }
 
 @Composable
@@ -136,6 +165,7 @@ private fun LiveGrid(d: ObdData, f: Boolean, mph: Boolean, live: Boolean) {
         Triple("Timing advance", "0E", d.timingDeg?.let { "%.1f°".format(it) }),
         Triple("Fuel trim, short", "06", d.stftPct?.let(::pct)),
         Triple("Fuel trim, long", "07", d.ltftPct?.let(::pct)),
+        Triple("Fuel level", "2F", d.fuelPct?.let { "$it %" }),
     )
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         items.chunked(2).forEach { row ->

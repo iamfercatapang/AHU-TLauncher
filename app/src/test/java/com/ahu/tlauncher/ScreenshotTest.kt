@@ -64,7 +64,8 @@ class ScreenshotTest {
 
     private fun state(nav: Boolean = false, access: Boolean = true) = HomeUiState(
         settings = Settings(pinnedApps = apps.take(5).map { it.key }),
-        obd = ObdState(ObdStatus.DEMO, ObdData(speedKmh = 62, rpm = 2340, coolantC = 86, batteryV = 14.1)),
+        obd = ObdState(ObdStatus.DEMO, ObdData(speedKmh = 62, rpm = 2340, coolantC = 86, batteryV = 14.1, fuelPct = 62)),
+        fuel = com.ahu.tlauncher.obd.FuelStats(tripKm = 23.4, tripLitres = 1.9, avgKmPerL = 12.6, rangeKm = 335),
         media = MediaInfo("com.spotify.music", "Midnight Drive", "The Night Lines", art(), true, 95_000, 214_000, 0, 1f),
         nav = if (nav) NavCardState(NavInfo("com.google.android.apps.maps", "Google Maps", "300 m", "Turn right onto Ayala Ave", null, "12 min · 4.3 km · 10:42 ETA"), null, null) else null,
         notificationAccess = access,
@@ -137,6 +138,10 @@ class ScreenshotTest {
     }
     @Test fun settingsAndroidAuto() = shot("settings_android_auto") {
         HomeScreen(state().copy(aa = com.ahu.tlauncher.system.AaState.Searching("192.168.43.1")), NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.ANDROID_AUTO)
+    }
+    @Test fun lowFuel() = shot("fuel_low", dark = false) {
+        val st = state()
+        HomeScreen(st.copy(obd = st.obd.copy(data = st.obd.data.copy(fuelPct = 9)), fuel = st.fuel.copy(rangeKm = 48)), NoopActions)
     }
     @Test fun settingsLight() = shot("settings_display_light", dark = false) { HomeScreen(state(), NoopActions, initialOverlay = Overlay.SETTINGS) }
 }

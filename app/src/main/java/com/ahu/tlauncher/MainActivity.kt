@@ -153,6 +153,7 @@ class MainActivity : ComponentActivity(), HomeActions {
         val update by app.updater.state.collectAsState()
         val weather by app.weather.weather.collectAsState()
         val diag by app.obd.diag.collectAsState()
+        val fuel by app.fuel.stats.collectAsState()
         val lights by app.lights.state.collectAsState()
         val notifCall by NotificationHub.call.collectAsState()
         val aa by app.androidAuto.state.collectAsState()
@@ -202,7 +203,7 @@ class MainActivity : ComponentActivity(), HomeActions {
             bluetoothOn = btOn, bluetooth = bt, wifi = wifi, isDefaultLauncher = isDefault,
             update = update, updateDismissedCode = dismissedCode, appVersion = BuildConfig.VERSION_NAME,
             weather = weather?.takeIf { System.currentTimeMillis() - it.fetchedAtMs < com.ahu.tlauncher.system.WeatherParser.MAX_AGE_MS },
-            diag = diag,
+            diag = diag, fuel = fuel,
             lights = lights,
             call = call, callPermission = callPerm, callSource = remember(notifCall) { NotificationHub.lastCallPackage },
             aa = aa, aaReceiver = aaReceiver,
@@ -392,6 +393,9 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun setObdExtended(on: Boolean) = app.obd.setExtended(on)
     override fun readObdCodes() = app.obd.readCodes()
     override fun clearObdCodes() = app.obd.clearCodes()
+    override fun resetTrip() = app.fuel.resetTrip()
+    override fun setTankL(l: Int) { lifecycleScope.launch { app.prefs.setTankL(l) } }
+    override fun setEngineCc(cc: Int) { lifecycleScope.launch { app.prefs.setEngineCc(cc) } }
     override fun resetCarImage(view: CarView) { lifecycleScope.launch { app.prefs.setCarImage(view, "") } }
 
     // ---------------- helpers ----------------

@@ -52,6 +52,7 @@ data class HomeUiState(
     val aaReceiver: String? = null,
     /** "Android Auto ready" prompt dismissed for this network. */
     val aaDismissed: Boolean = false,
+    val fuel: com.ahu.tlauncher.obd.FuelStats = com.ahu.tlauncher.obd.FuelStats(),
 )
 
 /** Speed shown on screen and used by the map: OBD when it has live data, otherwise GPS. */
@@ -100,6 +101,9 @@ interface HomeActions {
     fun setObdExtended(on: Boolean) {}
     fun readObdCodes() {}
     fun clearObdCodes() {}
+    fun resetTrip() {}
+    fun setTankL(l: Int) {}
+    fun setEngineCc(cc: Int) {}
     // headlights (ILL)
     fun lightsLearnOff() {}
     /** Returns a message describing the result. */

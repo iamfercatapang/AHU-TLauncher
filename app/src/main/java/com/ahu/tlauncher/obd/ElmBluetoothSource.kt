@@ -53,22 +53,31 @@ class ElmBluetoothSource(private val deviceAddress: String) : ObdSource {
 
                 var slowTick = 0
                 var extTick = 0
+                // Polls a PID unless the ECU already said it doesn't support it.
+                suspend fun poll(pid: String) {
+                    if (pid in data.unsupported) return
+                    val raw = send(output, input, "01$pid")
+                    data = if (ElmParser.noData(raw)) data.copy(unsupported = data.unsupported + pid) else applyExtra(data, pid, raw)
+                }
                 while (coroutineContext.isActive) {
                     val speed = ElmParser.speedKmh(send(output, input, "010D"))
                     val rpm = ElmParser.rpm(send(output, input, "010C"))
-                    data = data.copy(speedKmh = speed ?: data.speedKmh, rpm = rpm ?: data.rpm)
+                    data = data.copy(speedKmh = speed ?: data.speedKmh, rpm = rpm ?: data.rpm, sampleAtMs = System.currentTimeMillis())
+                    // Air flow every other cycle, for fuel consumption (MAP + intake temp if there's no MAF sensor).
+                    if (slowTick % 2 == 0) {
+                        poll("10")
+                        if ("10" in data.unsupported) poll("0B")
+                    }
                     if (slowTick++ % 8 == 0) {
                         val coolant = ElmParser.coolantC(send(output, input, "0105"))
                         val volts = ElmParser.atrv(send(output, input, "ATRV"))
                         data = data.copy(coolantC = coolant ?: data.coolantC, batteryV = volts ?: data.batteryV)
+                        poll("2F") // fuel tank level
+                        poll("0F")
                     }
                     if (link.extended.value) {
                         // One extra PID per cycle so speed and RPM stay responsive.
-                        val pid = EXTRA_PIDS[extTick++ % EXTRA_PIDS.size]
-                        if (pid !in data.unsupported) {
-                            val raw = send(output, input, "01$pid")
-                            data = if (ElmParser.noData(raw)) data.copy(unsupported = data.unsupported + pid) else applyExtra(data, pid, raw)
-                        }
+                        poll(EXTRA_PIDS[extTick++ % EXTRA_PIDS.size])
                     }
                     link.serve { cmd, t -> send(output, input, cmd, t) }
                     emit(ObdState(ObdStatus.CONNECTED, data))
@@ -85,7 +94,7 @@ class ElmBluetoothSource(private val deviceAddress: String) : ObdSource {
     }.flowOn(Dispatchers.IO)
 
     companion object {
-        val EXTRA_PIDS = listOf("04", "11", "0F", "10", "0E", "06", "07")
+        val EXTRA_PIDS = listOf("04", "11", "0E", "06", "07")
 
         fun applyExtra(d: ObdData, pid: String, raw: String): ObdData = when (pid) {
             "04" -> d.copy(loadPct = ElmParser.loadPct(raw) ?: d.loadPct)
@@ -95,6 +104,8 @@ class ElmBluetoothSource(private val deviceAddress: String) : ObdSource {
             "0E" -> d.copy(timingDeg = ElmParser.timingDeg(raw) ?: d.timingDeg)
             "06" -> d.copy(stftPct = ElmParser.fuelTrimPct(raw, "06") ?: d.stftPct)
             "07" -> d.copy(ltftPct = ElmParser.fuelTrimPct(raw, "07") ?: d.ltftPct)
+            "2F" -> d.copy(fuelPct = ElmParser.fuelLevelPct(raw) ?: d.fuelPct)
+            "0B" -> d.copy(mapKpa = ElmParser.mapKpa(raw) ?: d.mapKpa)
             else -> d
         }
     }
