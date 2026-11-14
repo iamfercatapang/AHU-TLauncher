@@ -68,6 +68,9 @@ interface HomeActions {
     fun next() {}
     fun previous() {}
     fun seekTo(ms: Long) {}
+    fun toggleShuffle() {}
+    fun cycleRepeat() {}
+    fun playQueueItem(id: Long) {}
     fun openMediaApp() {}
     fun openNavApp() {}
     fun navigateHome() {}

@@ -26,6 +26,22 @@ data class MediaInfo(
     val durationMs: Long,
     val updateTimeMs: Long,
     val speed: Float,
+    /** Queue shared by the app (empty if it doesn't share one). */
+    val queue: List<QueueEntry> = emptyList(),
+    val activeQueueId: Long = -1,
+    /** null = the app doesn't offer it. */
+    val shuffleOn: Boolean? = null,
+    /** 0 off, 1 one, 2 all; null = not offered. Same values as PlaybackStateCompat. */
+    val repeatMode: Int? = null,
+)
+
+data class QueueEntry(
+    val id: Long,
+    val title: String,
+    val subtitle: String,
+    val art: Bitmap?,
+    val artUri: String?,
+    val durationMs: Long?,
 )
 
 /** A call notification plus its button intents. */
@@ -47,6 +63,8 @@ object NotificationHub {
     private val main = Handler(Looper.getMainLooper())
     private var sessionManager: MediaSessionManager? = null
     private var controller: MediaController? = null
+    private var compat: android.support.v4.media.session.MediaControllerCompat? = null
+    private var appContext: Context? = null
     private var sessionsListenerRegistered = false
     private var listenerComponent: ComponentName? = null
     private val navByKey = LinkedHashMap<String, NavCardState>()
@@ -69,6 +87,7 @@ object NotificationHub {
         _accessGranted.value = granted
         if (!granted) return
         val app = context.applicationContext
+        appContext = app
         val msm = sessionManager ?: (app.getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager).also { sessionManager = it }
         val cn = ComponentName(app, LauncherNotificationListener::class.java).also { listenerComponent = it }
         try {
@@ -92,7 +111,14 @@ object NotificationHub {
                 if (msm != null && cn != null) runCatching { pickController(msm.getActiveSessions(cn)) }
             }
         }
-        override fun onSessionDestroyed() { controller = null; _media.value = null }
+        override fun onSessionDestroyed() { controller = null; compat = null; _media.value = null }
+        override fun onQueueChanged(queue: MutableList<android.media.session.MediaSession.QueueItem>?) = publish()
+    }
+
+    private val compatCallback = object : android.support.v4.media.session.MediaControllerCompat.Callback() {
+        override fun onShuffleModeChanged(shuffleMode: Int) = publish()
+        override fun onRepeatModeChanged(repeatMode: Int) = publish()
+        override fun onSessionReady() = publish()
     }
 
     private fun pickController(list: List<MediaController>) {
@@ -102,8 +128,18 @@ object NotificationHub {
             ?: list.firstOrNull()
         if (chosen?.sessionToken == controller?.sessionToken) { publish(); return }
         controller?.unregisterCallback(callback)
+        compat?.unregisterCallback(compatCallback)
         controller = chosen
         chosen?.registerCallback(callback, main)
+        // The compat wrapper exposes shuffle / repeat, which the framework controller doesn't.
+        compat = chosen?.let { c ->
+            appContext?.let { ctx ->
+                runCatching {
+                    android.support.v4.media.session.MediaControllerCompat(ctx, android.support.v4.media.session.MediaSessionCompat.Token.fromToken(c.sessionToken))
+                        .also { it.registerCallback(compatCallback, main) }
+                }.getOrNull()
+            }
+        }
         publish()
     }
 
@@ -128,8 +164,72 @@ object NotificationHub {
             durationMs = md?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L,
             updateTimeMs = ps?.lastPositionUpdateTime ?: 0L,
             speed = ps?.playbackSpeed ?: 1f,
+            queue = runCatching { c.queue }.getOrNull().orEmpty().take(60).map { q ->
+                val d = q.description
+                QueueEntry(
+                    id = q.queueId,
+                    title = d.title?.toString().orEmpty(),
+                    subtitle = d.subtitle?.toString().orEmpty(),
+                    art = d.iconBitmap,
+                    artUri = d.iconUri?.toString(),
+                    durationMs = d.extras?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.takeIf { it > 0 },
+                )
+            },
+            activeQueueId = ps?.activeQueueItemId ?: -1,
+            shuffleOn = shuffleState(ps),
+            repeatMode = repeatState(ps),
         )
     }
+
+    private const val ACTION_SET_REPEAT_MODE = 1L shl 18
+    private const val ACTION_SET_SHUFFLE_MODE = 1L shl 21
+
+    private fun customAction(ps: PlaybackState?, word: String) =
+        ps?.customActions?.firstOrNull { it.action.contains(word, true) || it.name.toString().contains(word, true) }
+
+    private fun shuffleState(ps: PlaybackState?): Boolean? {
+        val mode = compat?.takeIf { it.isSessionReady }?.shuffleMode ?: -1
+        val supported = ps != null && (ps.actions and ACTION_SET_SHUFFLE_MODE) != 0L
+        return when {
+            supported && mode >= 0 -> mode != 0
+            customAction(ps, "shuffle") != null -> customAction(ps, "shuffle")!!.let { a ->
+                // e.g. Spotify names the action after what it does next ("Shuffle on" / "Shuffle off")
+                val n = (a.action + " " + a.name).lowercase(); n.contains("off") || n.contains("disable")
+            }
+            else -> null
+        }
+    }
+
+    private fun repeatState(ps: PlaybackState?): Int? {
+        val mode = compat?.takeIf { it.isSessionReady }?.repeatMode ?: -1
+        val supported = ps != null && (ps.actions and ACTION_SET_REPEAT_MODE) != 0L
+        return when {
+            supported && mode >= 0 -> if (mode == 3) 2 else mode // GROUP counts as all
+            customAction(ps, "repeat") != null -> 0
+            else -> null
+        }
+    }
+
+    fun toggleShuffle() {
+        val m = _media.value ?: return
+        val ps = controller?.playbackState
+        val cc = compat
+        if (cc != null && cc.isSessionReady && ps != null && (ps.actions and ACTION_SET_SHUFFLE_MODE) != 0L) {
+            cc.transportControls.setShuffleMode(if (m.shuffleOn == true) android.support.v4.media.session.PlaybackStateCompat.SHUFFLE_MODE_NONE else android.support.v4.media.session.PlaybackStateCompat.SHUFFLE_MODE_ALL)
+        } else customAction(ps, "shuffle")?.let { controller?.transportControls?.sendCustomAction(it, null) }
+    }
+
+    /** Off → all → one → off. */
+    fun cycleRepeat() {
+        val m = _media.value ?: return
+        val ps = controller?.playbackState
+        val cc = compat
+        if (cc != null && cc.isSessionReady && ps != null && (ps.actions and ACTION_SET_REPEAT_MODE) != 0L) {
+            cc.transportControls.setRepeatMode(when (m.repeatMode) { 0 -> android.support.v4.media.session.PlaybackStateCompat.REPEAT_MODE_ALL; 2 -> android.support.v4.media.session.PlaybackStateCompat.REPEAT_MODE_ONE; else -> android.support.v4.media.session.PlaybackStateCompat.REPEAT_MODE_NONE })
+        } else customAction(ps, "repeat")?.let { controller?.transportControls?.sendCustomAction(it, null) }
+    }
+
+    fun playQueueItem(id: Long) { controller?.transportControls?.skipToQueueItem(id) }
 
     fun playPause() {
         val c = controller ?: return

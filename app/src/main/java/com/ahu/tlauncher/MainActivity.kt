@@ -237,6 +237,9 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun next() = NotificationHub.next()
     override fun previous() = NotificationHub.previous()
     override fun seekTo(ms: Long) = NotificationHub.seekTo(ms)
+    override fun toggleShuffle() = NotificationHub.toggleShuffle()
+    override fun cycleRepeat() = NotificationHub.cycleRepeat()
+    override fun playQueueItem(id: Long) = NotificationHub.playQueueItem(id)
 
     override fun openMediaApp() {
         val pi = NotificationHub.mediaSessionActivity()

@@ -143,5 +143,15 @@ class ScreenshotTest {
         val st = state()
         HomeScreen(st.copy(obd = st.obd.copy(data = st.obd.data.copy(fuelPct = 9)), fuel = st.fuel.copy(rangeKm = 48)), NoopActions)
     }
+    @Test fun musicQueue() = shot("music_queue") {
+        val st = state()
+        val titles = listOf("Midnight Drive" to "The Night Lines", "Coastal Highway" to "Paper Lanterns", "Slow Burn" to "Mira Vale",
+            "静かな夜" to "Kumo", "Long Way Home" to "The Night Lines", "Afterglow" to "Sun Theory")
+        val colors = listOf(0xFFB0524A, 0xFF3E6AE1, 0xFF25A06B, 0xFF8E5BD8, 0xFFD89B2B, 0xFF2B8FD8)
+        val queue = titles.mapIndexed { i, (t, a) ->
+            com.ahu.tlauncher.notify.QueueEntry(i + 1L, t, a, android.graphics.Bitmap.createBitmap(40, 40, android.graphics.Bitmap.Config.ARGB_8888).also { it.eraseColor(colors[i].toInt()) }, null, 180_000L + i * 23_000L)
+        }
+        HomeScreen(st.copy(media = st.media!!.copy(queue = queue, activeQueueId = 1, shuffleOn = false, repeatMode = 2)), NoopActions, initialOverlay = Overlay.MUSIC)
+    }
     @Test fun settingsLight() = shot("settings_display_light", dark = false) { HomeScreen(state(), NoopActions, initialOverlay = Overlay.SETTINGS) }
 }

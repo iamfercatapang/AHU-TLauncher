@@ -66,6 +66,8 @@ dependencies {
     implementation("org.maplibre.gl:android-sdk:13.7.1")
     implementation("org.osmdroid:osmdroid-android:6.1.20") // fallback for GPUs without OpenGL ES 3
     implementation("io.coil-kt:coil-compose:2.7.0")
+    // Shuffle / repeat on other apps' media sessions (MediaControllerCompat).
+    implementation("androidx.media:media:1.7.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")

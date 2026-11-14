@@ -126,7 +126,7 @@ fun HomeScreen(
                 exit = fadeOut(TMotion.std()),
                 modifier = Modifier.align(Alignment.BottomEnd),
             ) {
-                MusicPanel(state, actions, onClose = { overlay = Overlay.NONE }, modifier = Modifier.width(maxWidth * (1 - SPLIT_FRACTION)).padding(12.dp))
+                MusicPanel(state, actions, onClose = { overlay = Overlay.NONE }, modifier = Modifier.width(maxWidth * (1 - SPLIT_FRACTION)).height(maxHeight - STATUS_H).padding(10.dp))
             }
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.APPS,
