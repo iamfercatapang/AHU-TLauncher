@@ -189,6 +189,8 @@ class MainActivity : ComponentActivity(), HomeActions {
         // Bluetooth / Wi-Fi indicators refresh every 5 s (and on resume).
         val bt = remember(tick, now.second / 5, now.minute) { com.ahu.tlauncher.system.Connectivity.bluetooth(this) }
         val wifi = remember(tick, now.second / 5, now.minute) { com.ahu.tlauncher.system.Connectivity.wifi(this) }
+        val cell = remember(tick, now.second / 10, now.minute) { com.ahu.tlauncher.system.Connectivity.cell(this) }
+        val inbox by NotificationHub.inbox.collectAsState()
         val gpsSpeed = location?.let { l ->
             val age = (android.os.SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos) / 1_000_000
             com.ahu.tlauncher.obd.GpsSpeed.kmh(l.hasSpeed(), l.speed, age)
@@ -242,7 +244,7 @@ class MainActivity : ComponentActivity(), HomeActions {
             weather = weather?.takeIf { System.currentTimeMillis() - it.fetchedAtMs < com.ahu.tlauncher.system.WeatherParser.MAX_AGE_MS },
             diag = diag, fuel = fuel,
             lastMedia = if (media == null) lastMedia else null, resumingMedia = resumingMedia,
-            route = route, search = search, freeNav = freeMap, recents = recents, favourites = favourites, etaMin = etaMin,
+            route = route, search = search, freeNav = freeMap, cell = cell, inbox = inbox, recents = recents, favourites = favourites, etaMin = etaMin,
             lights = lights,
             call = call, callPermission = callPerm, returnPermission = returnPerm,
             eqCaps = eqCaps,
@@ -308,6 +310,10 @@ class MainActivity : ComponentActivity(), HomeActions {
             if (i >= 0 && j in cur.indices) { cur.removeAt(i); cur.add(j, key); app.prefs.setPinned(cur) }
         }
     }
+
+    override fun openInbox(item: com.ahu.tlauncher.notify.InboxItem) = NotificationHub.openInbox(item)
+    override fun dismissInbox(item: com.ahu.tlauncher.notify.InboxItem) = NotificationHub.dismissInbox(item)
+    override fun dismissAllInbox() = NotificationHub.dismissAllInbox()
 
     override fun playPause() {
         // Nothing running (e.g. after the engine was off): wake the last music app up.

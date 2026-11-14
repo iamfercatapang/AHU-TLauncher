@@ -75,7 +75,7 @@ val DOCK_H = 64.dp
 val STATUS_H = 40.dp
 private const val SPLIT_FRACTION = 0.36f
 
-enum class Overlay { NONE, APPS, SETTINGS, MUSIC, SEARCH, BRIGHTNESS, VOLUME, CARD_MUSIC }
+enum class Overlay { NONE, APPS, SETTINGS, MUSIC, SEARCH, BRIGHTNESS, VOLUME, CARD_MUSIC, NOTIFICATIONS }
 
 @Composable
 fun HomeScreen(
@@ -128,6 +128,7 @@ fun HomeScreen(
                 state, Modifier.fillMaxWidth().height(STATUS_H),
                 mapSpan = if (!mapVisible) null else if (carRight) (0.dp to maxWidth - stageW) else (stageW to maxWidth),
                 onObdClick = { settingsStart = com.ahu.tlauncher.ui.settings.Section.DIAGNOSTICS; overlay = Overlay.SETTINGS },
+                onBellClick = { toggle(Overlay.NOTIFICATIONS) },
             )
 
             // Prototype motion: panels rise 18 dp while fading in over a dimmed backdrop.
@@ -135,7 +136,7 @@ fun HomeScreen(
             val panelIn = fadeIn(TMotion.panel()) + androidx.compose.animation.slideInVertically(TMotion.panel()) { rise }
             val panelOut = fadeOut(androidx.compose.animation.core.tween(150))
             androidx.compose.animation.AnimatedVisibility(
-                visible = overlay !in setOf(Overlay.NONE, Overlay.BRIGHTNESS, Overlay.VOLUME, Overlay.CARD_MUSIC),
+                visible = overlay !in setOf(Overlay.NONE, Overlay.BRIGHTNESS, Overlay.VOLUME, Overlay.CARD_MUSIC, Overlay.NOTIFICATIONS),
                 enter = fadeIn(TMotion.panel()), exit = panelOut,
             ) { Box(Modifier.fillMaxSize().background(T.colors.scrim)) }
             // Tap anywhere outside an open panel to close it (that tap does nothing else).
@@ -146,6 +147,14 @@ fun HomeScreen(
             // Full-screen card row geometry (see CarStage: max 660 dp wide, music card 1.6 : 1 with 12 dp gap).
             val fullCardsW = androidx.compose.ui.unit.min(660.dp, maxWidth - 32.dp)
             val fullMusicW = (fullCardsW - 12.dp) * (1.6f / 2.6f)
+            // notifications, under the bell in the status bar
+            androidx.compose.animation.AnimatedVisibility(
+                visible = overlay == Overlay.NOTIFICATIONS,
+                enter = panelIn, exit = panelOut,
+                modifier = Modifier.align(Alignment.TopStart).padding(top = STATUS_H, start = (if (mapVisible && !carRight) stageW else 0.dp) + 12.dp),
+            ) {
+                NotificationsPopup(state, actions, onClose = { overlay = Overlay.NONE })
+            }
             // volume slider, above the dock's speaker
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.VOLUME,
@@ -301,6 +310,7 @@ private fun StatusBar(
     state: HomeUiState,
     modifier: Modifier,
     onObdClick: () -> Unit = {},
+    onBellClick: () -> Unit = {},
     /** Map area (start, end) when the map is visible; null when the car fills the screen. */
     mapSpan: Pair<androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp>? = null,
 ) {
@@ -311,7 +321,7 @@ private fun StatusBar(
             val obdX = if (mapSpan != null && mapSpan.first.value == 0f) mapSpan.second + 20.dp else 20.dp
             ObdBadge(state.obd.status, Modifier.align(Alignment.CenterStart).padding(start = obdX).pressable(onClick = onObdClick))
         }
-        val links = @Composable { Connectivity(state) }
+        val links = @Composable { Connectivity(state, onBellClick) }
         val clock = @Composable {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 state.weather?.let { w ->
@@ -341,7 +351,7 @@ private fun StatusBar(
 
 /** Bluetooth and Wi-Fi status icons (TLauncher's own line icons). */
 @Composable
-private fun Connectivity(state: HomeUiState) {
+private fun Connectivity(state: HomeUiState, onBellClick: () -> Unit = {}) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         val (btIcon, btDesc) = when (state.bluetooth) {
             BtStatus.CONNECTED -> com.ahu.tlauncher.ui.components.TIcons.Bluetooth to "Bluetooth connected"
@@ -357,6 +367,21 @@ private fun Connectivity(state: HomeUiState) {
         }
         Icon(icon, if (w.connected) "Wi-Fi connected" else if (w.enabled) "Wi-Fi not connected" else "Wi-Fi off",
             tint = if (w.connected) T.colors.text else T.colors.muted, modifier = Modifier.size(20.dp))
+        // mobile signal (only with a SIM): type label + four bars
+        state.cell?.let { c ->
+            Row(verticalAlignment = Alignment.Bottom) {
+                c.type?.let { Text(it, style = TType.caption, color = T.colors.text, modifier = Modifier.padding(end = 1.dp)) }
+                Box(Modifier.size(20.dp)) {
+                    Icon(com.ahu.tlauncher.ui.components.TIcons.signalBars(c.level, false), null, tint = T.colors.muted, modifier = Modifier.size(20.dp))
+                    Icon(com.ahu.tlauncher.ui.components.TIcons.signalBars(c.level, true), "Mobile signal ${c.level} of 4", tint = T.colors.text, modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+        // notification bell, with a dot when there's something unread
+        Box(Modifier.size(28.dp).pressable(onClick = onBellClick), contentAlignment = Alignment.Center) {
+            Icon(com.ahu.tlauncher.ui.components.TIcons.Bell, "Notifications", tint = if (state.inbox.isEmpty()) T.colors.muted else T.colors.text, modifier = Modifier.size(20.dp))
+            if (state.inbox.isNotEmpty()) Box(Modifier.align(Alignment.TopEnd).padding(top = 3.dp, end = 3.dp).size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(T.colors.accent))
+        }
     }
 }
 

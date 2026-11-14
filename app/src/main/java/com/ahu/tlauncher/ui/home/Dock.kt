@@ -102,7 +102,7 @@ private fun VolumeControl(state: HomeUiState, actions: HomeActions, active: Bool
             Icon(TIcons.ChevronUp, "Volume up", tint = DOCK_MUTED, modifier = Modifier.size(16.dp))
         }
         Box(Modifier.size(width = 44.dp, height = 28.dp).clip(TShapes.surface).background(if (active) ACTIVE_BG else Color.Transparent).pressable(onClick = onToggle), contentAlignment = Alignment.Center) {
-            Icon(if (v.muted || v.level == 0) TIcons.SpeakerOff else TIcons.Speaker, "Volume", tint = DOCK_FG, modifier = Modifier.size(24.dp))
+            Icon(if (v.muted || v.level == 0) TIcons.SpeakerOff else TIcons.SpeakerWaves, "Volume", tint = DOCK_FG, modifier = Modifier.size(24.dp))
         }
         Box(Modifier.size(width = 44.dp, height = 16.dp).pressable { actions.volumeStep(false) }, contentAlignment = Alignment.Center) {
             Icon(TIcons.ChevronDown, "Volume down", tint = DOCK_MUTED, modifier = Modifier.size(16.dp))

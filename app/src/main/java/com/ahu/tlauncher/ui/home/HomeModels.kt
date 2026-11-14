@@ -78,6 +78,10 @@ data class HomeUiState(
     val etaMin: Map<String, Int> = emptyMap(),
     /** Free map: OpenStreetMap search/routing and TLauncher's own spoken guidance. */
     val freeNav: Boolean = false,
+    /** Mobile signal (SIM head units only). */
+    val cell: com.ahu.tlauncher.system.CellStatus? = null,
+    /** Notifications for the status-bar bell. */
+    val inbox: List<com.ahu.tlauncher.notify.InboxItem> = emptyList(),
 )
 
 /** Route search and drawing need the Google key, Play services and the Google map selected. */
@@ -127,6 +131,9 @@ interface HomeActions {
     fun openMapSettings() {}
     /** Tap on the music card: player over the car panel (handled by the home screen). */
     fun openCardPlayer() {}
+    fun openInbox(item: com.ahu.tlauncher.notify.InboxItem) {}
+    fun dismissInbox(item: com.ahu.tlauncher.notify.InboxItem) {}
+    fun dismissAllInbox() {}
     fun volumeStep(up: Boolean) {}
     fun setVolume(level: Int) {}
     fun toggleMute() {}

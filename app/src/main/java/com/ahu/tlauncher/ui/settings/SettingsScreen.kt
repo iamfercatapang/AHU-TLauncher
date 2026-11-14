@@ -72,15 +72,15 @@ import com.ahu.tlauncher.ui.theme.TType
 import com.ahu.tlauncher.ui.theme.ThemeMode
 
 enum class Section(val label: String, val icon: ImageVector) {
-    DISPLAY("Display", Icons.Rounded.Tune),
-    DOCK("Dock", Icons.Rounded.Dock),
-    NAVIGATION("Navigation", Icons.Rounded.Map),
-    OBD("OBD-II", Icons.Rounded.Bluetooth),
-    DIAGNOSTICS("Diagnostics", Icons.Rounded.Build),
-    ANDROID_AUTO("Android Auto", Icons.Rounded.PhoneAndroid),
-    SOUND("Sound", Icons.Rounded.GraphicEq),
-    PERMISSIONS("Permissions", Icons.Rounded.Security),
-    ABOUT("About", Icons.Rounded.Info),
+    DISPLAY("Display", com.ahu.tlauncher.ui.components.TIcons.Display),
+    DOCK("Dock", com.ahu.tlauncher.ui.components.TIcons.DockBar),
+    NAVIGATION("Navigation", com.ahu.tlauncher.ui.components.TIcons.Navigate),
+    OBD("OBD-II", com.ahu.tlauncher.ui.components.TIcons.Plug),
+    DIAGNOSTICS("Diagnostics", com.ahu.tlauncher.ui.components.TIcons.Wrench),
+    ANDROID_AUTO("Android Auto", com.ahu.tlauncher.ui.components.TIcons.PhoneLink),
+    SOUND("Sound", com.ahu.tlauncher.ui.components.TIcons.EqBars),
+    PERMISSIONS("Permissions", com.ahu.tlauncher.ui.components.TIcons.Shield),
+    ABOUT("About", com.ahu.tlauncher.ui.components.TIcons.Info),
 }
 
 @Composable

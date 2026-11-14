@@ -44,6 +44,9 @@ data class QueueEntry(
     val durationMs: Long?,
 )
 
+/** A notification for the status-bar bell (messages, reminders… not music, navigation or calls). */
+data class InboxItem(val key: String, val packageName: String, val title: String, val text: String, val postedMs: Long, val contentIntent: PendingIntent?)
+
 /** A call notification plus its button intents. */
 data class CallCardState(val info: CallInfo, val intents: Map<CallAction, PendingIntent>, val contentIntent: PendingIntent?, val firstSeenMs: Long)
 
@@ -75,6 +78,11 @@ object NotificationHub {
     private var listenerComponent: ComponentName? = null
     private val navByKey = LinkedHashMap<String, NavCardState>()
     private val callByKey = LinkedHashMap<String, CallCardState>()
+    private val inboxByKey = LinkedHashMap<String, InboxItem>()
+    private val _inbox = MutableStateFlow<List<InboxItem>>(emptyList())
+    val inbox: StateFlow<List<InboxItem>> = _inbox.asStateFlow()
+    /** Set while the listener is connected, to dismiss notifications. */
+    @Volatile internal var listener: android.service.notification.NotificationListenerService? = null
 
     private val _call = MutableStateFlow<CallCardState?>(null)
     val call: StateFlow<CallCardState?> = _call.asStateFlow()
@@ -275,6 +283,19 @@ object NotificationHub {
     internal fun onCallRemoved(key: String) {
         if (callByKey.remove(key) != null) _call.value = callByKey.values.lastOrNull()
     }
+    internal fun onInboxPosted(item: InboxItem) { inboxByKey.remove(item.key); inboxByKey[item.key] = item; publishInbox() }
+    internal fun onInboxRemoved(key: String) { if (inboxByKey.remove(key) != null) publishInbox() }
+    internal fun clearInbox() { inboxByKey.clear(); publishInbox() }
+    private fun publishInbox() { _inbox.value = inboxByKey.values.sortedByDescending { it.postedMs }.take(20) }
+
+    /** Opens a notification (and removes it, as the system shade would). */
+    fun openInbox(item: InboxItem) {
+        runCatching { item.contentIntent?.send() }
+        dismissInbox(item)
+    }
+    fun dismissInbox(item: InboxItem) { runCatching { listener?.cancelNotification(item.key) }; onInboxRemoved(item.key) }
+    fun dismissAllInbox() { inboxByKey.values.toList().forEach { runCatching { listener?.cancelNotification(it.key) } }; clearInbox() }
+
     internal fun clearCalls() { callByKey.clear(); _call.value = null }
 
     /** Presses a button on the call notification. False if it has no such button. */

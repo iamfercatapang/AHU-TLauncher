@@ -218,5 +218,15 @@ class ScreenshotTest {
             com.ahu.tlauncher.route.RouteData(pts, 1080, 7400, "EDSA", emptyList(), listOf(step)), loading = false,
             remainingM = 6100, remainingS = 900, guided = true, turn = com.ahu.tlauncher.route.Turn(step, 320))), NoopActions)
     }
+    @Test fun notifications() = shot("notifications") {
+        val now = java.time.LocalDateTime.of(2026, 11, 13, 21, 41).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        HomeScreen(state().copy(
+            cell = com.ahu.tlauncher.system.CellStatus(3, "4G"),
+            inbox = listOf(
+                com.ahu.tlauncher.notify.InboxItem("a", apps[1].packageName, "Maria", "On my way, see you at 7", now - 4 * 60_000, null),
+                com.ahu.tlauncher.notify.InboxItem("b", apps[5].packageName, "Car wash reminder", "Tomorrow 9:00", now - 2 * 3_600_000, null),
+            ),
+        ), NoopActions, initialOverlay = Overlay.NOTIFICATIONS)
+    }
     @Test fun settingsLight() = shot("settings_display_light", dark = false) { HomeScreen(state(), NoopActions, initialOverlay = Overlay.SETTINGS) }
 }

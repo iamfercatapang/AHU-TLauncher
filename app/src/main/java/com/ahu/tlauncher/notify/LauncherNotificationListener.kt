@@ -20,10 +20,12 @@ class LauncherNotificationListener : NotificationListenerService() {
         NotificationHub.refresh(this)
         NotificationHub.clearNav()
         NotificationHub.clearCalls()
+        NotificationHub.clearInbox()
+        NotificationHub.listener = this
         runCatching { activeNotifications?.forEach { handle(it) } }
     }
 
-    override fun onListenerDisconnected() { NotificationHub.clearNav(); NotificationHub.clearCalls() }
+    override fun onListenerDisconnected() { NotificationHub.clearNav(); NotificationHub.clearCalls(); NotificationHub.clearInbox(); NotificationHub.listener = null }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         handle(sbn)
@@ -35,10 +37,12 @@ class LauncherNotificationListener : NotificationListenerService() {
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         if (sbn.packageName in NavParser.NAV_PACKAGES) NotificationHub.onNavRemoved(sbn.key)
         NotificationHub.onCallRemoved(sbn.key)
+        NotificationHub.onInboxRemoved(sbn.key)
     }
 
     private fun handle(sbn: StatusBarNotification) {
         handleCall(sbn)
+        handleInbox(sbn)
         if (sbn.packageName !in NavParser.NAV_PACKAGES) return
         val n = sbn.notification
         val isNav = n.category == "navigation" || (n.flags and Notification.FLAG_ONGOING_EVENT) != 0
@@ -54,6 +58,20 @@ class LauncherNotificationListener : NotificationListenerService() {
         val acts = n.actions ?: emptyArray()
         val exit = NavParser.exitActionIndex(acts.map { it.title }).takeIf { it >= 0 }?.let { acts[it].actionIntent }
         NotificationHub.onNavPosted(sbn.key, NavCardState(info, largeIcon(n), n.contentIntent, exit))
+    }
+
+    /** Messages, reminders and the like for the bell: clearable, not ongoing, not music/navigation/calls/system noise. */
+    private fun handleInbox(sbn: StatusBarNotification) {
+        val n = sbn.notification
+        val e = n.extras
+        val skip = sbn.packageName == packageName || !sbn.isClearable || (n.flags and Notification.FLAG_ONGOING_EVENT) != 0 ||
+            (n.flags and Notification.FLAG_GROUP_SUMMARY) != 0 || e?.containsKey(Notification.EXTRA_MEDIA_SESSION) == true ||
+            n.category in setOf("transport", "navigation", "call", "progress", "service", "sys", "status") ||
+            sbn.packageName in NavParser.NAV_PACKAGES
+        val title = e?.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+        if (skip || title.isBlank()) { NotificationHub.onInboxRemoved(sbn.key); return }
+        val text = (e?.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: e?.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
+        NotificationHub.onInboxPosted(InboxItem(sbn.key, sbn.packageName, title, text, sbn.postTime, n.contentIntent))
     }
 
     private fun handleCall(sbn: StatusBarNotification) {

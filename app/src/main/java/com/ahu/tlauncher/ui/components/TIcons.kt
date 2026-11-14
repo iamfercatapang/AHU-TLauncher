@@ -156,4 +156,64 @@ object TIcons {
         modifier?.contains("left") == true -> TurnLeft
         else -> Straight
     }
+
+    // ---------------------------------------------------------------- settings sidebar & status (thin line)
+    val Display by lazy { icon("Display") {
+        line { moveTo(4f, 6f); horizontalLineTo(20f); verticalLineTo(16f); horizontalLineTo(4f); close() }
+        line { moveTo(9f, 20f); horizontalLineTo(15f); moveTo(12f, 16f); verticalLineTo(20f) }
+    } }
+    val DockBar by lazy { icon("DockBar") {
+        line { moveTo(3.5f, 15f); horizontalLineTo(20.5f); verticalLineTo(19.5f); horizontalLineTo(3.5f); close() }
+        fill { circle(8f, 17.25f, 1f); circle(12f, 17.25f, 1f); circle(16f, 17.25f, 1f) }
+        line { moveTo(6f, 4.5f); horizontalLineTo(18f); verticalLineTo(11f); horizontalLineTo(6f); close() }
+    } }
+    /** OBD plug: connector body with two pins. */
+    val Plug by lazy { icon("Plug") {
+        line { moveTo(6.5f, 9f); horizontalLineTo(17.5f); verticalLineTo(13f); arcTo(5.5f, 5.5f, 0f, false, true, 6.5f, 13f); close() }
+        line { moveTo(9.5f, 9f); verticalLineTo(4f); moveTo(14.5f, 9f); verticalLineTo(4f); moveTo(12f, 18.5f); verticalLineTo(21f) }
+    } }
+    /** Service wrench (Diagnostics). */
+    val Wrench by lazy { icon("Wrench") {
+        line { moveTo(14.5f, 4f); arcTo(4.5f, 4.5f, 0f, false, false, 13.2f, 10.8f); lineTo(4.5f, 19.5f); lineTo(5.5f, 20.5f) ; lineTo(14.2f, 11.8f); arcTo(4.5f, 4.5f, 0f, false, false, 20f, 9.5f); lineTo(17f, 9.8f); lineTo(14.6f, 7.4f); close() }
+    } }
+    val PhoneLink by lazy { icon("PhoneLink") {
+        line { moveTo(8f, 3f); horizontalLineTo(16f); arcTo(1.5f, 1.5f, 0f, false, true, 17.5f, 4.5f); verticalLineTo(19.5f); arcTo(1.5f, 1.5f, 0f, false, true, 16f, 21f)
+            horizontalLineTo(8f); arcTo(1.5f, 1.5f, 0f, false, true, 6.5f, 19.5f); verticalLineTo(4.5f); arcTo(1.5f, 1.5f, 0f, false, true, 8f, 3f); close() }
+        line { moveTo(10.5f, 18f); horizontalLineTo(13.5f) }
+    } }
+    /** Equalizer bars (Sound). */
+    val EqBars by lazy { icon("EqBars") {
+        line { moveTo(5f, 20f); verticalLineTo(4f); moveTo(12f, 20f); verticalLineTo(4f); moveTo(19f, 20f); verticalLineTo(4f) }
+        line(2.6f) { moveTo(3.2f, 14f); horizontalLineTo(6.8f); moveTo(10.2f, 8f); horizontalLineTo(13.8f); moveTo(17.2f, 16f); horizontalLineTo(20.8f) }
+    } }
+    val Shield by lazy { icon("Shield") {
+        line { moveTo(12f, 3f); lineTo(19.5f, 6f); verticalLineTo(11.5f); curveTo(19.5f, 16f, 16.5f, 19.5f, 12f, 21f); curveTo(7.5f, 19.5f, 4.5f, 16f, 4.5f, 11.5f); verticalLineTo(6f); close() }
+        line { moveTo(9f, 12f); lineTo(11.2f, 14.2f); lineTo(15.2f, 10f) }
+    } }
+    val Info by lazy { icon("Info") {
+        line { circle(12f, 12f, 8.5f) }
+        line(2f) { moveTo(12f, 11f); verticalLineTo(16.5f) }
+        fill { circle(12f, 7.8f, 1.2f) }
+    } }
+    val Bell by lazy { icon("Bell") {
+        line { moveTo(6f, 16.5f); verticalLineTo(11f); arcTo(6f, 6f, 0f, false, true, 18f, 11f); verticalLineTo(16.5f); lineTo(19.5f, 18f); horizontalLineTo(4.5f); close() }
+        line { moveTo(10f, 20.5f); horizontalLineTo(14f) }
+    } }
+    /** Speaker with three sound waves (volume). */
+    val SpeakerWaves by lazy { icon("SpeakerWaves") {
+        line { moveTo(3f, 9.5f); horizontalLineTo(6.5f); lineTo(11f, 5.5f); verticalLineTo(18.5f); lineTo(6.5f, 14.5f); horizontalLineTo(3f); close() }
+        line { moveTo(14f, 10f); arcTo(3f, 3f, 0f, false, true, 14f, 14f) }
+        line { moveTo(16.5f, 7.5f); arcTo(6f, 6f, 0f, false, true, 16.5f, 16.5f) }
+        line { moveTo(19f, 5f); arcTo(9.5f, 9.5f, 0f, false, true, 19f, 19f) }
+    } }
+    /** Mobile signal: four rising bars, [level] 0–4 drawn solid, the rest faint (caller draws two passes). */
+    fun signalBars(level: Int, solid: Boolean) = icon("Signal$level$solid") {
+        for (i in 0 until 4) {
+            val on = i < level
+            if (on == solid) fill {
+                val x = 4f + i * 4.5f; val top = 18f - (i + 1) * 3.4f
+                moveTo(x, top); horizontalLineTo(x + 2.8f); verticalLineTo(19f); horizontalLineTo(x); close()
+            }
+        }
+    }
 }
