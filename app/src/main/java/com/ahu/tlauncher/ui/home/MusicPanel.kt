@@ -76,8 +76,9 @@ object UpNext {
  */
 @Composable
 fun MusicPanel(state: HomeUiState, actions: HomeActions, onClose: () -> Unit, modifier: Modifier = Modifier) {
-    val m = state.media
-    val rows = m?.let { UpNext.rows(it.queue, it.activeQueueId) }.orEmpty()
+    val live = state.media != null
+    val m = state.media ?: state.lastMedia
+    val rows = state.media?.let { UpNext.rows(it.queue, it.activeQueueId) }.orEmpty()
     Column(modifier.fillMaxWidth().clip(TShapes.surface).background(T.colors.panel).padding(start = 22.dp, end = 18.dp, top = 14.dp, bottom = 18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Music", style = TType.title, color = T.colors.text)
@@ -91,7 +92,7 @@ fun MusicPanel(state: HomeUiState, actions: HomeActions, onClose: () -> Unit, mo
         Row(Modifier.fillMaxWidth().weight(1f)) {
             val player = Modifier.fillMaxHeight().width(if (rows.isEmpty()) 340.dp else 300.dp)
             if (rows.isEmpty()) Spacer(Modifier.weight(1f))
-            Player(m, actions, player)
+            Player(m, actions, player, live, state.musicSubtitle(m?.let { mi -> state.apps.firstOrNull { it.packageName == mi.packageName }?.label }), state.resumingMedia)
             if (rows.isEmpty()) Spacer(Modifier.weight(1f))
             else {
                 Spacer(Modifier.width(28.dp))
@@ -102,7 +103,7 @@ fun MusicPanel(state: HomeUiState, actions: HomeActions, onClose: () -> Unit, mo
 }
 
 @Composable
-private fun Player(m: MediaInfo?, actions: HomeActions, modifier: Modifier) {
+private fun Player(m: MediaInfo?, actions: HomeActions, modifier: Modifier, live: Boolean = true, subtitle: String? = m?.artist, resuming: Boolean = false) {
     BoxWithConstraints(modifier) {
         // Artwork takes what's left after the text, seek bar and controls (about 190 dp).
         val art = min(maxWidth, maxHeight - 190.dp).coerceAtLeast(96.dp)
@@ -111,7 +112,7 @@ private fun Player(m: MediaInfo?, actions: HomeActions, modifier: Modifier) {
             Spacer(Modifier.height(14.dp))
             Column(Modifier.fillMaxWidth()) {
                 Text(m?.title?.ifBlank { null } ?: "Not playing", style = TType.title, color = T.colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(m?.artist?.ifBlank { null } ?: "Start music in any app", style = TType.label, color = T.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(subtitle?.ifBlank { null } ?: "Start music in any app", style = TType.label, color = T.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val pos = if (LocalInspectionMode.current) m?.positionMs ?: 0 else livePosition(m)
                 var dragging by remember { mutableStateOf<Float?>(null) }
                 val dur = (m?.durationMs ?: 0).coerceAtLeast(1)
@@ -119,7 +120,7 @@ private fun Player(m: MediaInfo?, actions: HomeActions, modifier: Modifier) {
                     value = dragging ?: (pos.toFloat() / dur).coerceIn(0f, 1f),
                     onValueChange = { dragging = it },
                     onValueChangeFinished = { dragging?.let { actions.seekTo((it * dur).toLong()) }; dragging = null },
-                    enabled = m != null && m.durationMs > 0,
+                    enabled = live && m != null && m.durationMs > 0,
                     colors = SliderDefaults.colors(
                         thumbColor = T.colors.text, activeTrackColor = T.colors.text, inactiveTrackColor = T.colors.divider,
                         disabledThumbColor = T.colors.muted, disabledInactiveTrackColor = T.colors.divider,
@@ -138,11 +139,11 @@ private fun Player(m: MediaInfo?, actions: HomeActions, modifier: Modifier) {
                     IconButtonT(Icons.Rounded.Shuffle, if (on) "Shuffle on" else "Shuffle off", size = 44.dp, iconSize = 22.dp,
                         tint = if (on) T.colors.accent else T.colors.muted, onClick = actions::toggleShuffle)
                 }
-                IconButtonT(Icons.Rounded.SkipPrevious, "Previous", size = 48.dp, iconSize = 30.dp, enabled = m != null) { actions.previous() }
+                IconButtonT(Icons.Rounded.SkipPrevious, "Previous", size = 48.dp, iconSize = 30.dp, enabled = live) { actions.previous() }
                 Box(Modifier.size(56.dp).clip(CircleShape).background(T.colors.card), contentAlignment = Alignment.Center) {
-                    IconButtonT(if (m?.isPlaying == true) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", size = 56.dp, iconSize = 32.dp, enabled = m != null) { actions.playPause() }
+                    IconButtonT(if (m?.isPlaying == true) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", size = 56.dp, iconSize = 32.dp, enabled = m != null && !resuming) { actions.playPause() }
                 }
-                IconButtonT(Icons.Rounded.SkipNext, "Next", size = 48.dp, iconSize = 30.dp, enabled = m != null) { actions.next() }
+                IconButtonT(Icons.Rounded.SkipNext, "Next", size = 48.dp, iconSize = 30.dp, enabled = live) { actions.next() }
                 m?.repeatMode?.let { mode ->
                     IconButtonT(if (mode == 1) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
                         when (mode) { 1 -> "Repeat one"; 2 -> "Repeat all"; else -> "Repeat off" }, size = 44.dp, iconSize = 22.dp,

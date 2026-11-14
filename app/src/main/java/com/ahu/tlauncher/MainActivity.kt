@@ -165,6 +165,8 @@ class MainActivity : ComponentActivity(), HomeActions {
         val recents by app.routes.recents.collectAsState()
         val favourites by app.routes.favourites.collectAsState()
         val etaMin by app.routes.etaMin.collectAsState()
+        val lastMedia by app.lastMedia.last.collectAsState()
+        val resumingMedia by app.lastMedia.resuming.collectAsState()
         // The trip ends when Google Maps / Waze stops navigating (their turn notification disappears for 20 s).
         val navOn = nav != null
         LaunchedEffect(navOn, route?.phase) {
@@ -224,6 +226,7 @@ class MainActivity : ComponentActivity(), HomeActions {
             update = update, updateDismissedCode = dismissedCode, appVersion = BuildConfig.VERSION_NAME,
             weather = weather?.takeIf { System.currentTimeMillis() - it.fetchedAtMs < com.ahu.tlauncher.system.WeatherParser.MAX_AGE_MS },
             diag = diag, fuel = fuel,
+            lastMedia = if (media == null) lastMedia else null, resumingMedia = resumingMedia,
             route = route, search = search, recents = recents, favourites = favourites, etaMin = etaMin,
             lights = lights,
             call = call, callPermission = callPerm, returnPermission = returnPerm, callSource = remember(notifCall) { NotificationHub.lastCallPackage },
@@ -254,7 +257,11 @@ class MainActivity : ComponentActivity(), HomeActions {
         }
     }
 
-    override fun playPause() = NotificationHub.playPause()
+    override fun playPause() {
+        // Nothing running (e.g. after the engine was off): wake the last music app up.
+        if (NotificationHub.media.value == null) app.lastMedia.resume { pkg -> if (!app.apps.launchPackage(pkg)) toastMissing(pkg) }
+        else NotificationHub.playPause()
+    }
     override fun next() = NotificationHub.next()
     override fun previous() = NotificationHub.previous()
     override fun seekTo(ms: Long) = NotificationHub.seekTo(ms)

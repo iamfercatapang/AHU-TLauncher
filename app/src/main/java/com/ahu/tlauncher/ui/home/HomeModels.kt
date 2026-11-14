@@ -22,6 +22,10 @@ data class HomeUiState(
     val settings: Settings = Settings(),
     val obd: ObdState = ObdState(),
     val media: MediaInfo? = null,
+    /** Last YouTube Music / Spotify song, shown when nothing is playing (e.g. after the head unit restarts). */
+    val lastMedia: MediaInfo? = null,
+    /** Play was pressed on the last song and we're waiting for the app to start. */
+    val resumingMedia: Boolean = false,
     val nav: NavCardState? = null,
     val notificationAccess: Boolean = false,
     val apps: List<AppEntry> = emptyList(),
@@ -71,6 +75,18 @@ data class HomeUiState(
 /** Route search and drawing need the Google key, Play services and the Google map selected. */
 val HomeUiState.routesEnabled: Boolean
     get() = googleMapsAvailable && settings.mapEngine == com.ahu.tlauncher.data.MapEngine.GOOGLE
+
+/** Second line under the song title: artist, or "Last played" / "Starting …" for a remembered song. */
+fun HomeUiState.musicSubtitle(appLabel: String?): String? {
+    val live = media
+    val last = lastMedia
+    return when {
+        live != null -> live.artist.ifBlank { null }
+        last == null -> null
+        resumingMedia -> "Starting ${appLabel ?: "music"}…"
+        else -> "Last played" + (last.artist.ifBlank { null }?.let { " · $it" } ?: "")
+    }
+}
 
 /** Speed shown on screen and used by the map: OBD when it has live data, otherwise GPS. */
 val HomeUiState.displaySpeedKmh: Int?

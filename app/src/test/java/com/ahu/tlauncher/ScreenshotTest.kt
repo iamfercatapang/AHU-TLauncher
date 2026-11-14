@@ -182,5 +182,9 @@ class ScreenshotTest {
         HomeScreen(state(nav = true).copy(googleMapsAvailable = true, route = com.ahu.tlauncher.route.RouteState(
             com.ahu.tlauncher.route.Place("SM Megamall", "Ortigas Center"), com.ahu.tlauncher.route.RoutePhase.ACTIVE, demoRoute, loading = false, remainingM = 6100, remainingS = 900)), NoopActions)
     }
+    @Test fun lastPlayed() = shot("music_last_played") {
+        val st = state()
+        HomeScreen(st.copy(media = null, lastMedia = st.media!!.copy(packageName = "com.google.android.apps.youtube.music", isPlaying = false)), NoopActions)
+    }
     @Test fun settingsLight() = shot("settings_display_light", dark = false) { HomeScreen(state(), NoopActions, initialOverlay = Overlay.SETTINGS) }
 }

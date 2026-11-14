@@ -393,21 +393,24 @@ fun MusicCard(state: HomeUiState, actions: HomeActions, modifier: Modifier = Mod
             }
             return@Box
         }
-        val m = state.media
+        // Nothing playing yet (e.g. after the engine was off): show the last song; Play resumes it.
+        val live = state.media != null
+        val m = state.media ?: state.lastMedia
+        val appLabel = m?.let { mi -> state.apps.firstOrNull { it.packageName == mi.packageName }?.label }
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().height(60.dp).pressable { actions.openMediaApp() }, verticalAlignment = Alignment.CenterVertically) {
-                AlbumArt(m, Modifier.size(60.dp))
+                AlbumArt(m, Modifier.size(60.dp).graphicsLayer { alpha = if (live || m == null) 1f else 0.6f })
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f).padding(end = 12.dp)) {
                     Text(m?.title?.ifBlank { null } ?: "Not playing", style = TType.title, color = T.colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(m?.artist?.ifBlank { null } ?: "Start music in any app", style = TType.label, color = T.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(state.musicSubtitle(appLabel) ?: "Start music in any app", style = TType.label, color = T.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             TrackProgress(m, Modifier.fillMaxWidth().height(2.dp))
             Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                IconButtonT(Icons.Rounded.SkipPrevious, "Previous", size = 40.dp, iconSize = 28.dp, enabled = m != null) { actions.previous() }
-                IconButtonT(if (m?.isPlaying == true) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", size = 40.dp, iconSize = 30.dp, enabled = m != null) { actions.playPause() }
-                IconButtonT(Icons.Rounded.SkipNext, "Next", size = 40.dp, iconSize = 28.dp, enabled = m != null) { actions.next() }
+                IconButtonT(Icons.Rounded.SkipPrevious, "Previous", size = 40.dp, iconSize = 28.dp, enabled = live) { actions.previous() }
+                IconButtonT(if (m?.isPlaying == true) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", size = 40.dp, iconSize = 30.dp, enabled = m != null && !state.resumingMedia) { actions.playPause() }
+                IconButtonT(Icons.Rounded.SkipNext, "Next", size = 40.dp, iconSize = 28.dp, enabled = live) { actions.next() }
             }
         }
     }
