@@ -201,5 +201,14 @@ class ScreenshotTest {
             com.ahu.tlauncher.system.EqMath.curve(com.ahu.tlauncher.system.EqMath.PRESETS.getValue("Rock"), listOf(60, 230, 910, 3600, 14000)), 30, 0))
         HomeScreen(state().copy(settings = state().settings.copy(eq = eq)), NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.SOUND)
     }
+    private fun queued(): HomeUiState {
+        val st = state()
+        val q = listOf("Midnight Drive" to "The Night Lines", "Coastal Highway" to "Paper Lanterns", "Slow Burn" to "Mira Vale", "Afterglow" to "Sun Theory")
+            .mapIndexed { i, (t, a) -> com.ahu.tlauncher.notify.QueueEntry(i + 1L, t, a, null, null, 200_000L + i * 17_000L) }
+        return st.copy(media = st.media!!.copy(queue = q, activeQueueId = 1))
+    }
+    @Test fun cardPlayerSplit() = shot("music_card_player") { HomeScreen(queued(), NoopActions, initialOverlay = Overlay.CARD_MUSIC) }
+    @Test fun cardPlayerFull() = shot("music_card_player_full", dark = false) { HomeScreen(queued(), NoopActions, initialOverlay = Overlay.CARD_MUSIC, initialMapVisible = false) }
+    @Test fun volumePopup() = shot("volume_popup") { HomeScreen(state(), NoopActions, initialOverlay = Overlay.VOLUME) }
     @Test fun settingsLight() = shot("settings_display_light", dark = false) { HomeScreen(state(), NoopActions, initialOverlay = Overlay.SETTINGS) }
 }

@@ -16,6 +16,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -165,5 +169,47 @@ fun RowScope.Stat(label: String, value: String, unit: String, modifier: Modifier
             Text(" $unit", style = TType.label, color = T.colors.muted, maxLines = 1, modifier = Modifier.padding(bottom = 2.dp))
         }
         Text(label, style = TType.label, color = T.colors.muted, maxLines = 1)
+    }
+}
+
+/**
+ * Thin slider like the prototype's popups: 4 dp track, filled part in [fill], round thumb.
+ * Drag or tap anywhere on it.
+ */
+@Composable
+fun ThinSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    range: ClosedFloatingPointRange<Float> = 0f..1f,
+    fill: Color = Color.White,
+    track: Color = Color.White.copy(alpha = 0.2f),
+    enabled: Boolean = true,
+) {
+    val latest = androidx.compose.runtime.rememberUpdatedState(onValueChange)
+    androidx.compose.foundation.Canvas(
+        modifier.height(28.dp).then(
+            if (!enabled) Modifier else Modifier.pointerInput(range) {
+                fun at(x: Float): Float {
+                    val pad = 8.dp.toPx()
+                    val t = ((x - pad) / (size.width - 2 * pad)).coerceIn(0f, 1f)
+                    return range.start + t * (range.endInclusive - range.start)
+                }
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    latest.value(at(down.position.x))
+                    drag(down.id) { c -> c.consume(); latest.value(at(c.position.x)) }
+                }
+            },
+        ),
+    ) {
+        val pad = 8.dp.toPx()
+        val cy = size.height / 2
+        val span = (range.endInclusive - range.start).takeIf { it > 0f } ?: 1f
+        val x = pad + ((value - range.start) / span).coerceIn(0f, 1f) * (size.width - 2 * pad)
+        val w = 4.dp.toPx()
+        drawLine(track, androidx.compose.ui.geometry.Offset(pad, cy), androidx.compose.ui.geometry.Offset(size.width - pad, cy), w, androidx.compose.ui.graphics.StrokeCap.Round)
+        drawLine(fill, androidx.compose.ui.geometry.Offset(pad, cy), androidx.compose.ui.geometry.Offset(x, cy), w, androidx.compose.ui.graphics.StrokeCap.Round)
+        drawCircle(fill.copy(alpha = if (enabled) 1f else 0.4f), 8.dp.toPx(), androidx.compose.ui.geometry.Offset(x, cy))
     }
 }

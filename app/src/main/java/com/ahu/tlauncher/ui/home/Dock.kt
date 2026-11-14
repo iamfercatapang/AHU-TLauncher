@@ -56,6 +56,7 @@ fun Dock(
     onLaunch: (AppEntry) -> Unit,
     modifier: Modifier = Modifier,
     onToggleBrightness: () -> Unit = {},
+    onToggleVolume: () -> Unit = {},
 ) {
     val pinned = state.settings.pinnedApps.mapNotNull { key -> state.apps.firstOrNull { it.key == key } }.take(6)
     Row(
@@ -71,7 +72,7 @@ fun Dock(
         DockButton(TIcons.Music, "Music", overlay == Overlay.MUSIC, onToggleMusic)
         DockButton(TIcons.More, "All apps", overlay == Overlay.APPS, onToggleApps)
         DockButton(TIcons.Sun, "Brightness", overlay == Overlay.BRIGHTNESS, onToggleBrightness)
-        VolumeControl(state, actions)
+        VolumeControl(state, actions, overlay == Overlay.VOLUME, onToggleVolume)
     }
 }
 
@@ -92,18 +93,16 @@ private fun DockButton(icon: ImageVector, desc: String, active: Boolean, onClick
     }
 }
 
-/** Vertical volume like the prototype: up, speaker with level, down. Tap the speaker to mute. */
+/** Vertical volume like the prototype: up, speaker, down. Tap the speaker for the volume slider. */
 @Composable
-private fun VolumeControl(state: HomeUiState, actions: HomeActions) {
+private fun VolumeControl(state: HomeUiState, actions: HomeActions, active: Boolean, onToggle: () -> Unit) {
     val v = state.volume
     Column(Modifier.width(56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(width = 44.dp, height = 16.dp).pressable { actions.volumeStep(true) }, contentAlignment = Alignment.Center) {
             Icon(TIcons.ChevronUp, "Volume up", tint = DOCK_MUTED, modifier = Modifier.size(16.dp))
         }
-        Row(Modifier.height(28.dp).pressable { actions.toggleMute() }, verticalAlignment = Alignment.CenterVertically) {
-            Icon(if (v.muted || v.level == 0) TIcons.SpeakerOff else TIcons.Speaker, "Mute", tint = DOCK_FG, modifier = Modifier.size(24.dp))
-            Spacer(Modifier.width(2.dp))
-            Text(if (v.muted) "0" else "${v.level}", style = TType.label.copy(fontSize = 13.sp), color = DOCK_FG, maxLines = 1, softWrap = false)
+        Box(Modifier.size(width = 44.dp, height = 28.dp).clip(TShapes.surface).background(if (active) ACTIVE_BG else Color.Transparent).pressable(onClick = onToggle), contentAlignment = Alignment.Center) {
+            Icon(if (v.muted || v.level == 0) TIcons.SpeakerOff else TIcons.Speaker, "Volume", tint = DOCK_FG, modifier = Modifier.size(24.dp))
         }
         Box(Modifier.size(width = 44.dp, height = 16.dp).pressable { actions.volumeStep(false) }, contentAlignment = Alignment.Center) {
             Icon(TIcons.ChevronDown, "Volume down", tint = DOCK_MUTED, modifier = Modifier.size(16.dp))

@@ -439,7 +439,8 @@ fun MusicCard(state: HomeUiState, actions: HomeActions, modifier: Modifier = Mod
         val m = state.media ?: state.lastMedia
         val appLabel = m?.let { mi -> state.apps.firstOrNull { it.packageName == mi.packageName }?.label }
         Column(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth().height(60.dp).pressable { actions.openMediaApp() }, verticalAlignment = Alignment.CenterVertically) {
+            // Tap the song to open the player over the car panel (or the music app if nothing was ever played).
+            Row(Modifier.fillMaxWidth().height(60.dp).pressable { if (m != null) actions.openCardPlayer() else actions.openMediaApp() }, verticalAlignment = Alignment.CenterVertically) {
                 AlbumArt(m, Modifier.size(60.dp).graphicsLayer { alpha = if (live || m == null) 1f else 0.6f })
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f).padding(end = 12.dp)) {

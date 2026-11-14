@@ -156,7 +156,7 @@ private fun Player(m: MediaInfo?, actions: HomeActions, modifier: Modifier, live
 }
 
 @Composable
-private fun QueueList(m: MediaInfo, rows: List<QueueEntry>, actions: HomeActions, modifier: Modifier) {
+internal fun QueueList(m: MediaInfo, rows: List<QueueEntry>, actions: HomeActions, modifier: Modifier, compact: Boolean = false) {
     Column(modifier) {
         Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Up next", style = TType.button, color = T.colors.text)
@@ -171,10 +171,10 @@ private fun QueueList(m: MediaInfo, rows: List<QueueEntry>, actions: HomeActions
                     Modifier.fillMaxWidth().clip(TShapes.card)
                         .background(if (current) T.colors.card else androidx.compose.ui.graphics.Color.Transparent)
                         .then(if (current) Modifier else Modifier.pressable { actions.playQueueItem(q.id) })
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                        .padding(horizontal = 10.dp, vertical = if (compact) 5.dp else 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    QueueArt(q, Modifier.size(44.dp).clip(TShapes.inner))
+                    QueueArt(q, Modifier.size(if (compact) 32.dp else 44.dp).clip(TShapes.inner))
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(q.title, style = TType.body, color = T.colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -202,7 +202,7 @@ private fun QueueArt(q: QueueEntry, modifier: Modifier) {
     }
 }
 
-private fun fmt(ms: Long): String {
+internal fun fmt(ms: Long): String {
     val s = ms / 1000
     return "%d:%02d".format(s / 60, s % 60)
 }

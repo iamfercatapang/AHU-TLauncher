@@ -74,7 +74,7 @@ val DOCK_H = 64.dp
 val STATUS_H = 40.dp
 private const val SPLIT_FRACTION = 0.36f
 
-enum class Overlay { NONE, APPS, SETTINGS, MUSIC, SEARCH, BRIGHTNESS }
+enum class Overlay { NONE, APPS, SETTINGS, MUSIC, SEARCH, BRIGHTNESS, VOLUME, CARD_MUSIC }
 
 @Composable
 fun HomeScreen(
@@ -99,7 +99,12 @@ fun HomeScreen(
         object : HomeActions by rawActions {
             override fun openNavApp() { if (routesOn) { mapVisible = true; overlay = Overlay.SEARCH } else rawActions.openNavApp() }
             override fun openMapSettings() { settingsStart = com.ahu.tlauncher.ui.settings.Section.NAVIGATION; overlay = Overlay.SETTINGS }
+            override fun openCardPlayer() { overlay = if (overlay == Overlay.CARD_MUSIC) Overlay.NONE else Overlay.CARD_MUSIC }
         }
+    }
+    // Settings, the dock's Music panel and search live on the map side: only in split view.
+    LaunchedEffect(mapVisible) {
+        if (!mapVisible && overlay in setOf(Overlay.SETTINGS, Overlay.MUSIC, Overlay.SEARCH)) overlay = Overlay.NONE
     }
     val toggle = { o: Overlay -> overlay = if (overlay == o) Overlay.NONE else o }
     // Instant switch: animating the width would re-layout the map every frame (janky on head units).
@@ -129,7 +134,7 @@ fun HomeScreen(
             val panelIn = fadeIn(TMotion.panel()) + androidx.compose.animation.slideInVertically(TMotion.panel()) { rise }
             val panelOut = fadeOut(androidx.compose.animation.core.tween(150))
             androidx.compose.animation.AnimatedVisibility(
-                visible = overlay != Overlay.NONE && overlay != Overlay.BRIGHTNESS,
+                visible = overlay !in setOf(Overlay.NONE, Overlay.BRIGHTNESS, Overlay.VOLUME, Overlay.CARD_MUSIC),
                 enter = fadeIn(TMotion.panel()), exit = panelOut,
             ) { Box(Modifier.fillMaxSize().background(T.colors.scrim)) }
             // Tap anywhere outside an open panel to close it (that tap does nothing else).
@@ -137,6 +142,26 @@ fun HomeScreen(
                 Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { overlay = Overlay.NONE } })
             }
 
+            // volume slider, above the dock's speaker
+            androidx.compose.animation.AnimatedVisibility(
+                visible = overlay == Overlay.VOLUME,
+                enter = panelIn, exit = panelOut,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 10.dp),
+            ) {
+                VolumePopup(state, actions)
+            }
+            // "Now playing" over the car panel (split view), or over the car area when it's full screen
+            androidx.compose.animation.AnimatedVisibility(
+                visible = overlay == Overlay.CARD_MUSIC,
+                enter = panelIn, exit = panelOut,
+                modifier = if (!mapVisible) Modifier.align(Alignment.BottomCenter)
+                else Modifier.align(if (carRight) Alignment.BottomEnd else Alignment.BottomStart),
+            ) {
+                CarMusicPlayer(
+                    state, actions, onClose = { overlay = Overlay.NONE },
+                    modifier = Modifier.width(if (mapVisible) stageW else 400.dp).height(maxHeight - STATUS_H - 84.dp).padding(horizontal = 12.dp).padding(bottom = 10.dp),
+                )
+            }
             // brightness slider, above the dock's sun button
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.BRIGHTNESS,
@@ -233,9 +258,14 @@ fun HomeScreen(
         Dock(
             state, actions,
             overlay = overlay,
-            onOpenSettings = { settingsStart = com.ahu.tlauncher.ui.settings.Section.DISPLAY; toggle(Overlay.SETTINGS) },
+            // Settings and the dock's Music panel open in split view: from full screen, glide back first.
+            onOpenSettings = {
+                settingsStart = com.ahu.tlauncher.ui.settings.Section.DISPLAY
+                if (!mapVisible) { mapVisible = true; overlay = Overlay.SETTINGS } else toggle(Overlay.SETTINGS)
+            },
             onToggleApps = { toggle(Overlay.APPS) },
-            onToggleMusic = { toggle(Overlay.MUSIC) },
+            onToggleMusic = { if (!mapVisible) { mapVisible = true; overlay = Overlay.MUSIC } else toggle(Overlay.MUSIC) },
+            onToggleVolume = { toggle(Overlay.VOLUME) },
             onToggleBrightness = { toggle(Overlay.BRIGHTNESS) },
             onLaunch = { app: AppEntry -> overlay = Overlay.NONE; actions.launch(app) },
             modifier = Modifier.fillMaxWidth().height(DOCK_H),
@@ -334,11 +364,37 @@ private fun weatherIcon(w: com.ahu.tlauncher.system.Weather) = when (w.kind) {
     com.ahu.tlauncher.system.WeatherKind.STORM -> Icons.Rounded.Thunderstorm
 }
 
+/** Volume slider (prototype popup): "Volume 70%", tap the speaker to mute. */
+@Composable
+private fun VolumePopup(state: HomeUiState, actions: HomeActions) {
+    val v = state.volume
+    val white = androidx.compose.ui.graphics.Color.White
+    var value by remember(v.level, v.muted) { mutableStateOf(if (v.muted) 0f else v.level.toFloat()) }
+    val pct = if (v.max == 0) 0 else (value * 100 / v.max).toInt()
+    Column(Modifier.width(300.dp).clip(TShapes.surface).background(androidx.compose.ui.graphics.Color(0xFF22252B)).padding(horizontal = 18.dp, vertical = 14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Volume", style = TType.button, color = white)
+            Spacer(Modifier.weight(1f))
+            Text("$pct%", style = TType.label, color = white.copy(alpha = 0.6f))
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(36.dp).pressable(onClick = actions::toggleMute), contentAlignment = Alignment.Center) {
+                Icon(if (v.muted || v.level == 0) com.ahu.tlauncher.ui.components.TIcons.SpeakerOff else com.ahu.tlauncher.ui.components.TIcons.Speaker,
+                    if (v.muted) "Unmute" else "Mute", tint = white, modifier = Modifier.size(20.dp))
+            }
+            com.ahu.tlauncher.ui.components.ThinSlider(
+                value, { value = it; actions.setVolume(Math.round(it)) }, range = 0f..v.max.toFloat().coerceAtLeast(1f),
+                modifier = Modifier.weight(1f).padding(start = 6.dp),
+            )
+        }
+    }
+}
+
 /** Screen brightness for the current time of day (day level / night level). */
 @Composable
 private fun BrightnessPopup(state: HomeUiState, actions: HomeActions) {
     var value by remember(state.brightness) { mutableStateOf(state.brightness.toFloat()) }
-    Column(Modifier.width(360.dp).clip(TShapes.surface).background(Palette.CarbonDark).padding(horizontal = 18.dp, vertical = 14.dp)) {
+    Column(Modifier.width(360.dp).clip(TShapes.surface).background(androidx.compose.ui.graphics.Color(0xFF22252B)).padding(horizontal = 18.dp, vertical = 14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Brightness", style = TType.button, color = androidx.compose.ui.graphics.Color.White)
             Spacer(Modifier.width(8.dp))
@@ -348,13 +404,8 @@ private fun BrightnessPopup(state: HomeUiState, actions: HomeActions) {
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.BrightnessLow, null, tint = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
-            androidx.compose.material3.Slider(
-                value = value, onValueChange = { value = it; actions.setBrightness(it.toInt()) }, valueRange = 1f..100f,
-                enabled = state.brightnessAllowed,
-                colors = androidx.compose.material3.SliderDefaults.colors(
-                    thumbColor = androidx.compose.ui.graphics.Color.White, activeTrackColor = androidx.compose.ui.graphics.Color.White,
-                    inactiveTrackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.2f),
-                ),
+            com.ahu.tlauncher.ui.components.ThinSlider(
+                value, { value = it; actions.setBrightness(it.toInt()) }, range = 1f..100f, enabled = state.brightnessAllowed,
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
             )
             Icon(Icons.Rounded.BrightnessHigh, null, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(22.dp))

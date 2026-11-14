@@ -123,6 +123,8 @@ interface HomeActions {
     fun openNavCard() {}
     /** Gear on the map: Settings → Navigation (handled by the home screen). */
     fun openMapSettings() {}
+    /** Tap on the music card: player over the car panel (handled by the home screen). */
+    fun openCardPlayer() {}
     fun volumeStep(up: Boolean) {}
     fun setVolume(level: Int) {}
     fun toggleMute() {}
