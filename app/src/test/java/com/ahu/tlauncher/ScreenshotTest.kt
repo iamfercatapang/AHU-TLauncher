@@ -156,5 +156,31 @@ class ScreenshotTest {
     @Test fun settingsNavigation() = shot("settings_navigation") {
         HomeScreen(state().copy(googleMapsAvailable = true), NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.NAVIGATION)
     }
+    private fun routeState() = state().copy(
+        googleMapsAvailable = true,
+        settings = state().settings.copy(homeAddress = "123 Mabini St, Makati", workAddress = "Ayala Ave, Makati"),
+        etaMin = mapOf("123 Mabini St, Makati" to 22, "Ayala Ave, Makati" to 35),
+        favourites = listOf(com.ahu.tlauncher.route.Place("Gym", "Bonifacio Global City")),
+        recents = listOf(com.ahu.tlauncher.route.Place("SM Megamall", "Ortigas Center, Mandaluyong"), com.ahu.tlauncher.route.Place("NAIA Terminal 3", "Pasay City")),
+    )
+    private val demoRoute = com.ahu.tlauncher.route.RouteData(
+        listOf(com.ahu.tlauncher.route.LatLon(14.55, 121.02), com.ahu.tlauncher.route.LatLon(14.585, 121.056)), 1080, 7400, "EDSA",
+        listOf(com.ahu.tlauncher.route.TrafficSpan(0, 1, com.ahu.tlauncher.route.Traffic.SLOW)),
+    )
+    @Test fun routeSearch() = shot("route_search") {
+        HomeScreen(routeState().copy(search = com.ahu.tlauncher.route.SearchState("sm mega", listOf(
+            com.ahu.tlauncher.route.Suggestion("a", "SM Megamall", "EDSA cor. Doña Julia Vargas Ave, Mandaluyong", 7400),
+            com.ahu.tlauncher.route.Suggestion("b", "SM Megamall Cinema", "Building A, SM Megamall, Mandaluyong", 7500),
+        ))), NoopActions, initialOverlay = Overlay.SEARCH)
+    }
+    @Test fun routeRecents() = shot("route_search_recents", dark = false) { HomeScreen(routeState(), NoopActions, initialOverlay = Overlay.SEARCH) }
+    @Test fun routePreview() = shot("route_preview") {
+        HomeScreen(routeState().copy(route = com.ahu.tlauncher.route.RouteState(
+            com.ahu.tlauncher.route.Place("SM Megamall", "Ortigas Center, Mandaluyong", placeId = "a"), com.ahu.tlauncher.route.RoutePhase.PREVIEW, demoRoute, loading = false)), NoopActions)
+    }
+    @Test fun routeActive() = shot("route_active", dark = false) {
+        HomeScreen(state(nav = true).copy(googleMapsAvailable = true, route = com.ahu.tlauncher.route.RouteState(
+            com.ahu.tlauncher.route.Place("SM Megamall", "Ortigas Center"), com.ahu.tlauncher.route.RoutePhase.ACTIVE, demoRoute, loading = false, remainingM = 6100, remainingS = 900)), NoopActions)
+    }
     @Test fun settingsLight() = shot("settings_display_light", dark = false) { HomeScreen(state(), NoopActions, initialOverlay = Overlay.SETTINGS) }
 }

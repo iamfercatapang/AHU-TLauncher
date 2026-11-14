@@ -20,6 +20,7 @@ import com.google.android.gms.maps.MapsInitializer
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapStyleOptions
+import androidx.compose.ui.graphics.toArgb
 import kotlinx.coroutines.delay
 
 /**
@@ -54,6 +55,8 @@ private class GoogleHandle(val view: MapView) : MapControls {
     var lon: Double? = null
     var bearing: Float? = null
     var speedKmh: Int? = null
+    val routeShapes = ArrayList<Any>() // Polylines + destination Marker
+    var fittedRoute: Any? = null
 
     override fun zoomIn() { map?.animateCamera(CameraUpdateFactory.zoomIn(), 300, null) }
     override fun zoomOut() { map?.animateCamera(CameraUpdateFactory.zoomOut(), 300, null) }
@@ -127,6 +130,46 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
                 SystemClock.elapsedRealtime() - handle.lastTouch >= DriveCamera.REFOLLOW_MS
             ) handle.recenter()
         }
+    }
+    // Route line: driven part trimmed, slow / jammed sections coloured from live traffic.
+    val density = LocalContext.current.resources.displayMetrics.density
+    LaunchedEffect(m, state.route) {
+        val gm = m ?: return@LaunchedEffect
+        handle.routeShapes.forEach { (it as? com.google.android.gms.maps.model.Polyline)?.remove(); (it as? com.google.android.gms.maps.model.Marker)?.remove() }
+        handle.routeShapes.clear()
+        val r = state.route
+        val data = r?.route
+        if (r == null || data == null) { handle.fittedRoute = null; gm.setPadding(0, 0, 0, 0); return@LaunchedEffect }
+        val active = r.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE
+        val start = if (active) (r.progressSeg + 1).coerceAtMost(data.points.size - 1) else 0
+        fun ll(p: com.ahu.tlauncher.route.LatLon) = LatLng(p.lat, p.lon)
+        val pts = buildList { if (active) r.car?.let { add(ll(it)) }; data.points.drop(start).forEach { add(ll(it)) } }
+        if (pts.size >= 2) {
+            fun line(points: List<LatLng>, color: androidx.compose.ui.graphics.Color, widthDp: Float, z: Float) =
+                gm.addPolyline(
+                    com.google.android.gms.maps.model.PolylineOptions().addAll(points).color(color.toArgb()).width(widthDp * density).zIndex(z)
+                        .startCap(com.google.android.gms.maps.model.RoundCap()).endCap(com.google.android.gms.maps.model.RoundCap())
+                        .jointType(com.google.android.gms.maps.model.JointType.ROUND),
+                )
+            handle.routeShapes += line(pts, ROUTE_OUTLINE, 9f, 1f)
+            handle.routeShapes += line(pts, ROUTE_BLUE, 6f, 2f)
+            data.traffic.filter { it.speed != com.ahu.tlauncher.route.Traffic.NORMAL }.forEach { t ->
+                val from = maxOf(t.from, start); val to = minOf(t.to, data.points.size - 1)
+                if (to > from) handle.routeShapes += line(data.points.subList(from, to + 1).map(::ll),
+                    if (t.speed == com.ahu.tlauncher.route.Traffic.JAM) TRAFFIC_JAM else TRAFFIC_SLOW, 6f, 3f)
+            }
+        }
+        gm.addMarker(com.google.android.gms.maps.model.MarkerOptions().position(ll(data.points.last())).title(r.destination.name))?.let { handle.routeShapes += it }
+        // Leave room for the cards over the map.
+        gm.setPadding(0, (60 * density).toInt(), 0, ((if (active) 80 else 170) * density).toInt())
+        if (!active && handle.fittedRoute !== data) {
+            // Preview: show the whole route, stop following the car.
+            handle.fittedRoute = data
+            handle.following = false
+            val b = com.google.android.gms.maps.model.LatLngBounds.builder().apply { data.points.forEach { include(ll(it)) } }.build()
+            runCatching { gm.animateCamera(CameraUpdateFactory.newLatLngBounds(b, (40 * density).toInt()), 700, null) }
+        }
+        if (active && handle.fittedRoute != null) { handle.fittedRoute = null; handle.recenter() }
     }
     AndroidView(factory = { handle.view }, modifier = modifier.clipToBounds())
     return handle

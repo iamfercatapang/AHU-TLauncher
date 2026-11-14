@@ -68,12 +68,12 @@ val DOCK_H = 64.dp
 val STATUS_H = 40.dp
 private const val SPLIT_FRACTION = 0.36f
 
-enum class Overlay { NONE, APPS, SETTINGS, MUSIC }
+enum class Overlay { NONE, APPS, SETTINGS, MUSIC, SEARCH }
 
 @Composable
 fun HomeScreen(
     state: HomeUiState,
-    actions: HomeActions,
+    rawActions: HomeActions,
     initialOverlay: Overlay = Overlay.NONE,
     initialMapVisible: Boolean = true,
     initialSettings: com.ahu.tlauncher.ui.settings.Section = com.ahu.tlauncher.ui.settings.Section.DISPLAY,
@@ -86,6 +86,14 @@ fun HomeScreen(
     LaunchedEffect(toast) { if (toast != null) { delay(2200); toast = null } }
     // Bring the map back when Maps/Waze starts guiding.
     LaunchedEffect(state.nav != null) { if (state.nav != null) mapVisible = true }
+    LaunchedEffect(state.route != null) { if (state.route != null) mapVisible = true }
+    // With the Google map, "Navigate" opens the dashboard's own search (route drawn here, voice by Maps/Waze).
+    val routesOn = state.routesEnabled
+    val actions = remember(rawActions, routesOn) {
+        if (!routesOn) rawActions else object : HomeActions by rawActions {
+            override fun openNavApp() { mapVisible = true; overlay = Overlay.SEARCH }
+        }
+    }
     val toggle = { o: Overlay -> overlay = if (overlay == o) Overlay.NONE else o }
     // Instant switch: animating the width would re-layout the map every frame (janky on head units).
     val stageFraction = if (mapVisible) SPLIT_FRACTION else 1f
@@ -147,6 +155,14 @@ fun HomeScreen(
                     modifier = Modifier.width(maxWidth * 0.74f).height(maxHeight * 0.8f).padding(bottom = 10.dp),
                 )
             }
+            // destination search, over the map
+            androidx.compose.animation.AnimatedVisibility(
+                visible = overlay == Overlay.SEARCH,
+                enter = fadeIn(TMotion.enter()), exit = fadeOut(TMotion.std()),
+                modifier = Modifier.align(if (carRight) Alignment.TopStart else Alignment.TopEnd).padding(top = STATUS_H + 4.dp),
+            ) {
+                SearchPanel(state, actions, onClose = { overlay = Overlay.NONE }, modifier = Modifier.width(maxWidth * (1 - SPLIT_FRACTION)).padding(horizontal = 14.dp))
+            }
             // Android Auto ready (phone's head unit server found on its hotspot)
             androidx.compose.animation.AnimatedVisibility(
                 visible = state.aa is com.ahu.tlauncher.system.AaState.Ready && !state.aaDismissed && state.call == null,
@@ -203,7 +219,9 @@ fun HomeScreen(
  */
 @Composable
 private fun MapReveal(modifier: Modifier, content: @Composable () -> Unit) {
+    // Previews/screenshots show the map straight away (they capture the first frame).
     val cover = remember { androidx.compose.animation.core.Animatable(1f) }
+    if (LocalInspectionMode.current) { Box(modifier) { content() }; return }
     LaunchedEffect(Unit) { cover.animateTo(0f, TMotion.enter()) }
     Box(modifier) {
         content()

@@ -72,6 +72,8 @@ class Prefs(private val context: Context) {
         val aaDetect = booleanPreferencesKey("aa_detect")
         val mapEngine = stringPreferencesKey("map_engine")
         val mapTraffic = booleanPreferencesKey("map_traffic")
+        val recents = stringPreferencesKey("recent_places")
+        val favourites = stringPreferencesKey("favourite_places")
         val tankL = androidx.datastore.preferences.core.intPreferencesKey("tank_l")
         val engineCc = androidx.datastore.preferences.core.intPreferencesKey("engine_cc")
         val fuelKm = androidx.datastore.preferences.core.doublePreferencesKey("fuel_long_km")
@@ -123,6 +125,13 @@ class Prefs(private val context: Context) {
     suspend fun setCarViews(views: Set<CarView>) = context.store.edit { it[K.carViews] = views.joinToString(",") { v -> v.name } }
     suspend fun setLightsSource(s: String) = context.store.edit { it[K.lights] = s }
     suspend fun setAaDetect(on: Boolean) = context.store.edit { it[K.aaDetect] = on }
+    /** Recent and favourite destinations for the route search. */
+    val placesStore = object : com.ahu.tlauncher.route.PlacesStore {
+        override suspend fun recents() = com.ahu.tlauncher.route.RouteMath.decodePlaces(context.store.data.first()[K.recents])
+        override suspend fun favourites() = com.ahu.tlauncher.route.RouteMath.decodePlaces(context.store.data.first()[K.favourites])
+        override suspend fun saveRecents(list: List<com.ahu.tlauncher.route.Place>) { context.store.edit { it[K.recents] = com.ahu.tlauncher.route.RouteMath.encodePlaces(list) } }
+        override suspend fun saveFavourites(list: List<com.ahu.tlauncher.route.Place>) { context.store.edit { it[K.favourites] = com.ahu.tlauncher.route.RouteMath.encodePlaces(list) } }
+    }
     suspend fun setMapEngine(e: MapEngine) = context.store.edit { it[K.mapEngine] = e.name }
     suspend fun setMapTraffic(on: Boolean) = context.store.edit { it[K.mapTraffic] = on }
     suspend fun setTankL(l: Int) = context.store.edit { it[K.tankL] = l.coerceIn(20, 120) }

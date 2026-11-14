@@ -24,6 +24,7 @@ class LauncherApp : Application() {
     lateinit var androidAuto: com.ahu.tlauncher.system.AndroidAutoDetector; private set
     lateinit var fuel: com.ahu.tlauncher.obd.FuelTracker; private set
     @Volatile private var fuelSettings = com.ahu.tlauncher.data.Settings()
+    lateinit var routes: com.ahu.tlauncher.route.RouteManager; private set
     lateinit var updater: com.ahu.tlauncher.update.Updater; private set
 
     override fun onCreate() {
@@ -36,6 +37,7 @@ class LauncherApp : Application() {
         weather = com.ahu.tlauncher.system.WeatherRepository(appScope, location.location)
         lights = com.ahu.tlauncher.system.LightsMonitor(this)
         calls = com.ahu.tlauncher.system.CallControl(this)
+        routes = com.ahu.tlauncher.route.RouteManager(appScope, com.ahu.tlauncher.route.GoogleWeb(this), location.location, prefs.placesStore)
         androidAuto = com.ahu.tlauncher.system.AndroidAutoDetector(this, appScope)
         fuel = com.ahu.tlauncher.obd.FuelTracker(
             appScope, obd.state, tankL = { fuelSettings.tankL }, displacementL = { fuelSettings.engineCc / 1000.0 }, store = prefs.fuelStore,

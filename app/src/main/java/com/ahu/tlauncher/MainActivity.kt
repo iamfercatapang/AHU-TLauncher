@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity(), HomeActions {
     private var lightsOffSnapshot: com.ahu.tlauncher.system.LightsSnapshot? = null
     private var callMuted by mutableStateOf(false)
     private var callAnsweredAt by mutableStateOf<Long?>(null)
+    private var navSeenDuringTrip = false
     private var aaDismissedOn by mutableStateOf<String?>(null)
     private val roleRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { resumeTick++ }
 
@@ -157,6 +158,20 @@ class MainActivity : ComponentActivity(), HomeActions {
         val lights by app.lights.state.collectAsState()
         val notifCall by NotificationHub.call.collectAsState()
         val aa by app.androidAuto.state.collectAsState()
+        val route by app.routes.route.collectAsState()
+        val search by app.routes.search.collectAsState()
+        val recents by app.routes.recents.collectAsState()
+        val favourites by app.routes.favourites.collectAsState()
+        val etaMin by app.routes.etaMin.collectAsState()
+        // The trip ends when Google Maps / Waze stops navigating (their turn notification disappears for 20 s).
+        val navOn = nav != null
+        LaunchedEffect(navOn, route?.phase) {
+            if (navOn || !access || route?.phase != com.ahu.tlauncher.route.RoutePhase.ACTIVE) return@LaunchedEffect
+            delay(if (navSeenDuringTrip) 20_000 else 120_000)
+            if (NotificationHub.nav.value == null) app.routes.end()
+        }
+        LaunchedEffect(navOn) { if (navOn && route?.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE) navSeenDuringTrip = true }
+        LaunchedEffect(route == null) { if (route == null) navSeenDuringTrip = false }
         val dismissedCode by app.updater.dismissedCode.collectAsState()
         val now by produceState(LocalDateTime.now()) {
             while (true) { value = LocalDateTime.now(); delay(1000 - (System.currentTimeMillis() % 1000)) }
@@ -206,6 +221,7 @@ class MainActivity : ComponentActivity(), HomeActions {
             update = update, updateDismissedCode = dismissedCode, appVersion = BuildConfig.VERSION_NAME,
             weather = weather?.takeIf { System.currentTimeMillis() - it.fetchedAtMs < com.ahu.tlauncher.system.WeatherParser.MAX_AGE_MS },
             diag = diag, fuel = fuel,
+            route = route, search = search, recents = recents, favourites = favourites, etaMin = etaMin,
             lights = lights,
             call = call, callPermission = callPerm, callSource = remember(notifCall) { NotificationHub.lastCallPackage },
             aa = aa, aaReceiver = aaReceiver,
@@ -260,10 +276,13 @@ class MainActivity : ComponentActivity(), HomeActions {
         }
     }
 
-    override fun navigateHome() = navigateTo { it.homeAddress }
-    override fun navigateWork() = navigateTo { it.workAddress }
+    override fun navigateHome() = navigateTo("Home") { it.homeAddress }
+    override fun navigateWork() = navigateTo("Work") { it.workAddress }
 
-    private fun navigateTo(pick: (com.ahu.tlauncher.data.Settings) -> String) {
+    private fun routesOn(s: com.ahu.tlauncher.data.Settings) =
+        googleMapsAvailable && app.routes.available && s.mapEngine == com.ahu.tlauncher.data.MapEngine.GOOGLE
+
+    private fun navigateTo(label: String, pick: (com.ahu.tlauncher.data.Settings) -> String) {
         lifecycleScope.launch {
             val s = app.prefs.settings.first()
             val addr = pick(s).trim()
@@ -271,6 +290,8 @@ class MainActivity : ComponentActivity(), HomeActions {
                 android.widget.Toast.makeText(this@MainActivity, "Set the address in Settings → Navigation", android.widget.Toast.LENGTH_LONG).show()
                 return@launch
             }
+            // With the Google map: show the route first; Start hands it to Google Maps / Waze.
+            if (routesOn(s)) { app.routes.preview(com.ahu.tlauncher.route.Place(label, addr)); return@launch }
             val q = Uri.encode(addr)
             val intent = when (s.navApp) {
                 NavApp.MAPS -> Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$q")).setPackage(NavParser.MAPS)
@@ -278,6 +299,39 @@ class MainActivity : ComponentActivity(), HomeActions {
                 NavApp.ASK -> Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=$q"))
             }
             if (!startSafely(intent)) startSafely(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=$q")))
+        }
+    }
+
+    // ---- dashboard route
+    override fun searchPlaces(query: String) = app.routes.search(query)
+    override fun clearSearch() = app.routes.clearSearch()
+    override fun pickSuggestion(s: com.ahu.tlauncher.route.Suggestion) = app.routes.pick(s)
+    override fun previewPlace(p: com.ahu.tlauncher.route.Place) = app.routes.preview(p)
+    override fun endRoute() = app.routes.end()
+    override fun toggleFavourite(p: com.ahu.tlauncher.route.Place) = app.routes.toggleFavourite(p)
+    override fun refreshEtas() {
+        lifecycleScope.launch { val s = app.prefs.settings.first(); app.routes.refreshEtas(listOf(s.homeAddress, s.workAddress)) }
+    }
+
+    /** Start: voice guidance in Google Maps / Waze, then bring the dashboard (with the route) back to the front. */
+    override fun startRoute() {
+        val p = app.routes.start() ?: return
+        lifecycleScope.launch {
+            val nav = app.prefs.settings.first().navApp
+            val dest = p.latLon?.let { "${it.lat},${it.lon}" } ?: Uri.encode(p.address)
+            val intent = when (nav) {
+                NavApp.WAZE -> Intent(Intent.ACTION_VIEW, Uri.parse(p.latLon?.let { "https://waze.com/ul?ll=$dest&navigate=yes" } ?: "https://waze.com/ul?q=$dest&navigate=yes")).setPackage(NavParser.WAZE)
+                else -> Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$dest")).setPackage(NavParser.MAPS)
+            }
+            if (!startSafely(intent)) {
+                android.widget.Toast.makeText(this@MainActivity, "Couldn't open ${if (nav == NavApp.WAZE) "Waze" else "Google Maps"} for voice guidance", android.widget.Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            // Give the navigation app time to start guiding, then return (it keeps talking in the background).
+            delay(2_500)
+            runCatching {
+                startActivity(Intent(this@MainActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+            }
         }
     }
 

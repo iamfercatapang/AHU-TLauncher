@@ -113,6 +113,9 @@ fun MapPane(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modif
             else -> rasterMap(dark, state, Modifier.fillMaxSize())
         }
 
+        // route preview / trip cards (route search needs the Google map)
+        if (useGoogle || preview) RouteOverlays(state, actions, Modifier.fillMaxSize())
+
         // top-left: live turn-by-turn card while Google Maps / Waze is navigating
         state.nav?.let { nav ->
             Box(Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = STATUS_H + 4.dp)) { NavCard(nav, onClick = actions::openNavCard) }

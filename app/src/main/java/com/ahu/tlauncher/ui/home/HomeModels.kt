@@ -57,7 +57,18 @@ data class HomeUiState(
     /** "Android Auto ready" prompt dismissed for this network. */
     val aaDismissed: Boolean = false,
     val fuel: com.ahu.tlauncher.obd.FuelStats = com.ahu.tlauncher.obd.FuelStats(),
+    // dashboard route (Google search + Routes)
+    val route: com.ahu.tlauncher.route.RouteState? = null,
+    val search: com.ahu.tlauncher.route.SearchState = com.ahu.tlauncher.route.SearchState(),
+    val recents: List<com.ahu.tlauncher.route.Place> = emptyList(),
+    val favourites: List<com.ahu.tlauncher.route.Place> = emptyList(),
+    /** Drive minutes to Home / Work, keyed by address. */
+    val etaMin: Map<String, Int> = emptyMap(),
 )
+
+/** Route search and drawing need the Google key, Play services and the Google map selected. */
+val HomeUiState.routesEnabled: Boolean
+    get() = googleMapsAvailable && settings.mapEngine == com.ahu.tlauncher.data.MapEngine.GOOGLE
 
 /** Speed shown on screen and used by the map: OBD when it has live data, otherwise GPS. */
 val HomeUiState.displaySpeedKmh: Int?
@@ -112,6 +123,15 @@ interface HomeActions {
     fun setTankL(l: Int) {}
     fun setMapEngine(e: com.ahu.tlauncher.data.MapEngine) {}
     fun setMapTraffic(on: Boolean) {}
+    // route
+    fun searchPlaces(query: String) {}
+    fun clearSearch() {}
+    fun pickSuggestion(s: com.ahu.tlauncher.route.Suggestion) {}
+    fun previewPlace(p: com.ahu.tlauncher.route.Place) {}
+    fun startRoute() {}
+    fun endRoute() {}
+    fun toggleFavourite(p: com.ahu.tlauncher.route.Place) {}
+    fun refreshEtas() {}
     fun setEngineCc(cc: Int) {}
     // headlights (ILL)
     fun lightsLearnOff() {}
