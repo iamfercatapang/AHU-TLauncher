@@ -26,6 +26,9 @@ data class RouteState(
     val car: LatLon? = null,
     val remainingM: Int? = null,
     val remainingS: Int? = null,
+    /** Free map: TLauncher guides the trip itself (next turn shown and spoken). */
+    val guided: Boolean = false,
+    val turn: Turn? = null,
 )
 
 data class SearchState(
@@ -51,6 +54,11 @@ class RouteManager(
     private val web: GoogleWeb,
     private val location: StateFlow<Location?>,
     private val store: PlacesStore,
+    /** True when the free (OpenStreetMap) map is in use: free search/routing and TLauncher's own guidance. */
+    private val freeMode: () -> Boolean = { false },
+    private val speak: (String) -> Unit = {},
+    private val stopSpeaking: () -> Unit = {},
+    private val mph: () -> Boolean = { false },
 ) {
     private val _route = MutableStateFlow<RouteState?>(null)
     val route: StateFlow<RouteState?> = _route.asStateFlow()
@@ -72,7 +80,9 @@ class RouteManager(
     private var arriving = false
     private val etaFetchedAt = HashMap<String, Long>()
 
-    val available get() = web.hasKey
+    /** Google search/routes need the key; free mode needs nothing. */
+    val available get() = freeMode() || web.hasKey
+    private val spoken = HashMap<Int, Int>() // step pointIndex → announcement stage spoken
 
     init {
         scope.launch {
@@ -90,6 +100,12 @@ class RouteManager(
         searchJob = scope.launch {
             delay(300) // wait for typing to pause
             _search.value = _search.value.copy(loading = true)
+            if (freeMode()) {
+                _search.value = runCatching {
+                    _search.value.copy(suggestions = FreeNav.parseSearch(FreeNav.get(FreeNav.searchUrl(query, here())), here()), loading = false)
+                }.getOrElse { _search.value.copy(loading = false, error = it.message) }
+                return@launch
+            }
             val body = JSONObject().put("input", query).put("sessionToken", session)
             here()?.let { h ->
                 val c = JSONObject().put("latitude", h.lat).put("longitude", h.lon)
@@ -110,7 +126,7 @@ class RouteManager(
     fun pick(s: Suggestion) {
         val tok = session
         clearSearch()
-        preview(Place(s.title, s.subtitle, placeId = s.placeId), detailsSession = tok)
+        preview(Place(s.title, s.subtitle, s.lat, s.lon, placeId = s.placeId), detailsSession = tok)
     }
 
     /** Drive times for the Home / Work shortcuts, refreshed at most every 10 minutes. */
@@ -136,14 +152,15 @@ class RouteManager(
             val origin = here() ?: run { _route.value = _route.value?.copy(loading = false, error = "Waiting for GPS position…"); return@launch }
             runCatching {
                 var dest = place
-                if (dest.latLon == null && dest.placeId != null) {
+                if (freeMode()) dest = freePlace(dest)
+                else if (dest.latLon == null && dest.placeId != null && !dest.placeId!!.startsWith("osm:")) {
                     val q = if (detailsSession != null) "?sessionToken=$detailsSession" else ""
                     val json = web.get("https://places.googleapis.com/v1/places/${dest.placeId}$q", "id,displayName,formattedAddress,location", "Places API (New)")
                     dest = RouteMath.parsePlace(json, dest.placeId!!)?.let { it.copy(name = it.name.ifBlank { place.name }) } ?: dest
                 }
                 dest to computeRoute(origin, dest, location.value?.takeIf { it.hasBearing() }?.bearing)
             }.onSuccess { (dest, r) ->
-                _route.value = RouteState(dest, RoutePhase.PREVIEW, r, loading = false, car = origin, remainingM = r.distanceM, remainingS = r.durationS)
+                _route.value = RouteState(dest, RoutePhase.PREVIEW, r, loading = false, car = origin, remainingM = r.distanceM, remainingS = r.durationS, guided = freeMode())
             }.onFailure { e ->
                 _route.value = _route.value?.copy(loading = false, error = e.message)
             }
@@ -156,6 +173,11 @@ class RouteManager(
         if (s.route == null) return null
         _route.value = s.copy(phase = RoutePhase.ACTIVE)
         offRouteSince = 0; lastReroute = System.currentTimeMillis(); arriving = false
+        spoken.clear()
+        if (s.guided) {
+            val first = s.route.steps.firstOrNull { it.type != "depart" }
+            speak("Starting route to ${s.destination.name}." + (first?.let { " " + FreeNav.instruction(it) + "." } ?: ""))
+        }
         val p = s.destination
         val list = (listOf(p) + _recents.value.filterNot { it.sameAs(p) }).take(8)
         _recents.value = list
@@ -163,7 +185,7 @@ class RouteManager(
         return p
     }
 
-    fun end() { routeJob?.cancel(); _route.value = null }
+    fun end() { routeJob?.cancel(); if (_route.value?.guided == true) stopSpeaking(); _route.value = null }
 
     fun toggleFavourite(p: Place) {
         val list = if (_favourites.value.any { it.sameAs(p) }) _favourites.value.filterNot { it.sameAs(p) } else (_favourites.value + p).take(12)
@@ -181,17 +203,32 @@ class RouteManager(
         val (seg, off) = RouteMath.progress(r.points, p, s.progressSeg)
         val left = RouteMath.remainingM(r.points, seg, p)
         val leftS = if (r.distanceM > 0) (r.durationS * left / r.distanceM).toInt() else r.durationS
-        _route.value = s.copy(progressSeg = seg, car = p, remainingM = left.toInt(), remainingS = leftS)
+        val turn = if (s.guided) FreeNav.nextTurn(r, seg, p) else null
+        _route.value = s.copy(progressSeg = seg, car = p, remainingM = left.toInt(), remainingS = leftS, turn = turn)
         val now = System.currentTimeMillis()
+        // Free map: speak the next turn ahead of time, again when close, and at the turn.
+        if (turn != null) {
+            val kmh = if (loc.hasSpeed()) (loc.speed * 3.6f).toInt() else 0
+            val done = spoken[turn.step.pointIndex] ?: 0
+            val stage = FreeNav.dueStage(turn.distanceM, kmh, done)
+            if (stage > 0) {
+                spoken[turn.step.pointIndex] = stage
+                val what = FreeNav.instruction(turn.step)
+                speak(if (stage == 3) what else "In ${FreeNav.spokenDistance(turn.distanceM, mph())}, ${what.replaceFirstChar { it.lowercase() }}")
+            }
+        }
         // Arrived.
         if (RouteMath.distanceM(p, r.points.last()) < 40) {
             if (!arriving) { arriving = true; scope.launch { delay(8_000); if (_route.value?.destination == s.destination) end() } }
             return
         }
         // Off the line for 15 s (e.g. Google Maps chose another road): recalculate, at most every 30 s.
+        // Off the line (e.g. a missed turn): recalculate. TLauncher guides free routes, so it reacts faster there.
+        val wait = if (s.guided) 8_000 else 15_000
+        val gap = if (s.guided) 15_000 else 30_000
         if (off > 60) {
             if (offRouteSince == 0L) offRouteSince = now
-            if (now - offRouteSince > 15_000 && now - lastReroute > 30_000) {
+            if (now - offRouteSince > wait && now - lastReroute > gap) {
                 lastReroute = now; offRouteSince = 0
                 reroute(loc)
             }
@@ -203,11 +240,32 @@ class RouteManager(
         routeJob?.cancel()
         routeJob = scope.launch {
             runCatching { computeRoute(LatLon(loc.latitude, loc.longitude), s.destination, loc.takeIf { it.hasBearing() }?.bearing) }
-                .onSuccess { r -> _route.value = _route.value?.copy(route = r, progressSeg = 0, remainingM = r.distanceM, remainingS = r.durationS, error = null) }
+                .onSuccess { r ->
+                    spoken.clear()
+                    if (s.guided) speak("Route recalculated.")
+                    _route.value = _route.value?.copy(route = r, progressSeg = 0, remainingM = r.distanceM, remainingS = r.durationS, error = null)
+                }
         }
     }
 
+    /**
+     * A destination usable by the free router: OpenStreetMap places already have a position; Home/Work
+     * addresses and places found with Google are looked up again on OpenStreetMap (Google's data stays on Google maps).
+     */
+    private suspend fun freePlace(p: Place): Place {
+        if (p.latLon != null && (p.placeId == null || p.placeId.startsWith("osm:"))) return p
+        val q = listOf(p.name, p.address).filter { it.isNotBlank() }.distinct().joinToString(", ")
+        val hit = FreeNav.parseSearch(FreeNav.get(FreeNav.searchUrl(q, here())), here()).firstOrNull()
+            ?: FreeNav.parseSearch(FreeNav.get(FreeNav.searchUrl(p.address.ifBlank { p.name }, here())), here()).firstOrNull()
+            ?: throw ApiException("Couldn't find \"${p.name}\" on the free map")
+        return p.copy(lat = hit.lat, lon = hit.lon, placeId = hit.placeId)
+    }
+
     private suspend fun computeRoute(origin: LatLon, dest: Place, heading: Float?): RouteData {
+        if (freeMode()) {
+            val d = freePlace(dest).latLon!!
+            return FreeNav.parseRoute(FreeNav.get(FreeNav.routeUrl(origin, d))) ?: throw ApiException("No route found")
+        }
         fun ll(p: LatLon) = JSONObject().put("latLng", JSONObject().put("latitude", p.lat).put("longitude", p.lon))
         val o = ll(origin).apply { heading?.let { put("heading", it.toInt()) } }
         val d = dest.latLon?.let { JSONObject().put("location", ll(it)) }

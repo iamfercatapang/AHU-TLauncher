@@ -210,5 +210,13 @@ class ScreenshotTest {
     @Test fun cardPlayerSplit() = shot("music_card_player") { HomeScreen(queued(), NoopActions, initialOverlay = Overlay.CARD_MUSIC) }
     @Test fun cardPlayerFull() = shot("music_card_player_full", dark = false) { HomeScreen(queued(), NoopActions, initialOverlay = Overlay.CARD_MUSIC, initialMapVisible = false) }
     @Test fun volumePopup() = shot("volume_popup") { HomeScreen(state(), NoopActions, initialOverlay = Overlay.VOLUME) }
+    @Test fun freeGuidance() = shot("free_nav_turn") {
+        val pts = listOf(com.ahu.tlauncher.route.LatLon(14.55, 121.02), com.ahu.tlauncher.route.LatLon(14.56, 121.03), com.ahu.tlauncher.route.LatLon(14.585, 121.056))
+        val step = com.ahu.tlauncher.route.Step("turn", "right", "EDSA", 1)
+        HomeScreen(state().copy(freeNav = true, route = com.ahu.tlauncher.route.RouteState(
+            com.ahu.tlauncher.route.Place("SM Megamall", "Ortigas Center"), com.ahu.tlauncher.route.RoutePhase.ACTIVE,
+            com.ahu.tlauncher.route.RouteData(pts, 1080, 7400, "EDSA", emptyList(), listOf(step)), loading = false,
+            remainingM = 6100, remainingS = 900, guided = true, turn = com.ahu.tlauncher.route.Turn(step, 320))), NoopActions)
+    }
     @Test fun settingsLight() = shot("settings_display_light", dark = false) { HomeScreen(state(), NoopActions, initialOverlay = Overlay.SETTINGS) }
 }

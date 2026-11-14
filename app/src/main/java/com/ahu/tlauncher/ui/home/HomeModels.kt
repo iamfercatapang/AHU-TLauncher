@@ -76,11 +76,13 @@ data class HomeUiState(
     val favourites: List<com.ahu.tlauncher.route.Place> = emptyList(),
     /** Drive minutes to Home / Work, keyed by address. */
     val etaMin: Map<String, Int> = emptyMap(),
+    /** Free map: OpenStreetMap search/routing and TLauncher's own spoken guidance. */
+    val freeNav: Boolean = false,
 )
 
 /** Route search and drawing need the Google key, Play services and the Google map selected. */
 val HomeUiState.routesEnabled: Boolean
-    get() = googleMapsAvailable && settings.mapEngine == com.ahu.tlauncher.data.MapEngine.GOOGLE
+    get() = freeNav || (googleMapsAvailable && settings.mapEngine == com.ahu.tlauncher.data.MapEngine.GOOGLE)
 
 /** Second line under the song title: artist, or "Last played" / "Starting …" for a remembered song. */
 fun HomeUiState.musicSubtitle(appLabel: String?): String? {

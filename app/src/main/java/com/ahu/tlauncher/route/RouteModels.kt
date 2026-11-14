@@ -16,7 +16,8 @@ data class Place(val name: String, val address: String, val lat: Double? = null,
     fun sameAs(o: Place) = (placeId != null && placeId == o.placeId) || (name == o.name && address == o.address)
 }
 
-data class Suggestion(val placeId: String, val title: String, val subtitle: String, val distanceM: Int?)
+/** A search suggestion. Google ones carry [placeId]; free (OpenStreetMap/Photon) ones carry their position. */
+data class Suggestion(val placeId: String, val title: String, val subtitle: String, val distanceM: Int?, val lat: Double? = null, val lon: Double? = null)
 
 enum class Traffic { NORMAL, SLOW, JAM }
 
@@ -30,7 +31,21 @@ data class RouteData(
     /** Main road, e.g. "EDSA". */
     val via: String,
     val traffic: List<TrafficSpan>,
+    /** Turn-by-turn steps (free routes only; Google Maps guides Google routes). */
+    val steps: List<Step> = emptyList(),
 )
+
+/** One manoeuvre of a free route (OSRM). [pointIndex] = where it happens on the polyline. */
+data class Step(
+    val type: String,
+    val modifier: String?,
+    val road: String,
+    val pointIndex: Int,
+    val exit: Int? = null,
+)
+
+/** What's next while guiding: the step, and metres to it along the route. */
+data class Turn(val step: Step, val distanceM: Int)
 
 /** Pure parsing and geometry, unit tested. */
 object RouteMath {

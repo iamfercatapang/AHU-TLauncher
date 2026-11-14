@@ -114,7 +114,7 @@ fun SearchPanel(state: HomeUiState, actions: HomeActions, onClose: () -> Unit, m
                 s.suggestions.forEach { sg ->
                     PlaceRow(Icons.Rounded.Place, sg.title, sg.subtitle, sg.distanceM?.let { fmtDistance(it, mph) }) { actions.pickSuggestion(sg); onClose() }
                 }
-                Text("Powered by Google", style = TType.caption, color = T.colors.muted, modifier = Modifier.align(Alignment.End).padding(top = 6.dp))
+                Text(if (state.freeNav) "Search by Photon · © OpenStreetMap contributors" else "Powered by Google", style = TType.caption, color = T.colors.muted, modifier = Modifier.align(Alignment.End).padding(top = 6.dp))
             }
             state.recents.isNotEmpty() -> {
                 Text("Recent", style = TType.caption, color = T.colors.muted, modifier = Modifier.padding(start = 8.dp, bottom = 2.dp))
@@ -152,7 +152,7 @@ private fun PlaceRow(icon: ImageVector, title: String, subtitle: String, trailin
 fun RoutePreviewCard(state: HomeUiState, r: RouteState, actions: HomeActions, modifier: Modifier = Modifier) {
     val mph = state.settings.speedUnit == com.ahu.tlauncher.data.SpeedUnit.MPH
     val fav = state.favourites.any { it.sameAs(r.destination) }
-    val navName = if (state.settings.navApp == com.ahu.tlauncher.data.NavApp.WAZE) "Waze" else "Google Maps"
+    val navName = if (r.guided) "TLauncher" else if (state.settings.navApp == com.ahu.tlauncher.data.NavApp.WAZE) "Waze" else "Google Maps"
     Column(modifier.widthIn(max = 420.dp).clip(TShapes.surface).background(T.colors.panel).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.LocationOn, null, tint = TRAFFIC_JAM, modifier = Modifier.size(22.dp)); Spacer(Modifier.width(8.dp))
@@ -241,6 +241,29 @@ fun RouteOverlays(state: HomeUiState, actions: HomeActions, modifier: Modifier) 
             TripCard(state, r, actions, Modifier.align(Alignment.BottomStart).padding(12.dp))
             if (r.route?.traffic?.any { it.speed != com.ahu.tlauncher.route.Traffic.NORMAL } == true)
                 TrafficLegend(Modifier.align(Alignment.BottomEnd).padding(end = 10.dp, bottom = 24.dp))
+        }
+    }
+}
+
+/** Next-turn card for TLauncher's own guidance (free map), styled like the Google Maps turn card. */
+@Composable
+fun FreeTurnCard(state: HomeUiState, r: RouteState, modifier: Modifier = Modifier) {
+    val turn = r.turn ?: return
+    val mph = state.settings.speedUnit == com.ahu.tlauncher.data.SpeedUnit.MPH
+    Column(modifier.widthIn(min = 280.dp, max = 340.dp).clip(TShapes.surface).background(T.colors.frost)) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(com.ahu.tlauncher.ui.components.TIcons.turn(turn.step.type, turn.step.modifier), null, tint = T.colors.text, modifier = Modifier.size(44.dp))
+            Spacer(Modifier.width(14.dp))
+            Column {
+                Text(fmtDistance(turn.distanceM.let { if (it >= 1000) it else (it / 10) * 10 }, mph), style = TType.display, color = T.colors.text, maxLines = 1)
+                Text(com.ahu.tlauncher.route.FreeNav.instruction(turn.step), style = TType.button, color = T.colors.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(T.colors.divider))
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            val left = r.remainingS ?: 0
+            Text("${fmtDuration(left)} · ${fmtDistance(r.remainingM ?: 0, mph)}", style = TType.label, color = T.colors.body, modifier = Modifier.weight(1f))
+            Text("TLauncher", style = TType.label, color = T.colors.muted)
         }
     }
 }

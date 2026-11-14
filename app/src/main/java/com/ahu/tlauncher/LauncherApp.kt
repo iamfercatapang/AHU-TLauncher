@@ -25,6 +25,9 @@ class LauncherApp : Application() {
     lateinit var fuel: com.ahu.tlauncher.obd.FuelTracker; private set
     @Volatile private var fuelSettings = com.ahu.tlauncher.data.Settings()
     lateinit var routes: com.ahu.tlauncher.route.RouteManager; private set
+    lateinit var voice: com.ahu.tlauncher.system.Voice; private set
+    /** Free map in use (chosen in Settings, or Google not available): free routing + TLauncher's own guidance. */
+    @Volatile var freeMap = true
     lateinit var lastMedia: com.ahu.tlauncher.notify.LastMedia; private set
     lateinit var brightness: com.ahu.tlauncher.system.BrightnessControl; private set
     lateinit var soundEq: com.ahu.tlauncher.system.SoundEq; private set
@@ -43,7 +46,13 @@ class LauncherApp : Application() {
         brightness = com.ahu.tlauncher.system.BrightnessControl(this)
         soundEq = com.ahu.tlauncher.system.SoundEq(this)
         lastMedia = com.ahu.tlauncher.notify.LastMedia(this, appScope)
-        routes = com.ahu.tlauncher.route.RouteManager(appScope, com.ahu.tlauncher.route.GoogleWeb(this), location.location, prefs.placesStore)
+        voice = com.ahu.tlauncher.system.Voice(this)
+        routes = com.ahu.tlauncher.route.RouteManager(
+            appScope, com.ahu.tlauncher.route.GoogleWeb(this), location.location, prefs.placesStore,
+            freeMode = { freeMap },
+            speak = { voice.speak(it) }, stopSpeaking = { voice.stop() },
+            mph = { fuelSettings.speedUnit == com.ahu.tlauncher.data.SpeedUnit.MPH },
+        )
         androidAuto = com.ahu.tlauncher.system.AndroidAutoDetector(this, appScope)
         fuel = com.ahu.tlauncher.obd.FuelTracker(
             appScope, obd.state, tankL = { fuelSettings.tankL }, displacementL = { fuelSettings.engineCc / 1000.0 }, store = prefs.fuelStore,

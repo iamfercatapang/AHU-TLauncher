@@ -49,8 +49,8 @@ fun CarMusicPlayer(state: HomeUiState, actions: HomeActions, onClose: () -> Unit
     val appLabel = m?.let { mi -> state.apps.firstOrNull { it.packageName == mi.packageName }?.label }
     val dark = T.colors.isDark
     val surface = if (dark) Color(0xFF22252B) else T.colors.panel
-    Column(modifier.clip(RoundedCornerShape(16.dp)).background(surface).padding(14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    Column(modifier.clip(RoundedCornerShape(16.dp)).background(surface).padding(horizontal = 14.dp, vertical = 10.dp)) {
+        Row(Modifier.height(32.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Now playing", style = TType.title, color = T.colors.text)
             Spacer(Modifier.width(8.dp))
             Text(state.musicSubtitle(appLabel)?.takeIf { !live } ?: appLabel.orEmpty(), style = TType.caption, color = T.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -58,24 +58,24 @@ fun CarMusicPlayer(state: HomeUiState, actions: HomeActions, onClose: () -> Unit
                 Icon(TIcons.Close, "Close", tint = T.colors.text, modifier = Modifier.size(18.dp))
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
         // feature: art, level meter, title (soft gradient behind, like the prototype)
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                 .background(Brush.verticalGradient(listOf((if (dark) Color.White else Color.Black).copy(alpha = 0.06f), Color.Transparent)))
-                .padding(vertical = 8.dp),
+                .padding(vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            AlbumArt(m, Modifier.size(76.dp).clip(RoundedCornerShape(8.dp)))
-            Spacer(Modifier.height(8.dp))
+            AlbumArt(m, Modifier.size(60.dp).clip(RoundedCornerShape(8.dp)))
+            Spacer(Modifier.height(4.dp))
             LevelMeter(m?.isPlaying == true)
-            Text(m?.title?.ifBlank { null } ?: "Not playing", style = TType.title, color = T.colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
+            Text(m?.title?.ifBlank { null } ?: "Not playing", style = TType.button, color = T.colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp))
             Text(m?.artist.orEmpty(), style = TType.label, color = T.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         // seek bar + times
         val pos = if (LocalInspectionMode.current) m?.positionMs ?: 0 else livePosition(state.media)
         val dur = m?.durationMs ?: 0
-        BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 10.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(T.colors.divider)) {
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 8.dp).height(3.dp).clip(RoundedCornerShape(2.dp)).background(T.colors.divider)) {
             val frac = if (dur > 0) (pos.toFloat() / dur).coerceIn(0f, 1f) else 0f
             Box(Modifier.width(maxWidth * frac).fillMaxHeight().background(T.colors.text))
         }
@@ -85,7 +85,7 @@ fun CarMusicPlayer(state: HomeUiState, actions: HomeActions, onClose: () -> Unit
             Text(if (dur > 0) fmt(dur) else "", style = TType.caption, color = T.colors.muted)
         }
         // controls: previous · play · next, and collapse on the right
-        Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().height(40.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
             Ctrl(TIcons.Previous, "Previous", enabled = live) { actions.previous() }
             Ctrl(if (m?.isPlaying == true) TIcons.Pause else TIcons.Play, "Play/Pause", enabled = m != null && !state.resumingMedia) { actions.playPause() }
             Ctrl(TIcons.Next, "Next", enabled = live) { actions.next() }
@@ -95,7 +95,7 @@ fun CarMusicPlayer(state: HomeUiState, actions: HomeActions, onClose: () -> Unit
         val media = state.media
         val rows = media?.let { UpNext.rows(it.queue, it.activeQueueId) }.orEmpty()
         if (media != null && rows.isNotEmpty()) {
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(2.dp))
             QueueList(media, rows, actions, Modifier.weight(1f).fillMaxWidth(), compact = true)
         }
     }
@@ -103,8 +103,8 @@ fun CarMusicPlayer(state: HomeUiState, actions: HomeActions, onClose: () -> Unit
 
 @Composable
 private fun Ctrl(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, enabled: Boolean = true, onClick: () -> Unit) {
-    Box(Modifier.size(44.dp).clip(TShapes.surface).pressable(enabled = enabled, onClick = onClick), contentAlignment = Alignment.Center) {
-        Icon(icon, desc, tint = T.colors.text, modifier = Modifier.size(22.dp))
+    Box(Modifier.size(38.dp).clip(TShapes.surface).pressable(enabled = enabled, onClick = onClick), contentAlignment = Alignment.Center) {
+        Icon(icon, desc, tint = T.colors.text, modifier = Modifier.size(19.dp))
     }
 }
 

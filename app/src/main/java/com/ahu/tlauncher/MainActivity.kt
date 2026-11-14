@@ -174,7 +174,7 @@ class MainActivity : ComponentActivity(), HomeActions {
         // The trip ends when Google Maps / Waze stops navigating (their turn notification disappears for 20 s).
         val navOn = nav != null
         LaunchedEffect(navOn, route?.phase) {
-            if (navOn || !access || route?.phase != com.ahu.tlauncher.route.RoutePhase.ACTIVE) return@LaunchedEffect
+            if (navOn || !access || route?.phase != com.ahu.tlauncher.route.RoutePhase.ACTIVE || route?.guided == true) return@LaunchedEffect
             delay(if (navSeenDuringTrip) 20_000 else 120_000)
             if (NotificationHub.nav.value == null) app.routes.end()
         }
@@ -229,6 +229,8 @@ class MainActivity : ComponentActivity(), HomeActions {
         }
         LaunchedEffect(tick) { brightnessNow = app.brightness.get() }
         brightnessIsNight = night
+        val freeMap = !(googleMapsAvailable && settings.mapEngine == com.ahu.tlauncher.data.MapEngine.GOOGLE)
+        app.freeMap = freeMap
         val state = HomeUiState(
             settings = settings, obd = obd, media = media, nav = nav, notificationAccess = access,
             apps = apps, volume = volume, now = now,
@@ -240,7 +242,7 @@ class MainActivity : ComponentActivity(), HomeActions {
             weather = weather?.takeIf { System.currentTimeMillis() - it.fetchedAtMs < com.ahu.tlauncher.system.WeatherParser.MAX_AGE_MS },
             diag = diag, fuel = fuel,
             lastMedia = if (media == null) lastMedia else null, resumingMedia = resumingMedia,
-            route = route, search = search, recents = recents, favourites = favourites, etaMin = etaMin,
+            route = route, search = search, freeNav = freeMap, recents = recents, favourites = favourites, etaMin = etaMin,
             lights = lights,
             call = call, callPermission = callPerm, returnPermission = returnPerm,
             eqCaps = eqCaps,
@@ -339,8 +341,8 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun navigateHome() = navigateTo("Home") { it.homeAddress }
     override fun navigateWork() = navigateTo("Work") { it.workAddress }
 
-    private fun routesOn(s: com.ahu.tlauncher.data.Settings) =
-        googleMapsAvailable && app.routes.available && s.mapEngine == com.ahu.tlauncher.data.MapEngine.GOOGLE
+    @Suppress("UNUSED_PARAMETER")
+    private fun routesOn(s: com.ahu.tlauncher.data.Settings) = app.routes.available
 
     private fun navigateTo(label: String, pick: (com.ahu.tlauncher.data.Settings) -> String) {
         lifecycleScope.launch {
@@ -386,7 +388,7 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun startRoute() {
         // Android only lets an app return to the front from the background with "Display over other apps".
         // Ask once; if the user declines, the trip still starts and they press Home to come back.
-        if (!canReturnToFront() && !overlayAsked) {
+        if (!app.freeMap && !canReturnToFront() && !overlayAsked) {
             overlayAsked = true
             pendingRouteStart = true
             android.widget.Toast.makeText(this, "Turn on \"Display over other apps\" so TLauncher can come back after Google Maps starts", android.widget.Toast.LENGTH_LONG).show()
@@ -405,6 +407,8 @@ class MainActivity : ComponentActivity(), HomeActions {
     }
 
     private fun launchRoute() {
+        // Free map: TLauncher guides the trip itself; nothing to hand over.
+        if (app.freeMap) { app.routes.start(); return }
         val p = app.routes.start() ?: return
         lifecycleScope.launch {
             val nav = app.prefs.settings.first().navApp

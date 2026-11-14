@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -142,6 +143,9 @@ fun HomeScreen(
                 Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { overlay = Overlay.NONE } })
             }
 
+            // Full-screen card row geometry (see CarStage: max 660 dp wide, music card 1.6 : 1 with 12 dp gap).
+            val fullCardsW = androidx.compose.ui.unit.min(660.dp, maxWidth - 32.dp)
+            val fullMusicW = (fullCardsW - 12.dp) * (1.6f / 2.6f)
             // volume slider, above the dock's speaker
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.VOLUME,
@@ -154,12 +158,14 @@ fun HomeScreen(
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.CARD_MUSIC,
                 enter = panelIn, exit = panelOut,
-                modifier = if (!mapVisible) Modifier.align(Alignment.BottomCenter)
+                // Full screen: exactly over the music card (left of the Navigate card), growing upwards.
+                modifier = if (!mapVisible) Modifier.align(Alignment.BottomCenter).offset(x = -(fullCardsW - fullMusicW) / 2)
                 else Modifier.align(if (carRight) Alignment.BottomEnd else Alignment.BottomStart),
             ) {
                 CarMusicPlayer(
                     state, actions, onClose = { overlay = Overlay.NONE },
-                    modifier = Modifier.width(if (mapVisible) stageW else 400.dp).height(maxHeight - STATUS_H - 84.dp).padding(horizontal = 12.dp).padding(bottom = 10.dp),
+                    modifier = if (!mapVisible) Modifier.width(fullMusicW).height(maxHeight - STATUS_H - 96.dp).padding(bottom = 10.dp)
+                    else Modifier.width(stageW).height(maxHeight - STATUS_H - 80.dp).padding(horizontal = 12.dp).padding(bottom = 10.dp),
                 )
             }
             // brightness slider, above the dock's sun button

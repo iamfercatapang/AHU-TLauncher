@@ -128,4 +128,32 @@ object TIcons {
     val Pause by lazy { icon("Pause") { fill { moveTo(7f, 5f); horizontalLineTo(10f); verticalLineTo(19f); horizontalLineTo(7f); close(); moveTo(14f, 5f); horizontalLineTo(17f); verticalLineTo(19f); horizontalLineTo(14f); close() } } }
     val Next by lazy { icon("Next") { fill { moveTo(6f, 6f); lineTo(15f, 12f); lineTo(6f, 18f); close(); moveTo(16f, 6f); horizontalLineTo(18.2f); verticalLineTo(18f); horizontalLineTo(16f); close() } } }
     val Previous by lazy { icon("Previous") { fill { moveTo(18f, 6f); lineTo(9f, 12f); lineTo(18f, 18f); close(); moveTo(5.8f, 6f); horizontalLineTo(8f); verticalLineTo(18f); horizontalLineTo(5.8f); close() } } }
+
+    // Turn arrows for TLauncher's own guidance (free map).
+    val Straight by lazy { icon("Straight") { line(2.4f) { moveTo(12f, 21f); verticalLineTo(4f); moveTo(6.5f, 9.5f); lineTo(12f, 4f); lineTo(17.5f, 9.5f) } } }
+    val TurnRight by lazy { icon("TurnRight") { line(2.4f) { moveTo(7f, 21f); verticalLineTo(12f); arcTo(4f, 4f, 0f, false, true, 11f, 8f); horizontalLineTo(19f); moveTo(14.5f, 3.5f); lineTo(19f, 8f); lineTo(14.5f, 12.5f) } } }
+    val TurnLeft by lazy { icon("TurnLeft") { line(2.4f) { moveTo(17f, 21f); verticalLineTo(12f); arcTo(4f, 4f, 0f, false, false, 13f, 8f); horizontalLineTo(5f); moveTo(9.5f, 3.5f); lineTo(5f, 8f); lineTo(9.5f, 12.5f) } } }
+    val SlightRight by lazy { icon("SlightRight") { line(2.4f) { moveTo(8f, 21f); verticalLineTo(14f); lineTo(17f, 5f); moveTo(10.5f, 5f); horizontalLineTo(17f); verticalLineTo(11.5f) } } }
+    val SlightLeft by lazy { icon("SlightLeft") { line(2.4f) { moveTo(16f, 21f); verticalLineTo(14f); lineTo(7f, 5f); moveTo(13.5f, 5f); horizontalLineTo(7f); verticalLineTo(11.5f) } } }
+    val UTurn by lazy { icon("UTurn") { line(2.4f) { moveTo(16f, 21f); verticalLineTo(9f); arcTo(4.5f, 4.5f, 0f, false, false, 7f, 9f); verticalLineTo(16f); moveTo(3.5f, 12.5f); lineTo(7f, 16f); lineTo(10.5f, 12.5f) } } }
+    val Roundabout by lazy { icon("Roundabout") {
+        line(2.2f) { circle(12f, 10f, 4f) }
+        line(2.4f) { moveTo(12f, 21f); verticalLineTo(14f); moveTo(15f, 7.2f); lineTo(19f, 3.5f); moveTo(14.5f, 3.5f); horizontalLineTo(19f); verticalLineTo(8f) }
+    } }
+    val Arrive by lazy { icon("Arrive") {
+        line(2f) { moveTo(12f, 21f); curveTo(12f, 21f, 5f, 14.5f, 5f, 9.5f); arcTo(7f, 7f, 0f, false, true, 19f, 9.5f); curveTo(19f, 14.5f, 12f, 21f, 12f, 21f); close() }
+        fill { circle(12f, 9.5f, 2.6f) }
+    } }
+
+    /** Arrow for a route step (OSRM type + modifier). */
+    fun turn(type: String, modifier: String?) = when {
+        type == "arrive" -> Arrive
+        type.startsWith("roundabout") || type == "rotary" -> Roundabout
+        modifier == "uturn" -> UTurn
+        modifier == "slight right" || (type == "fork" && modifier?.contains("right") == true) -> SlightRight
+        modifier == "slight left" || (type == "fork" && modifier?.contains("left") == true) -> SlightLeft
+        modifier?.contains("right") == true -> TurnRight
+        modifier?.contains("left") == true -> TurnLeft
+        else -> Straight
+    }
 }

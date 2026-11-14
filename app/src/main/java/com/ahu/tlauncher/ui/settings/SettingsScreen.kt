@@ -392,7 +392,7 @@ private fun AboutSection(state: HomeUiState, a: HomeActions) {
     }
     Divider()
     Text(
-        "Map data © OpenStreetMap contributors, tiles by OpenFreeMap / OpenMapTiles. Inter typeface © The Inter Project Authors (SIL OFL 1.1). " +
+        "Map data © OpenStreetMap contributors, tiles by OpenFreeMap / OpenMapTiles. Free-map search by Photon (komoot), routes by OSRM on FOSSGIS servers. Inter typeface © The Inter Project Authors (SIL OFL 1.1). " +
             "Design language inspired by minimalist in-car displays; not affiliated with any car maker.",
         style = TType.label, color = T.colors.muted, modifier = Modifier.padding(vertical = 10.dp),
     )

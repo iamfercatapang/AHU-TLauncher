@@ -124,12 +124,15 @@ fun MapPane(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modif
         }
 
         // route preview / trip cards (route search needs the Google map)
-        if (useGoogle || preview) RouteOverlays(state, actions, Modifier.fillMaxSize())
+        RouteOverlays(state, actions, Modifier.fillMaxSize())
 
         // top-left: live turn-by-turn card while Google Maps / Waze is navigating; otherwise the Navigate pill
         val side = if (controlsOnLeft) Alignment.TopEnd else Alignment.TopStart
         val nav = state.nav
-        if (nav != null) {
+        val freeTurn = state.route?.takeIf { it.guided && it.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE && it.turn != null }
+        if (freeTurn != null) {
+            FreeTurnCard(state, freeTurn, Modifier.align(side).padding(horizontal = 12.dp).padding(top = STATUS_H + 4.dp))
+        } else if (nav != null) {
             Box(Modifier.align(side).padding(horizontal = 12.dp).padding(top = STATUS_H + 4.dp)) { NavCard(nav, onClick = actions::openNavCard) }
         } else if (state.route?.phase != com.ahu.tlauncher.route.RoutePhase.ACTIVE) {
             NavigatePill(actions::openNavApp, Modifier.align(side).padding(horizontal = 12.dp).padding(top = STATUS_H + 4.dp))
@@ -229,7 +232,51 @@ internal fun LifecycleBinding(onStart: () -> Unit, onResume: () -> Unit, onPause
 
 // ---------------------------------------------------------------- MapLibre (vector)
 
+/** Adds (once per style) and updates the route line and destination dot on the MapLibre map. */
+private fun drawFreeRoute(style: Style, r: com.ahu.tlauncher.route.RouteState?, data: com.ahu.tlauncher.route.RouteData?) {
+    val lineSrc = "tl-route"; val destSrc = "tl-route-dest"
+    if (style.getSource(lineSrc) == null) {
+        style.addSource(org.maplibre.android.style.sources.GeoJsonSource(lineSrc))
+        style.addSource(org.maplibre.android.style.sources.GeoJsonSource(destSrc))
+        val casing = org.maplibre.android.style.layers.LineLayer("tl-route-casing", lineSrc).withProperties(
+            org.maplibre.android.style.layers.PropertyFactory.lineColor("#1E3E9A"),
+            org.maplibre.android.style.layers.PropertyFactory.lineWidth(9f),
+            org.maplibre.android.style.layers.PropertyFactory.lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND),
+            org.maplibre.android.style.layers.PropertyFactory.lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND),
+        )
+        val line = org.maplibre.android.style.layers.LineLayer("tl-route-line", lineSrc).withProperties(
+            org.maplibre.android.style.layers.PropertyFactory.lineColor("#3E6AE1"),
+            org.maplibre.android.style.layers.PropertyFactory.lineWidth(6f),
+            org.maplibre.android.style.layers.PropertyFactory.lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND),
+            org.maplibre.android.style.layers.PropertyFactory.lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND),
+        )
+        val dest = org.maplibre.android.style.layers.CircleLayer("tl-route-dest", destSrc).withProperties(
+            org.maplibre.android.style.layers.PropertyFactory.circleColor("#E5484D"),
+            org.maplibre.android.style.layers.PropertyFactory.circleRadius(8f),
+            org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor("#FFFFFF"),
+            org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth(3f),
+        )
+        // under the car puck when it's there
+        val under = org.maplibre.android.location.LocationComponentConstants.SHADOW_LAYER
+        listOf(casing, line, dest).forEach { if (style.getLayer(under) != null) style.addLayerBelow(it, under) else style.addLayer(it) }
+    }
+    val pts = if (data == null || r == null) emptyList() else {
+        val active = r.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE
+        val start = if (active) (r.progressSeg + 1).coerceAtMost(data.points.size - 1) else 0
+        buildList { if (active) r.car?.let { add(it) }; addAll(data.points.drop(start)) }
+    }
+    val lineGeo = org.maplibre.geojson.FeatureCollection.fromFeatures(
+        if (pts.size < 2) emptyArray() else arrayOf(org.maplibre.geojson.Feature.fromGeometry(org.maplibre.geojson.LineString.fromLngLats(pts.map { org.maplibre.geojson.Point.fromLngLat(it.lon, it.lat) }))),
+    )
+    val destGeo = org.maplibre.geojson.FeatureCollection.fromFeatures(
+        data?.points?.lastOrNull()?.let { arrayOf(org.maplibre.geojson.Feature.fromGeometry(org.maplibre.geojson.Point.fromLngLat(it.lon, it.lat))) } ?: emptyArray(),
+    )
+    style.getSourceAs<org.maplibre.android.style.sources.GeoJsonSource>(lineSrc)?.setGeoJson(lineGeo)
+    style.getSourceAs<org.maplibre.android.style.sources.GeoJsonSource>(destSrc)?.setGeoJson(destGeo)
+}
+
 private class VectorHandle(val view: MapView) : MapControls {
+    var fittedRoute: Any? = null
     val bearingState = androidx.compose.runtime.mutableFloatStateOf(0f)
     override val bearing: Float get() = bearingState.floatValue
     override fun northUp() { following = false; map?.animateCamera(CameraUpdateFactory.bearingTo(0.0), 500) }
@@ -293,6 +340,7 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier): Ma
         VectorHandle(MapView(ctx, opts).apply { onCreate(null) })
     }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
+    var styleTick by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     LifecycleBinding(handle.view::onStart, handle.view::onResume, handle.view::onPause, handle.view::onStop, handle.view::onDestroy)
     DisposableEffect(handle) {
         handle.view.getMapAsync { m ->
@@ -315,6 +363,7 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier): Ma
         val url = if (dark) STYLE_DARK else STYLE_LIGHT
         handle.styleUrl = url
         m.setStyle(Style.Builder().fromUri(url)) { style ->
+            styleTick++
             if (state.locationPermission && !handle.locationActive) {
                 runCatching {
                     val lc = m.locationComponent
@@ -346,6 +395,24 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier): Ma
                 }
             }
         }
+    }
+    // Route (free map): blue line with a darker edge from the car to the destination, driven part trimmed.
+    LaunchedEffect(m, styleTick, state.route) {
+        val gm = m ?: return@LaunchedEffect
+        val style = gm.style?.takeIf { it.isFullyLoaded } ?: return@LaunchedEffect
+        val r = state.route
+        val data = r?.route
+        drawFreeRoute(style, r, data)
+        if (data == null) { handle.fittedRoute = null; return@LaunchedEffect }
+        val active = r.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE
+        if (!active && handle.fittedRoute !== data) {
+            handle.fittedRoute = data
+            handle.following = false
+            val b = org.maplibre.android.geometry.LatLngBounds.Builder().includes(data.points.map { LatLng(it.lat, it.lon) }).build()
+            val d = handle.view.resources.displayMetrics.density
+            runCatching { gm.animateCamera(CameraUpdateFactory.newLatLngBounds(b, (40 * d).toInt(), (70 * d).toInt(), (40 * d).toInt(), (180 * d).toInt()), 700) }
+        }
+        if (active && handle.fittedRoute != null) { handle.fittedRoute = null; handle.recenter() }
     }
     // Speed decides park vs. drive (with hysteresis); starting to drive always resumes following.
     LaunchedEffect(speed) {
