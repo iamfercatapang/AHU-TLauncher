@@ -153,5 +153,8 @@ class ScreenshotTest {
         }
         HomeScreen(st.copy(media = st.media!!.copy(queue = queue, activeQueueId = 1, shuffleOn = false, repeatMode = 2)), NoopActions, initialOverlay = Overlay.MUSIC)
     }
+    @Test fun settingsNavigation() = shot("settings_navigation") {
+        HomeScreen(state().copy(googleMapsAvailable = true), NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.NAVIGATION)
+    }
     @Test fun settingsLight() = shot("settings_display_light", dark = false) { HomeScreen(state(), NoopActions, initialOverlay = Overlay.SETTINGS) }
 }

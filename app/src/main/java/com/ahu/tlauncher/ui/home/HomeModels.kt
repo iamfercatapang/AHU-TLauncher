@@ -29,6 +29,10 @@ data class HomeUiState(
     val now: LocalDateTime = LocalDateTime.now(),
     val locationLat: Double? = null,
     val locationLon: Double? = null,
+    /** GPS course over ground (degrees), for the heading-up Google map. */
+    val locationBearing: Float? = null,
+    /** Google map can run: API key built in and Google Play services present. */
+    val googleMapsAvailable: Boolean = false,
     val locationPermission: Boolean = false,
     /** Speed from GPS (km/h), null without a fresh fix. Used when no OBD adapter is connected. */
     val gpsSpeedKmh: Int? = null,
@@ -106,6 +110,8 @@ interface HomeActions {
     fun clearObdCodes() {}
     fun resetTrip() {}
     fun setTankL(l: Int) {}
+    fun setMapEngine(e: com.ahu.tlauncher.data.MapEngine) {}
+    fun setMapTraffic(on: Boolean) {}
     fun setEngineCc(cc: Int) {}
     // headlights (ILL)
     fun lightsLearnOff() {}

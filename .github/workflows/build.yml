@@ -38,6 +38,7 @@ jobs:
           TLAUNCHER_KEYSTORE_PASSWORD: ${{ secrets.TLAUNCHER_KEYSTORE_PASSWORD }}
           TLAUNCHER_KEY_ALIAS: ${{ secrets.TLAUNCHER_KEY_ALIAS }}
           TLAUNCHER_KEY_PASSWORD: ${{ secrets.TLAUNCHER_KEY_PASSWORD }}
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
         run: ./gradlew assembleDebug assembleRelease --console=plain
 
       - uses: actions/upload-artifact@v4

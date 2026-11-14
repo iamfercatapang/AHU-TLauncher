@@ -90,7 +90,7 @@ private const val DEFAULT_LON = 120.9842
 private const val ATTRIBUTION = "© OpenFreeMap © OpenMapTiles © OpenStreetMap contributors"
 
 /** What the on-map buttons can do, whichever engine is drawing the map. */
-private interface MapControls {
+internal interface MapControls {
     fun zoomIn()
     fun zoomOut()
     fun recenter()
@@ -103,9 +103,12 @@ fun MapPane(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modif
     val ctx = LocalContext.current
     val vectorCapable = remember { supportsGles3(ctx) }
 
+    // Google when chosen and available (API key + Play services); otherwise the free OpenFreeMap map.
+    val useGoogle = !preview && state.googleMapsAvailable && state.settings.mapEngine == com.ahu.tlauncher.data.MapEngine.GOOGLE
     Box(modifier.clipToBounds().background(T.colors.appBg)) {
         val controls: MapControls? = when {
             preview -> { MapPlaceholder(Modifier.fillMaxSize()); null }
+            useGoogle -> googleMap(dark, state.settings.mapTraffic, state, Modifier.fillMaxSize())
             vectorCapable -> vectorMap(dark, state, Modifier.fillMaxSize())
             else -> rasterMap(dark, state, Modifier.fillMaxSize())
         }
@@ -130,7 +133,7 @@ fun MapPane(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modif
             }
         }
 
-        Text(
+        if (!useGoogle) Text(
             if (vectorCapable) ATTRIBUTION else "© OpenStreetMap contributors", style = TType.caption, color = T.colors.muted,
             modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp),
         )
@@ -144,7 +147,7 @@ private fun supportsGles3(ctx: Context): Boolean = runCatching {
 
 /** Forward the screen lifecycle to a classic Android map view. */
 @Composable
-private fun LifecycleBinding(onStart: () -> Unit, onResume: () -> Unit, onPause: () -> Unit, onStop: () -> Unit, onDestroy: () -> Unit) {
+internal fun LifecycleBinding(onStart: () -> Unit, onResume: () -> Unit, onPause: () -> Unit, onStop: () -> Unit, onDestroy: () -> Unit) {
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner) {
         val obs = LifecycleEventObserver { _, e ->

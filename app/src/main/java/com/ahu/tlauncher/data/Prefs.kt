@@ -19,6 +19,7 @@ enum class ObdSourceType { DEMO, BLUETOOTH }
 enum class NavApp { MAPS, WAZE, ASK }
 /** Which side the car panel sits on in the car + map split view. */
 enum class CarSide { LEFT, RIGHT }
+enum class MapEngine { GOOGLE, OPENFREEMAP }
 enum class CarView(val label: String) { SIDE("Side"), FRONT("Front"), REAR("Rear") }
 
 data class Settings(
@@ -43,6 +44,9 @@ data class Settings(
     val aaDetect: Boolean = true,
     /** Fuel tank capacity in litres (2018 Avanza: 43 L), for the range estimate. */
     val tankL: Int = 43,
+    /** Google is used when available (key + Play services); OpenFreeMap otherwise. */
+    val mapEngine: MapEngine = MapEngine.GOOGLE,
+    val mapTraffic: Boolean = true,
     /** Engine size in cc (1.3 = 1329, 1.5 = 1496); only used when the car has no MAF sensor. */
     val engineCc: Int = 1496,
     val onboardingDone: Boolean = false,
@@ -66,6 +70,8 @@ class Prefs(private val context: Context) {
         val carSide = stringPreferencesKey("car_side")
         val lights = stringPreferencesKey("lights_source")
         val aaDetect = booleanPreferencesKey("aa_detect")
+        val mapEngine = stringPreferencesKey("map_engine")
+        val mapTraffic = booleanPreferencesKey("map_traffic")
         val tankL = androidx.datastore.preferences.core.intPreferencesKey("tank_l")
         val engineCc = androidx.datastore.preferences.core.intPreferencesKey("engine_cc")
         val fuelKm = androidx.datastore.preferences.core.doublePreferencesKey("fuel_long_km")
@@ -94,6 +100,8 @@ class Prefs(private val context: Context) {
         lightsSource = this[K.lights] ?: "off",
         aaDetect = this[K.aaDetect] ?: true,
         tankL = this[K.tankL] ?: 43,
+        mapEngine = enumOr(this[K.mapEngine], MapEngine.GOOGLE),
+        mapTraffic = this[K.mapTraffic] ?: true,
         engineCc = this[K.engineCc] ?: 1496,
         onboardingDone = this[K.onboarding] ?: false,
         pinnedSeeded = this[K.pinnedSeeded] ?: false,
@@ -115,6 +123,8 @@ class Prefs(private val context: Context) {
     suspend fun setCarViews(views: Set<CarView>) = context.store.edit { it[K.carViews] = views.joinToString(",") { v -> v.name } }
     suspend fun setLightsSource(s: String) = context.store.edit { it[K.lights] = s }
     suspend fun setAaDetect(on: Boolean) = context.store.edit { it[K.aaDetect] = on }
+    suspend fun setMapEngine(e: MapEngine) = context.store.edit { it[K.mapEngine] = e.name }
+    suspend fun setMapTraffic(on: Boolean) = context.store.edit { it[K.mapTraffic] = on }
     suspend fun setTankL(l: Int) = context.store.edit { it[K.tankL] = l.coerceIn(20, 120) }
     suspend fun setEngineCc(cc: Int) = context.store.edit { it[K.engineCc] = cc }
     /** Long-term fuel totals (km, litres). */

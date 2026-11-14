@@ -243,6 +243,21 @@ private fun NavigationSection(state: HomeUiState, a: HomeActions) {
         Segmented(listOf(NavApp.MAPS to "Maps", NavApp.WAZE to "Waze", NavApp.ASK to "Ask"), s.navApp, a::setNavApp)
     }
     Divider()
+    SettingRow(
+        "Map",
+        when {
+            s.mapEngine == com.ahu.tlauncher.data.MapEngine.OPENFREEMAP -> "OpenFreeMap (free, no traffic)"
+            state.googleMapsAvailable -> "Google Maps with live traffic"
+            !BuildConfig.HAS_MAPS_KEY -> "Google Maps isn't set up in this build (no API key), so OpenFreeMap is shown"
+            else -> "Google Play services is missing on this head unit, so OpenFreeMap is shown"
+        },
+    ) {
+        Segmented(listOf(com.ahu.tlauncher.data.MapEngine.GOOGLE to "Google", com.ahu.tlauncher.data.MapEngine.OPENFREEMAP to "Free"), s.mapEngine, a::setMapEngine)
+    }
+    if (s.mapEngine == com.ahu.tlauncher.data.MapEngine.GOOGLE && state.googleMapsAvailable) {
+        SettingRow("Live traffic", "Traffic colours on the Google map") { com.ahu.tlauncher.ui.components.TSwitch(s.mapTraffic, a::setMapTraffic) }
+    }
+    Divider()
     SmallTitle("Saved places")
     AddressField("Home", s.homeAddress, a::setHome)
     AddressField("Work", s.workAddress, a::setWork)

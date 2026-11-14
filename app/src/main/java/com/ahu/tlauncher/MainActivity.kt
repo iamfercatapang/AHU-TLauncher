@@ -199,7 +199,9 @@ class MainActivity : ComponentActivity(), HomeActions {
         val state = HomeUiState(
             settings = settings, obd = obd, media = media, nav = nav, notificationAccess = access,
             apps = apps, volume = volume, now = now,
-            locationLat = location?.latitude, locationLon = location?.longitude, locationPermission = locPerm, gpsSpeedKmh = gpsSpeed,
+            locationLat = location?.latitude, locationLon = location?.longitude,
+            locationBearing = location?.takeIf { it.hasBearing() }?.bearing,
+            googleMapsAvailable = googleMapsAvailable, locationPermission = locPerm, gpsSpeedKmh = gpsSpeed,
             bluetoothOn = btOn, bluetooth = bt, wifi = wifi, isDefaultLauncher = isDefault,
             update = update, updateDismissedCode = dismissedCode, appVersion = BuildConfig.VERSION_NAME,
             weather = weather?.takeIf { System.currentTimeMillis() - it.fetchedAtMs < com.ahu.tlauncher.system.WeatherParser.MAX_AGE_MS },
@@ -397,6 +399,14 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun readObdCodes() = app.obd.readCodes()
     override fun clearObdCodes() = app.obd.clearCodes()
     override fun resetTrip() = app.fuel.resetTrip()
+    private val googleMapsAvailable by lazy {
+        BuildConfig.HAS_MAPS_KEY && runCatching {
+            com.google.android.gms.common.GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this) ==
+                com.google.android.gms.common.ConnectionResult.SUCCESS
+        }.getOrDefault(false)
+    }
+    override fun setMapEngine(e: com.ahu.tlauncher.data.MapEngine) { lifecycleScope.launch { app.prefs.setMapEngine(e) } }
+    override fun setMapTraffic(on: Boolean) { lifecycleScope.launch { app.prefs.setMapTraffic(on) } }
     override fun setTankL(l: Int) { lifecycleScope.launch { app.prefs.setTankL(l) } }
     override fun setEngineCc(cc: Int) { lifecycleScope.launch { app.prefs.setEngineCc(cc) } }
     override fun resetCarImage(view: CarView) { lifecycleScope.launch { app.prefs.setCarImage(view, "") } }

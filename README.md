@@ -49,6 +49,18 @@ Updates only install if every build is signed with the same key. CI reads that k
 
 Classic Bluetooth adapters such as ELM327 v1.5/v2.1 or Vgate iCar 2 work. BLE-only adapters are not supported yet.
 
+## Google map (optional)
+
+The map pane uses Google Maps (with live traffic) when the build has an API key and the head unit has
+Google Play services; otherwise it uses OpenFreeMap. *Settings → Navigation → Map* switches between them.
+
+1. In Google Cloud Console, create a project, enable **Maps SDK for Android**, and create an API key.
+2. Restrict the key to **Android apps**: package `com.ahu.tlauncher`, SHA-1
+   `CC:77:49:8B:70:E9:D8:E1:4A:29:73:15:92:96:41:C7:A1:CD:30:61` (the release signing key), and to the
+   Maps SDK for Android API only.
+3. Add it as the repository secret **`MAPS_API_KEY`**. The next build includes it. Local builds read
+   `MAPS_API_KEY=...` from `local.properties`.
+
 ## Build
 ```bash
 ./gradlew assembleDebug          # app/build/outputs/apk/debug/app-debug.apk

@@ -17,6 +17,13 @@ android {
         val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionCode = run
         versionName = "1.0.$run"
+
+        // Google Maps API key: CI secret MAPS_API_KEY, or MAPS_API_KEY=... in local.properties. Empty = OpenFreeMap only.
+        val mapsKey = System.getenv("MAPS_API_KEY")?.takeIf { it.isNotBlank() }
+            ?: rootProject.file("local.properties").takeIf { it.exists() }?.readLines()
+                ?.firstOrNull { it.startsWith("MAPS_API_KEY=") }?.substringAfter("=")?.trim() ?: ""
+        manifestPlaceholders["mapsApiKey"] = mapsKey
+        buildConfigField("boolean", "HAS_MAPS_KEY", (mapsKey.isNotEmpty()).toString())
     }
 
     // Release key comes from CI secrets (see README). Local builds fall back to the debug key.
@@ -68,6 +75,8 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
     // Shuffle / repeat on other apps' media sessions (MediaControllerCompat).
     implementation("androidx.media:media:1.7.0")
+    // Google map in the dashboard (needs Google Play services on the head unit + an API key).
+    implementation("com.google.android.gms:play-services-maps:19.0.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
