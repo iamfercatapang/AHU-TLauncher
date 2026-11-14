@@ -198,6 +198,7 @@ private fun SpeedBlock(state: HomeUiState, modifier: Modifier, glideKey: Any) {
     // the unit in the middle and a battery-style fuel gauge on the right, then a thin RPM line.
     Column(modifier.padding(top = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(speed.toString(), modifier = Modifier.glideOnChange(glideKey), style = TType.speed, color = T.colors.text, textAlign = TextAlign.Center)
+        Text(if (mph) "mph" else "km/h", style = TType.label, color = T.colors.muted, modifier = Modifier.offset(y = (-8).dp))
         Column(Modifier.widthIn(max = 380.dp).fillMaxWidth().padding(horizontal = 14.dp).offset(y = (-6).dp)) {
             Box(Modifier.fillMaxWidth().height(20.dp)) {
                 Row(Modifier.align(Alignment.CenterStart), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -205,7 +206,6 @@ private fun SpeedBlock(state: HomeUiState, modifier: Modifier, glideKey: Any) {
                         Text(label, style = TType.label, color = if (on) T.colors.text else T.colors.muted)
                     }
                 }
-                Text(if (mph) "mph" else "km/h", style = TType.label, color = T.colors.muted, modifier = Modifier.align(Alignment.Center))
                 val fuel = if (obd) state.obd.data.fuelPct else null
                 if (fuel != null) FuelGauge(fuel, state.fuel.rangeKm, mph, Modifier.align(Alignment.CenterEnd))
             }
@@ -215,20 +215,20 @@ private fun SpeedBlock(state: HomeUiState, modifier: Modifier, glideKey: Any) {
     }
 }
 
-/** Battery-style fuel gauge ("62% · 335 km" + shell with green fill). Amber when low. */
+/** TLauncher's fuel gauge: pump icon, slim level bar and "62% · 335 km". Amber when low. */
 @Composable
 private fun FuelGauge(pct: Int, rangeKm: Int?, mph: Boolean, modifier: Modifier) {
     val level by animateFloatAsState(pct.coerceIn(0, 100) / 100f, TMotion.count(), label = "fuel")
     val low = pct < com.ahu.tlauncher.obd.FuelMath.LOW_FUEL_PCT
-    val fill = if (low) TELL_AMBER else T.colors.green
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        val range = rangeKm?.let { if (mph) " · ${(it * 0.621371).roundToInt()} mi" else " · $it km" } ?: ""
-        Text("$pct%$range", style = TType.label, color = if (low) TELL_AMBER else T.colors.muted, maxLines = 1)
-        Spacer(Modifier.width(8.dp))
-        Box(Modifier.width(32.dp).height(12.dp).border(1.dp, T.colors.muted, androidx.compose.foundation.shape.RoundedCornerShape(1.dp)).padding(2.dp)) {
-            Box(Modifier.fillMaxHeight().fillMaxWidth(level).background(fill))
+        Icon(Icons.Rounded.LocalGasStation, "Fuel", tint = if (low) TELL_AMBER else T.colors.muted, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(6.dp))
+        Box(Modifier.width(56.dp).height(6.dp).clip(CircleShape).background(T.colors.secondary.copy(alpha = 0.3f))) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(level).clip(CircleShape).background(if (low) TELL_AMBER else T.colors.text))
         }
-        Box(Modifier.padding(start = 1.dp).width(2.dp).height(5.dp).background(T.colors.muted))
+        Spacer(Modifier.width(8.dp))
+        val range = rangeKm?.let { if (mph) " · ${(it * 0.621371).roundToInt()} mi" else " · $it km" } ?: ""
+        Text("$pct%$range", style = TType.caption, color = if (low) TELL_AMBER else T.colors.muted, maxLines = 1)
     }
 }
 

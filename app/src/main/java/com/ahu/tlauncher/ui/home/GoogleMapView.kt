@@ -24,27 +24,53 @@ import androidx.compose.ui.graphics.toArgb
 import kotlinx.coroutines.delay
 
 /**
- * Night look for the Google map, matching the dashboard's carbon greys.
- * Written for TLauncher (not copied from Google's samples).
+ * Night look for the Google map, after the dashboard prototype's map: deep blue-grey ground,
+ * slate roads, teal water, quiet labels and no business clutter. Written for TLauncher.
  */
 private const val GOOGLE_DARK_STYLE = """[
- {"elementType":"geometry","stylers":[{"color":"#1d2025"}]},
- {"elementType":"labels.text.fill","stylers":[{"color":"#8a8f98"}]},
- {"elementType":"labels.text.stroke","stylers":[{"color":"#1d2025"}]},
- {"elementType":"labels.icon","stylers":[{"saturation":-80},{"lightness":-30}]},
- {"featureType":"administrative","elementType":"geometry.stroke","stylers":[{"color":"#3a3e46"}]},
- {"featureType":"landscape.man_made","elementType":"geometry","stylers":[{"color":"#22262c"}]},
- {"featureType":"poi","elementType":"geometry","stylers":[{"color":"#22262c"}]},
- {"featureType":"poi.park","elementType":"geometry","stylers":[{"color":"#1f2a24"}]},
- {"featureType":"road","elementType":"geometry","stylers":[{"color":"#353a43"}]},
- {"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#1d2025"}]},
- {"featureType":"road.arterial","elementType":"geometry","stylers":[{"color":"#3f444e"}]},
- {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#4c525d"}]},
- {"featureType":"road.highway","elementType":"labels.text.fill","stylers":[{"color":"#b4b9c2"}]},
- {"featureType":"transit","elementType":"geometry","stylers":[{"color":"#2a2e35"}]},
- {"featureType":"water","elementType":"geometry","stylers":[{"color":"#0f1a24"}]},
- {"featureType":"water","elementType":"labels.text.fill","stylers":[{"color":"#4d6276"}]}
+ {"elementType":"geometry","stylers":[{"color":"#1b2029"}]},
+ {"elementType":"labels.text.fill","stylers":[{"color":"#8a94a3"}]},
+ {"elementType":"labels.text.stroke","stylers":[{"color":"#1b2029"}]},
+ {"elementType":"labels.icon","stylers":[{"saturation":-90},{"lightness":-25}]},
+ {"featureType":"administrative","elementType":"geometry.stroke","stylers":[{"color":"#2f3744"}]},
+ {"featureType":"landscape.man_made","elementType":"geometry","stylers":[{"color":"#1f252f"}]},
+ {"featureType":"poi","elementType":"geometry","stylers":[{"color":"#1f252f"}]},
+ {"featureType":"poi.business","stylers":[{"visibility":"off"}]},
+ {"featureType":"poi.park","elementType":"geometry","stylers":[{"color":"#1c2a2a"}]},
+ {"featureType":"poi.park","elementType":"labels.text.fill","stylers":[{"color":"#6f8a86"}]},
+ {"featureType":"road","elementType":"geometry","stylers":[{"color":"#2d3542"}]},
+ {"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#1b2029"}]},
+ {"featureType":"road.arterial","elementType":"geometry","stylers":[{"color":"#36404f"}]},
+ {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#46536a"}]},
+ {"featureType":"road.highway","elementType":"labels.text.fill","stylers":[{"color":"#b8c1cf"}]},
+ {"featureType":"transit","elementType":"geometry","stylers":[{"color":"#262d38"}]},
+ {"featureType":"transit.station","elementType":"labels.icon","stylers":[{"visibility":"off"}]},
+ {"featureType":"water","elementType":"geometry","stylers":[{"color":"#173c46"}]},
+ {"featureType":"water","elementType":"labels.text.fill","stylers":[{"color":"#4f7d88"}]}
 ]"""
+
+/** Day look: Google's map, quieter (muted colours, no business icons), to sit with DESIGN.md's white UI. */
+private const val GOOGLE_LIGHT_STYLE = """[
+ {"elementType":"geometry","stylers":[{"saturation":-35}]},
+ {"elementType":"labels.icon","stylers":[{"saturation":-70}]},
+ {"featureType":"poi.business","stylers":[{"visibility":"off"}]},
+ {"featureType":"transit.station","elementType":"labels.icon","stylers":[{"visibility":"off"}]}
+]"""
+
+/** The car on the map: the prototype's red navigation arrow (TLauncher's own drawing), white edge. */
+private fun carArrow(density: Float): com.google.android.gms.maps.model.BitmapDescriptor {
+    val s = (34 * density).toInt()
+    val b = android.graphics.Bitmap.createBitmap(s, s, android.graphics.Bitmap.Config.ARGB_8888)
+    val c = android.graphics.Canvas(b)
+    val path = android.graphics.Path().apply {
+        moveTo(s * 0.5f, s * 0.08f); lineTo(s * 0.86f, s * 0.9f); lineTo(s * 0.5f, s * 0.72f); lineTo(s * 0.14f, s * 0.9f); close()
+    }
+    val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    p.style = android.graphics.Paint.Style.FILL; p.color = 0xFFE5484D.toInt(); c.drawPath(path, p)
+    p.style = android.graphics.Paint.Style.STROKE; p.strokeWidth = 2f * density; p.strokeJoin = android.graphics.Paint.Join.ROUND
+    p.color = android.graphics.Color.WHITE; c.drawPath(path, p)
+    return com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(b)
+}
 
 private class GoogleHandle(val view: MapView) : MapControls {
     var map: GoogleMap? = null
@@ -110,9 +136,22 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
         }
     }
     val m = map
-    LaunchedEffect(m, dark) { m?.setMapStyle(if (dark) MapStyleOptions(GOOGLE_DARK_STYLE) else null) }
+    LaunchedEffect(m, dark) { m?.setMapStyle(MapStyleOptions(if (dark) GOOGLE_DARK_STYLE else GOOGLE_LIGHT_STYLE)) }
     LaunchedEffect(m, traffic) { m?.isTrafficEnabled = traffic }
-    LaunchedEffect(m, state.locationPermission) { if (m != null && state.locationPermission) runCatching { m.isMyLocationEnabled = true } }
+    // The car is drawn as the prototype's red arrow (pointing along the GPS course) instead of Google's blue dot.
+    val carDensity = LocalContext.current.resources.displayMetrics.density
+    val car = remember { mutableStateOf<com.google.android.gms.maps.model.Marker?>(null) }
+    LaunchedEffect(m, state.locationLat, state.locationLon, state.locationBearing) {
+        val gm = m ?: return@LaunchedEffect
+        val lat = state.locationLat ?: return@LaunchedEffect
+        val lon = state.locationLon ?: return@LaunchedEffect
+        val pos = LatLng(lat, lon)
+        val marker = car.value ?: gm.addMarker(
+            com.google.android.gms.maps.model.MarkerOptions().position(pos).icon(carArrow(carDensity)).anchor(0.5f, 0.55f).flat(true).zIndex(10f),
+        )?.also { car.value = it }
+        marker?.position = pos
+        state.locationBearing?.let { marker?.rotation = it }
+    }
 
     // Follow the car on every GPS update; speed decides park vs drive.
     val speed = state.displaySpeedKmh
