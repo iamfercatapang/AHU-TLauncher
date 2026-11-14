@@ -169,6 +169,7 @@ class MainActivity : ComponentActivity(), HomeActions {
         val favourites by app.routes.favourites.collectAsState()
         val etaMin by app.routes.etaMin.collectAsState()
         val lastMedia by app.lastMedia.last.collectAsState()
+        val eqCaps by app.soundEq.caps.collectAsState()
         val resumingMedia by app.lastMedia.resuming.collectAsState()
         // The trip ends when Google Maps / Waze stops navigating (their turn notification disappears for 20 s).
         val navOn = nav != null
@@ -242,6 +243,7 @@ class MainActivity : ComponentActivity(), HomeActions {
             route = route, search = search, recents = recents, favourites = favourites, etaMin = etaMin,
             lights = lights,
             call = call, callPermission = callPerm, returnPermission = returnPerm,
+            eqCaps = eqCaps,
             brightness = brightnessNow, brightnessNight = night, brightnessAllowed = brightAllowed, callSource = remember(notifCall) { NotificationHub.lastCallPackage },
             aa = aa, aaReceiver = aaReceiver,
             aaDismissed = (aa as? com.ahu.tlauncher.system.AaState.Ready)?.gateway?.let { it == aaDismissedOn } == true,
@@ -254,6 +256,15 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun launch(app: AppEntry) {
         if (!this.app.apps.launch(app)) toastMissing(app.label)
     }
+
+    private var eqSaveJob: kotlinx.coroutines.Job? = null
+    /** Applied right away; saved once the slider settles. */
+    override fun setEq(s: com.ahu.tlauncher.system.EqSettings) {
+        app.soundEq.apply(s)
+        eqSaveJob?.cancel()
+        eqSaveJob = lifecycleScope.launch { delay(400); app.prefs.setEq(com.ahu.tlauncher.system.EqMath.encode(s)) }
+    }
+    override fun chooseUnitEq(pkg: String) { lifecycleScope.launch { app.prefs.setUnitEqApp(pkg) } }
 
     override fun setBrightness(percent: Int) {
         if (!app.brightness.canWrite()) { requestBrightnessPermission(); return }

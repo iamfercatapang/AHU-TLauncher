@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Dock
 import androidx.compose.material.icons.rounded.Info
@@ -77,6 +78,7 @@ enum class Section(val label: String, val icon: ImageVector) {
     OBD("OBD-II", Icons.Rounded.Bluetooth),
     DIAGNOSTICS("Diagnostics", Icons.Rounded.Build),
     ANDROID_AUTO("Android Auto", Icons.Rounded.PhoneAndroid),
+    SOUND("Sound", Icons.Rounded.GraphicEq),
     PERMISSIONS("Permissions", Icons.Rounded.Security),
     ABOUT("About", Icons.Rounded.Info),
 }
@@ -114,6 +116,7 @@ fun SettingsScreen(state: HomeUiState, actions: HomeActions, onClose: () -> Unit
                     Section.OBD -> ObdSection(state, actions)
                     Section.DIAGNOSTICS -> DiagnosticsSection(state, actions)
                     Section.ANDROID_AUTO -> AndroidAutoSection(state, actions)
+                    Section.SOUND -> SoundSection(state, actions)
                     Section.PERMISSIONS -> PermissionsSection(state, actions)
                     Section.ABOUT -> AboutSection(state, actions)
                 }
