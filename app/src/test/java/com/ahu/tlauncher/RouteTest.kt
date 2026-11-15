@@ -52,7 +52,8 @@ class RouteTest {
 
     @Test fun shortDistancesForSearchRows() {
         assertEquals("332 km", com.ahu.tlauncher.ui.home.fmtDistanceShort(331_800, mph = false))
-        assertEquals("24.6 km", com.ahu.tlauncher.ui.home.fmtDistanceShort(24_600, mph = false).replace(',', '.'))
+        assertEquals("25 km", com.ahu.tlauncher.ui.home.fmtDistanceShort(24_600, mph = false)) // no decimal from 10 km up
+        assertEquals("9.5 km", com.ahu.tlauncher.ui.home.fmtDistanceShort(9_500, mph = false).replace(',', '.')) // decimal below 10 km
         assertEquals("850 m", com.ahu.tlauncher.ui.home.fmtDistanceShort(850, mph = false))
         assertEquals("21 mi", com.ahu.tlauncher.ui.home.fmtDistanceShort(33_800, mph = true))
     }
