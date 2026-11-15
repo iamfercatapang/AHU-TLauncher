@@ -71,7 +71,8 @@ fun BluetoothPopup(state: HomeUiState, actions: HomeActions, onClose: () -> Unit
     val details by produceState<BtDetails?>(null, state.bluetooth) {
         while (true) { value = actions.bluetoothDetails(); delay(REFRESH_MS) }
     }
-    BluetoothPopupContent(state.bluetooth, details, actions::openBluetoothSettings, onClose)
+    // The popup's own reading is the freshest; until it arrives, the status bar's.
+    BluetoothPopupContent(details?.status ?: state.bluetooth, details, actions::openBluetoothSettings, onClose)
 }
 
 @Composable

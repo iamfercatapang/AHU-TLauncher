@@ -2,8 +2,6 @@ package com.ahu.tlauncher.ui.home
 
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntAsState
@@ -11,8 +9,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
-import com.ahu.tlauncher.ui.components.glideOnChange
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
@@ -135,8 +131,15 @@ fun CarStage(
     drawBackground: Boolean = true,
     /** Swiping the panel between split and full screen (the home screen's gesture); not on the cards. */
     panelSwipe: Modifier = Modifier,
+    /** 0 = split view, 1 = full screen, in between while swiping or sweeping. Read at draw/layout time. */
+    progress: () -> Float = { if (expanded) 1f else 0f },
 ) {
     val dark = T.colors.isDark
+    val prog = androidx.compose.runtime.rememberUpdatedState(progress)
+    // Discrete choices flip half-way; the continuous ones read the progress directly.
+    val wide by remember { derivedStateOf { prog.value() >= 0.5f } }
+    val showPager by remember { derivedStateOf { prog.value() < 1f } }
+    val showRow by remember { derivedStateOf { prog.value() > 0f } }
     Box(
         modifier.then(panelSwipe).then(if (drawBackground) Modifier.background(stageBrush()) else Modifier).clipToBounds().drawBehind {
             // Night: a soft pool of light behind the car, like the prototype's lit stage.
@@ -147,15 +150,15 @@ fun CarStage(
         },
     ) {
         Column(Modifier.fillMaxSize().padding(top = STATUS_H)) {
-            SpeedBlock(state, Modifier.fillMaxWidth(), glideKey = expanded)
-            CarHero(state, Modifier.fillMaxWidth().weight(1f), glideKey = expanded)
+            SpeedBlock(state, Modifier.fillMaxWidth())
+            CarHero(state, Modifier.fillMaxWidth().weight(1f), progress)
         }
         Telltales(state, Modifier.align(Alignment.TopStart).padding(start = 18.dp, top = STATUS_H + 8.dp))
         // Lights-on tell-tale sits at the panel's top-right corner, in the status row (as in the prototype).
         if (state.lights.on) Icon(
             com.ahu.tlauncher.ui.components.LowBeamIcon, "Headlights on", tint = TELL_GREEN,
-            modifier = Modifier.align(if (handleOnLeft || expanded) Alignment.TopStart else Alignment.TopEnd)
-                .padding(start = if (expanded) 150.dp else 18.dp, end = 18.dp, top = 9.dp).size(22.dp),
+            modifier = Modifier.align(if (handleOnLeft || wide) Alignment.TopStart else Alignment.TopEnd)
+                .padding(start = if (wide) 150.dp else 18.dp, end = 18.dp, top = 9.dp).size(22.dp),
         )
 
         // bottom cards overlap the reflection, as in the reference layout
@@ -164,19 +167,14 @@ fun CarStage(
                 // Sideways swipes on the cards stay with the cards (the pager, or nothing) instead of moving the panel.
                 .pointerInput(Unit) { detectHorizontalDragGestures { change, _ -> change.consume() } }
                 .padding(horizontal = 16.dp, vertical = 10.dp),
+            contentAlignment = Alignment.BottomCenter,
         ) {
-            AnimatedContent(
-                expanded,
-                transitionSpec = { (fadeIn(TMotion.enter()) togetherWith fadeOut(tween(120, easing = TMotion.EaseOut))).using(SizeTransform(clip = false) { _, _ -> snap() }) },
-                label = "cards",
-            ) { full ->
-                if (full) {
-                    Row(Modifier.widthIn(max = 660.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        MusicCard(state, actions, Modifier.weight(1.6f))
-                        NavigateCard(actions, Modifier.weight(1f))
-                    }
-                } else {
-                    CardPager(state, actions)
+            // Split view's card pager fades out as full screen's two-card row fades in, with the panel's progress.
+            if (showPager) Box(Modifier.graphicsLayer { alpha = 1f - prog.value() }) { CardPager(state, actions) }
+            if (showRow) {
+                Row(Modifier.widthIn(max = 660.dp).graphicsLayer { alpha = prog.value() }, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    MusicCard(state, actions, Modifier.weight(1.6f))
+                    NavigateCard(actions, Modifier.weight(1f))
                 }
             }
         }
@@ -193,7 +191,7 @@ fun CarStage(
 }
 
 @Composable
-private fun SpeedBlock(state: HomeUiState, modifier: Modifier, glideKey: Any) {
+private fun SpeedBlock(state: HomeUiState, modifier: Modifier) {
     val obd = ObdDisplay.show(state.obd.status)
     val obdSpeed = if (obd) state.obd.data.speedKmh else null
     // No OBD and no GPS fix yet (e.g. parked indoors): show 0 rather than nothing.
@@ -205,7 +203,7 @@ private fun SpeedBlock(state: HomeUiState, modifier: Modifier, glideKey: Any) {
     // Laid out like the prototype's speed card: number, then a row with the source where gears would be,
     // the unit in the middle and a battery-style fuel gauge on the right, then a thin RPM line.
     Column(modifier.padding(top = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(speed.toString(), modifier = Modifier.glideOnChange(glideKey), style = TType.speed, color = T.colors.text, textAlign = TextAlign.Center)
+        Text(speed.toString(), style = TType.speed, color = T.colors.text, textAlign = TextAlign.Center)
         Text(if (mph) "mph" else "km/h", style = TType.label, color = T.colors.muted, modifier = Modifier.offset(y = (-8).dp))
         Column(Modifier.widthIn(max = 380.dp).fillMaxWidth().padding(horizontal = 14.dp).offset(y = (-6).dp)) {
             Box(Modifier.fillMaxWidth().height(20.dp)) {
@@ -303,7 +301,7 @@ private fun calloutKinds(state: HomeUiState): List<CalloutKind> {
 
 /** Car photo (tap to change view) with mirrored floor reflection and data callouts with leader lines. */
 @Composable
-private fun CarHero(state: HomeUiState, modifier: Modifier, glideKey: Any) {
+private fun CarHero(state: HomeUiState, modifier: Modifier, progress: () -> Float) {
     val ctx = LocalContext.current
     val preview = LocalInspectionMode.current
     val custom = state.settings.carImages
@@ -315,14 +313,8 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, glideKey: Any) {
     val sideSrc = remember(custom) {
         if (preview) CarSource.Bundled(R.drawable.car_side) else CarImages.source(ctx, com.ahu.tlauncher.data.CarView.SIDE, custom) ?: CarSource.Illustration
     }
-    val expanded = glideKey == true
-    // 0 = front, 1 = 3/4. Like the prototype's turntable: the car swings round on a vertical axis.
-    // Low-performance mode: a short cross-fade instead of the 3D turn.
+    // Low-performance mode: a cross-fade instead of the 3D turn.
     val low = LocalLowPerf.current
-    val turn = remember { androidx.compose.animation.core.Animatable(if (expanded) 1f else 0f) }
-    LaunchedEffect(expanded) {
-        turn.animateTo(if (expanded) 1f else 0f, if (low) tween(LOW_PERF_FADE_MS) else tween(CAR_TURN_MS, easing = TMotion.EaseInOut))
-    }
 
     val f = state.settings.tempUnit == TempUnit.F
     // The car and its layout only redraw when a callout appears or disappears, not on every reading.
@@ -337,8 +329,10 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, glideKey: Any) {
         val calloutH = if (callouts.isEmpty()) 8.dp else 56.dp
         val maxImgH = (maxHeight - calloutH) * (if (callouts.isEmpty()) 0.64f else 0.56f)
         fun widthFor(r: Float) = min(maxWidth - 32.dp, maxImgH * r) * CAR_SCALE
-        val target = if (expanded) side else front
-        val tRatio = ratioOf(target)
+        // 0 = front, 1 = 3/4, following the panel (swipe or sweep). Like the prototype's turntable: the car
+        // swings round on a vertical axis, and its footprint moves between the two photos' proportions.
+        val p = progress()
+        val tRatio = ratioOf(front) + (ratioOf(side) - ratioOf(front)) * p
         val imgW = widthFor(tRatio)
         val imgH = imgW / tRatio
         val shadowH = imgH * 0.14f
@@ -348,7 +342,7 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, glideKey: Any) {
         val lines = rowW == imgW
         val density = androidx.compose.ui.platform.LocalDensity.current.density
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.glideOnChange(glideKey).width(rowW).height(calloutH + imgH)) {
+            Box(Modifier.width(rowW).height(calloutH + imgH)) {
                 Box(
                     Modifier.offset(x = carX + imgW * 0.06f, y = calloutH + imgH - shadowH).size(imgW * 0.88f, shadowH)
                         .drawBehind {
@@ -359,7 +353,6 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, glideKey: Any) {
                 )
                 callouts.forEach { c -> CalloutView(c, state, f, rowW, calloutH, imgH, lines) }
                 // Both photos sit on the same ground line; the turn swaps them mid-way.
-                val p = turn.value
                 listOf(front to (1f - p), side to p).forEach { (painter, weight) ->
                     if (painter == null || weight <= 0.001f) return@forEach
                     val r = ratioOf(painter)
@@ -385,10 +378,6 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, glideKey: Any) {
     }
 }
 
-/** Length of the front ↔ 3/4 car turn (prototype's card transitions are ~0.6 s). */
-private const val CAR_TURN_MS = 600
-/** Cross-fade used instead of the turn in low-performance mode. */
-private const val LOW_PERF_FADE_MS = 200
 
 @Composable
 private fun rememberCarPainter(src: CarSource): Painter? {

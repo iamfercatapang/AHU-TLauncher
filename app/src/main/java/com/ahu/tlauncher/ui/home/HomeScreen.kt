@@ -56,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.IntOffset
@@ -93,6 +94,13 @@ private const val MIN_SETTLE_MS = 150
 private const val LOW_PERF_SETTLE_MS = 150
 /** Strip of the map, next to the car panel, that also grabs the panel. */
 private val MAP_GRAB_W = 24.dp
+
+/** Lays the panel out at [edge] × the available width. */
+private fun Modifier.panelWidth(edge: () -> Float): Modifier = layout { measurable, constraints ->
+    val w = (constraints.maxWidth * edge()).roundToInt().coerceIn(0, constraints.maxWidth)
+    val placeable = measurable.measure(constraints.copy(minWidth = w, maxWidth = w))
+    layout(w, placeable.height) { placeable.place(0, 0) }
+}
 
 /** What a horizontal swipe on the car panel does: start, move by dx px, end with a velocity in px/s. */
 private class PanelSwipe(val onStart: () -> Unit, val onDrag: (Float) -> Unit, val onEnd: (Float) -> Unit)
@@ -173,6 +181,8 @@ fun HomeScreen(
     // Swiping the panel: while a finger holds it, the edge follows the finger (fraction of the width, else -1).
     var dragEdge by remember { androidx.compose.runtime.mutableFloatStateOf(-1f) }
     val panelEdge = { if (dragEdge >= 0f) dragEdge else edge.value }
+    // 0 = split view, 1 = full screen: drives the car's turn and the cards' cross-fade during a swipe or sweep.
+    val panelProgress = { ((panelEdge() - SPLIT_FRACTION) / (1f - SPLIT_FRACTION)).coerceIn(0f, 1f) }
     // Low-performance mode: the panel jumps (the map still fades in behind it).
     val lowPerf = com.ahu.tlauncher.ui.theme.LocalLowPerf.current
     LaunchedEffect(mapVisible) {
@@ -236,12 +246,15 @@ fun HomeScreen(
                     }
                 },
             ) {
+                // The panel is laid out at the edge's live width, so everything in it follows the finger
+                // (and the sweep): speed, tell-tales, the car (turning with the progress) and the cards.
                 CarStage(
                     state, actions, expanded = !mapVisible, onToggleMap = { mapVisible = !mapVisible },
                     handleOnLeft = carRight,
                     drawBackground = false,
-                    modifier = Modifier.align(if (carRight) Alignment.TopEnd else Alignment.TopStart).width(stageW).fillMaxHeight(),
+                    modifier = Modifier.align(if (carRight) Alignment.TopEnd else Alignment.TopStart).panelWidth(panelEdge).fillMaxHeight(),
                     panelSwipe = Modifier.panelSwipe(swipe),
+                    progress = panelProgress,
                 )
             }
             // In split view, a thin strip of the map next to the panel grabs it too (the rest of the map pans as usual).

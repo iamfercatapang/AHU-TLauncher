@@ -207,8 +207,21 @@ class MainActivity : ComponentActivity(), HomeActions {
         }
         val tick = resumeTick
         // Status bar indicators, read off the main thread while the launcher is on screen.
-        val btOn by polled(false, tick, 5_000) { bluetoothEnabled() }
-        val bt by polled(com.ahu.tlauncher.system.BtStatus.OFF, tick, 5_000) { com.ahu.tlauncher.system.Connectivity.bluetooth(this) }
+        // Bluetooth: re-read on every Bluetooth broadcast (adapter, device, audio/call profile), and every 15 s in case one is missed.
+        val bt by produceState(com.ahu.tlauncher.system.BtStatus.OFF, tick) {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                kotlinx.coroutines.flow.merge(
+                    com.ahu.tlauncher.system.Connectivity.bluetoothChanges(this@MainActivity),
+                    kotlinx.coroutines.flow.flow { while (true) { delay(15_000); emit(Unit) } },
+                ).collectLatest {
+                    // Profiles connect a moment after the device itself: read now and once more shortly after.
+                    value = withContext(Dispatchers.IO) { com.ahu.tlauncher.system.Connectivity.bluetoothStatus(this@MainActivity) }
+                    delay(1_500)
+                    value = withContext(Dispatchers.IO) { com.ahu.tlauncher.system.Connectivity.bluetoothStatus(this@MainActivity) }
+                }
+            }
+        }
+        val btOn = bt != com.ahu.tlauncher.system.BtStatus.OFF
         val wifi by polled(com.ahu.tlauncher.system.WifiStatus(false, false, 0), tick, 5_000) { com.ahu.tlauncher.system.Connectivity.wifi(this) }
         val cell by polled<com.ahu.tlauncher.system.CellStatus?>(null, tick, 10_000) { com.ahu.tlauncher.system.Connectivity.cell(this) }
         val isDefault = remember(tick) { isDefaultLauncher() }
@@ -664,10 +677,6 @@ class MainActivity : ComponentActivity(), HomeActions {
     // ---------------- helpers ----------------
 
     @android.annotation.SuppressLint("MissingPermission")
-    private fun bluetoothEnabled(): Boolean = runCatching {
-        getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled == true
-    }.getOrDefault(false)
-
     private fun isDefaultLauncher(): Boolean {
         val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
         return packageManager.resolveActivity(i, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName == packageName
