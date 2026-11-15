@@ -402,15 +402,17 @@ fun HomeScreen(
             }
             // destination search, over the map
             // (a floating card on the map's free side, away from its buttons, like the prototype)
+            val searchW = maxWidth * (1 - SPLIT_FRACTION)
+            val searchMaxH = maxHeight - STATUS_H - 16.dp
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.SEARCH,
                 enter = navEnter(), exit = navExit(),
                 modifier = Modifier.align(if (carRight) Alignment.TopStart else Alignment.TopEnd).padding(top = STATUS_H + 4.dp),
             ) {
-                Box(Modifier.width(maxWidth * (1 - SPLIT_FRACTION)).padding(horizontal = 12.dp)) {
+                Box(Modifier.width(searchW).padding(horizontal = 12.dp)) {
                     SearchPanel(
                         state, actions, onClose = { overlay = Overlay.NONE },
-                        modifier = Modifier.align(if (carRight) Alignment.TopEnd else Alignment.TopStart).heightIn(max = maxHeight - STATUS_H - 16.dp),
+                        modifier = Modifier.align(if (carRight) Alignment.TopEnd else Alignment.TopStart).heightIn(max = searchMaxH),
                     )
                 }
             }

@@ -51,7 +51,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -151,7 +150,7 @@ private val LightNav = NavColors(
     cta = Color(0xFF171A20), onCta = Color.White, good = Color(0xFF1F8A4C), danger = Color(0xFFD03B3F), star = Color(0xFFE0A21B),
 )
 
-val navColors: NavColors @Composable @ReadOnlyComposable get() = if (T.colors.isDark) DarkNav else LightNav
+val navColors: NavColors @Composable get() = if (T.colors.isDark) DarkNav else LightNav
 
 private val PanelShape = RoundedCornerShape(16.dp)
 private val TileShape = RoundedCornerShape(12.dp)

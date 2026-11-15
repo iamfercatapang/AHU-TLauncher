@@ -504,7 +504,7 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier, onL
                                 LocationComponentOptions.builder(ctx)
                                     // the prototype's red arrow instead of MapLibre's blue dot
                                     .foregroundDrawable(com.ahu.tlauncher.R.drawable.puck_arrow).gpsDrawable(com.ahu.tlauncher.R.drawable.puck_arrow)
-                                    .foregroundDrawableStale(com.ahu.tlauncher.R.drawable.puck_arrow).gpsStaleDrawable(com.ahu.tlauncher.R.drawable.puck_arrow)
+                                    .foregroundDrawableStale(com.ahu.tlauncher.R.drawable.puck_arrow)
                                     .backgroundDrawable(com.ahu.tlauncher.R.drawable.puck_none).backgroundDrawableStale(com.ahu.tlauncher.R.drawable.puck_none)
                                     .bearingDrawable(com.ahu.tlauncher.R.drawable.puck_none)
                                     .accuracyColor(ROUTE_LINE.toArgb()).accuracyAlpha(0.10f)
