@@ -33,7 +33,7 @@ import com.ahu.tlauncher.ui.theme.TType
 @Composable
 fun NotificationsPopup(state: HomeUiState, actions: HomeActions, onClose: () -> Unit) {
     val surface = if (T.colors.isDark) Color(0xFF22252B) else T.colors.panel
-    Column(Modifier.width(380.dp).clip(TShapes.surface).background(surface).padding(14.dp)) {
+    Column(Modifier.width(STATUS_POPUP_W).clip(TShapes.surface).background(surface).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Notifications", style = TType.title, color = T.colors.text, modifier = Modifier.weight(1f))
             if (state.inbox.isNotEmpty()) Box(Modifier.clip(TShapes.button).pressable(onClick = actions::dismissAllInbox).padding(horizontal = 10.dp, vertical = 6.dp)) {

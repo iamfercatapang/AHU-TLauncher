@@ -55,6 +55,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -76,6 +81,8 @@ const val CANVAS_H = 600f
 val DOCK_H = 64.dp
 val STATUS_H = 40.dp
 private const val SPLIT_FRACTION = 0.36f
+/** Width of the status bar popups (notifications, Bluetooth, Wi-Fi, mobile, weather). */
+internal val STATUS_POPUP_W = 380.dp
 
 enum class Overlay { NONE, APPS, SETTINGS, MUSIC, SEARCH, BRIGHTNESS, VOLUME, CARD_MUSIC, NOTIFICATIONS, BLUETOOTH, WIFI, CELL, WEATHER }
 
@@ -125,7 +132,10 @@ fun HomeScreen(
     val panelBrush = stageBrush()
 
     Column(Modifier.fillMaxSize().background(T.colors.appBg)) {
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+        // Where each status icon is drawn (window coordinates), so its popup opens right under it.
+        val anchors = remember { androidx.compose.runtime.mutableStateMapOf<Overlay, androidx.compose.ui.geometry.Rect>() }
+        var bodyOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().onGloballyPositioned { bodyOrigin = it.positionInRoot() }) {
             val stageW = maxWidth * stageFraction
             val sideRight = state.settings.carSide == com.ahu.tlauncher.data.CarSide.RIGHT
             val carRight = sideRight && mapVisible
@@ -156,6 +166,7 @@ fun HomeScreen(
                 onObdClick = { settingsStart = com.ahu.tlauncher.ui.settings.Section.DIAGNOSTICS; overlay = Overlay.SETTINGS },
                 onBellClick = { toggle(Overlay.NOTIFICATIONS) },
                 onStatusClick = toggle,
+                onAnchor = { o, r -> if (anchors[o] != r) anchors[o] = r },
             )
 
             // Prototype motion: panels rise 18 dp while fading in over a dimmed backdrop.
@@ -175,30 +186,42 @@ fun HomeScreen(
             val fullCardsW = androidx.compose.ui.unit.min(660.dp, maxWidth - 32.dp)
             val fullMusicW = (fullCardsW - 12.dp) * (1.6f / 2.6f)
             // notifications, under the bell in the status bar
+            // Status popups open centred under their own icon (like the car panel's music player sits
+            // exactly over its card), kept 8 dp inside the screen. Until an icon has been laid out,
+            // fall back to the status bar's side of the screen.
+            val popupW = STATUS_POPUP_W
+            val under = { o: Overlay, fallback: Modifier ->
+                if (o !in anchors) fallback
+                else Modifier.align(Alignment.TopStart).offset {
+                    val r = anchors[o] ?: return@offset IntOffset.Zero
+                    val w = popupW.roundToPx()
+                    val margin = 8.dp.roundToPx()
+                    val x = (r.center.x - bodyOrigin.x - w / 2f).roundToInt().coerceIn(margin, maxOf(margin, constraints.maxWidth - w - margin))
+                    IntOffset(x, (r.bottom - bodyOrigin.y).roundToInt() + 4.dp.roundToPx())
+                }
+            }
+            val leftFallback = Modifier.align(Alignment.TopStart).padding(top = STATUS_H, start = (if (mapVisible && !carRight) stageW else 0.dp) + 12.dp)
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.NOTIFICATIONS,
                 enter = panelIn, exit = panelOut,
-                modifier = Modifier.align(Alignment.TopStart).padding(top = STATUS_H, start = (if (mapVisible && !carRight) stageW else 0.dp) + 12.dp),
+                modifier = under(Overlay.NOTIFICATIONS, leftFallback),
             ) {
                 NotificationsPopup(state, actions, onClose = { overlay = Overlay.NONE })
             }
-            // Bluetooth / Wi-Fi / mobile under their icons (map's top-left in split view, top-right
-            // when the car fills the screen); weather under the temperature at the top-right.
-            val linksAnchor = if (mapVisible) Modifier.align(Alignment.TopStart).padding(top = STATUS_H, start = (if (!carRight) stageW else 0.dp) + 12.dp)
-                else Modifier.align(Alignment.TopEnd).padding(top = STATUS_H, end = 12.dp)
+            val linksFallback = if (mapVisible) leftFallback else Modifier.align(Alignment.TopEnd).padding(top = STATUS_H, end = 12.dp)
             val closeStatus = { overlay = Overlay.NONE }
-            androidx.compose.animation.AnimatedVisibility(overlay == Overlay.BLUETOOTH, linksAnchor, enter = panelIn, exit = panelOut) {
+            androidx.compose.animation.AnimatedVisibility(overlay == Overlay.BLUETOOTH, under(Overlay.BLUETOOTH, linksFallback), enter = panelIn, exit = panelOut) {
                 BluetoothPopup(state, actions, onClose = closeStatus)
             }
-            androidx.compose.animation.AnimatedVisibility(overlay == Overlay.WIFI, linksAnchor, enter = panelIn, exit = panelOut) {
+            androidx.compose.animation.AnimatedVisibility(overlay == Overlay.WIFI, under(Overlay.WIFI, linksFallback), enter = panelIn, exit = panelOut) {
                 WifiPopup(state, actions, onClose = closeStatus)
             }
-            androidx.compose.animation.AnimatedVisibility(overlay == Overlay.CELL, linksAnchor, enter = panelIn, exit = panelOut) {
+            androidx.compose.animation.AnimatedVisibility(overlay == Overlay.CELL, under(Overlay.CELL, linksFallback), enter = panelIn, exit = panelOut) {
                 CellPopup(state, actions, onClose = closeStatus)
             }
             androidx.compose.animation.AnimatedVisibility(
                 overlay == Overlay.WEATHER,
-                Modifier.align(Alignment.TopEnd).padding(top = STATUS_H, end = (if (mapVisible && carRight) stageW else 0.dp) + 12.dp),
+                under(Overlay.WEATHER, Modifier.align(Alignment.TopEnd).padding(top = STATUS_H, end = (if (mapVisible && carRight) stageW else 0.dp) + 12.dp)),
                 enter = panelIn, exit = panelOut,
             ) {
                 WeatherPopup(state, onClose = closeStatus)
@@ -361,6 +384,8 @@ private fun StatusBar(
     onObdClick: () -> Unit = {},
     onBellClick: () -> Unit = {},
     onStatusClick: (Overlay) -> Unit = {},
+    /** Reports where each tappable status item is drawn (window coordinates). */
+    onAnchor: (Overlay, androidx.compose.ui.geometry.Rect) -> Unit = { _, _ -> },
     /** Map area (start, end) when the map is visible; null when the car fills the screen. */
     mapSpan: Pair<androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp>? = null,
 ) {
@@ -371,14 +396,18 @@ private fun StatusBar(
             val obdX = if (mapSpan != null && mapSpan.first.value == 0f) mapSpan.second + 20.dp else 20.dp
             ObdBadge(state.obd.status, Modifier.align(Alignment.CenterStart).padding(start = obdX).pressable(onClick = onObdClick))
         }
-        val links = @Composable { Connectivity(state, onBellClick, onStatusClick) }
+        val links = @Composable { Connectivity(state, onBellClick, onStatusClick, onAnchor) }
         val clock = @Composable {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 state.weather?.let { w ->
                     val f = state.settings.tempUnit == com.ahu.tlauncher.data.TempUnit.F
                     val t = if (f) w.tempC * 9 / 5 + 32 else w.tempC
                     // Tap for the weather popup (details and the next hours).
-                    Row(Modifier.pressable { onStatusClick(Overlay.WEATHER) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.onGloballyPositioned { onAnchor(Overlay.WEATHER, it.boundsInRoot()) }
+                            .pressable { onStatusClick(Overlay.WEATHER) }.padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Icon(weatherIcon(w), w.kind.name.lowercase().replace('_', ' '), tint = T.colors.text, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("${Math.round(t)} °${if (f) "F" else "C"}", style = TType.button, color = T.colors.text)
@@ -404,7 +433,12 @@ private fun StatusBar(
 
 /** Bluetooth and Wi-Fi status icons (TLauncher's own line icons). */
 @Composable
-private fun Connectivity(state: HomeUiState, onBellClick: () -> Unit = {}, onStatusClick: (Overlay) -> Unit = {}) {
+private fun Connectivity(
+    state: HomeUiState,
+    onBellClick: () -> Unit = {},
+    onStatusClick: (Overlay) -> Unit = {},
+    onAnchor: (Overlay, androidx.compose.ui.geometry.Rect) -> Unit = { _, _ -> },
+) {
     // Each item sits in a 28 dp tap target; 6 dp between targets keeps the icons 14 dp apart as before.
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         val (btIcon, btDesc) = when (state.bluetooth) {
@@ -412,7 +446,7 @@ private fun Connectivity(state: HomeUiState, onBellClick: () -> Unit = {}, onSta
             BtStatus.ON -> com.ahu.tlauncher.ui.components.TIcons.Bluetooth to "Bluetooth on"
             BtStatus.OFF -> com.ahu.tlauncher.ui.components.TIcons.BluetoothOff to "Bluetooth off"
         }
-        Box(Modifier.size(28.dp).pressable { onStatusClick(Overlay.BLUETOOTH) }, contentAlignment = Alignment.Center) {
+        Box(Modifier.size(28.dp).onGloballyPositioned { onAnchor(Overlay.BLUETOOTH, it.boundsInRoot()) }.pressable { onStatusClick(Overlay.BLUETOOTH) }, contentAlignment = Alignment.Center) {
             Icon(btIcon, btDesc, tint = if (state.bluetooth == BtStatus.CONNECTED) T.colors.text else T.colors.muted, modifier = Modifier.size(20.dp))
         }
         val w = state.wifi
@@ -421,13 +455,13 @@ private fun Connectivity(state: HomeUiState, onBellClick: () -> Unit = {}, onSta
             !w.connected -> com.ahu.tlauncher.ui.components.TIcons.wifi(0)
             else -> com.ahu.tlauncher.ui.components.TIcons.wifi(w.level.coerceIn(1, 4).let { if (it >= 3) 3 else it })
         }
-        Box(Modifier.size(28.dp).pressable { onStatusClick(Overlay.WIFI) }, contentAlignment = Alignment.Center) {
+        Box(Modifier.size(28.dp).onGloballyPositioned { onAnchor(Overlay.WIFI, it.boundsInRoot()) }.pressable { onStatusClick(Overlay.WIFI) }, contentAlignment = Alignment.Center) {
             Icon(icon, if (w.connected) "Wi-Fi connected" else if (w.enabled) "Wi-Fi not connected" else "Wi-Fi off",
                 tint = if (w.connected) T.colors.text else T.colors.muted, modifier = Modifier.size(20.dp))
         }
         // mobile signal (only with a SIM): type label + four bars
         state.cell?.let { c ->
-            Row(Modifier.height(28.dp).pressable { onStatusClick(Overlay.CELL) }.padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.Bottom) {
+            Row(Modifier.height(28.dp).onGloballyPositioned { onAnchor(Overlay.CELL, it.boundsInRoot()) }.pressable { onStatusClick(Overlay.CELL) }.padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.Bottom) {
                 c.type?.let { Text(it, style = TType.caption, color = T.colors.text, modifier = Modifier.padding(end = 1.dp)) }
                 Box(Modifier.size(20.dp)) {
                     Icon(com.ahu.tlauncher.ui.components.TIcons.signalBars(c.level, false), null, tint = T.colors.muted, modifier = Modifier.size(20.dp))
@@ -436,7 +470,7 @@ private fun Connectivity(state: HomeUiState, onBellClick: () -> Unit = {}, onSta
             }
         }
         // notification bell, with a dot when there's something unread
-        Box(Modifier.size(28.dp).pressable(onClick = onBellClick), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(28.dp).onGloballyPositioned { onAnchor(Overlay.NOTIFICATIONS, it.boundsInRoot()) }.pressable(onClick = onBellClick), contentAlignment = Alignment.Center) {
             Icon(com.ahu.tlauncher.ui.components.TIcons.Bell, "Notifications", tint = if (state.inbox.isEmpty()) T.colors.muted else T.colors.text, modifier = Modifier.size(20.dp))
             if (state.inbox.isNotEmpty()) Box(Modifier.align(Alignment.TopEnd).padding(top = 3.dp, end = 3.dp).size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(T.colors.accent))
         }

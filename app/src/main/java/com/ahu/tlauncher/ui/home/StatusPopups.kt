@@ -263,11 +263,11 @@ internal fun conditionName(k: WeatherKind) = when (k) {
 
 // ---------------------------------------------------------------- shared pieces
 
-/** Same card as the notifications list: 380 dp, title row with a close button. */
+/** Same card as the notifications list: [STATUS_POPUP_W] wide, title row with a close button. */
 @Composable
 private fun StatusPopupFrame(title: String, onClose: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     val surface = if (T.colors.isDark) Color(0xFF22252B) else T.colors.panel
-    Column(Modifier.width(380.dp).clip(TShapes.surface).background(surface).padding(14.dp)) {
+    Column(Modifier.width(STATUS_POPUP_W).clip(TShapes.surface).background(surface).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(title, style = TType.title, color = T.colors.text, modifier = Modifier.weight(1f))
             Box(Modifier.size(32.dp).pressable(onClick = onClose), contentAlignment = Alignment.Center) {
