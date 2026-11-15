@@ -62,6 +62,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -287,7 +289,15 @@ private class VectorHandle(val view: MapView) : MapControls {
     var following = true
     var lastTouch = 0L
     var speedKmh: Int? = null
+    var lowPerf = false
     private var appliedMode: DriveCamera.Mode? = null
+
+    /** Caps the map's and the car puck's frame rate in low-performance mode (no cap otherwise). */
+    fun applyFps() {
+        val fps = if (lowPerf) com.ahu.tlauncher.system.PerfPolicy.LOW_PERF_MAP_FPS else Int.MAX_VALUE
+        view.setMaximumFps(fps)
+        if (locationActive) runCatching { map?.locationComponent?.setMaxAnimationFps(fps) }
+    }
     private var appliedZoom = -1.0
 
     override fun zoomIn() { map?.animateCamera(CameraUpdateFactory.zoomIn(), 300) }
@@ -310,7 +320,7 @@ private class VectorHandle(val view: MapView) : MapControls {
             if (appliedMode != mode) {
                 lc.cameraMode = CameraMode.TRACKING_GPS
                 lc.renderMode = RenderMode.GPS
-                lc.tiltWhileTracking(DriveCamera.DRIVE_TILT, 750)
+                lc.tiltWhileTracking(DriveCamera.driveTilt(lowPerf), 750)
                 lc.zoomWhileTracking(z, 750); appliedZoom = z
             } else if (kotlin.math.abs(z - appliedZoom) >= 0.25) {
                 lc.zoomWhileTracking(z, 1200); appliedZoom = z
@@ -330,8 +340,8 @@ private class VectorHandle(val view: MapView) : MapControls {
 @SuppressLint("MissingPermission")
 @Composable
 private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier): MapControls {
-    val speed = state.displaySpeedKmh
     val ctx = LocalContext.current
+    val current = rememberUpdatedState(state)
     val handle = remember {
         MapLibre.getInstance(ctx)
         val opts = MapLibreMapOptions.createFromAttributes(ctx)
@@ -391,6 +401,7 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier): Ma
                         override fun onCameraTrackingChanged(currentMode: Int) = Unit
                     })
                     handle.locationActive = true
+                    if (handle.lowPerf) handle.applyFps()
                     handle.recenter()
                 }
             }
@@ -414,15 +425,23 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier): Ma
         }
         if (active && handle.fittedRoute != null) { handle.fittedRoute = null; handle.recenter() }
     }
+    // Low-performance mode: at most 30 fps, and a flat map while driving.
+    val lowPerf = state.lowPerf
+    LaunchedEffect(handle, lowPerf) {
+        if (handle.lowPerf != lowPerf) { handle.lowPerf = lowPerf; handle.applyFps(); handle.recenter() }
+    }
     // Speed decides park vs. drive (with hysteresis); starting to drive always resumes following.
-    LaunchedEffect(speed) {
-        handle.speedKmh = speed
-        val next = DriveCamera.nextMode(handle.mode, speed)
-        if (next != handle.mode) {
-            handle.mode = next
-            if (next == DriveCamera.Mode.DRIVE) handle.following = true
+    // Watched here rather than read in composition, so a new speed doesn't recompose the map.
+    LaunchedEffect(handle) {
+        snapshotFlow { current.value.displaySpeedKmh }.collect { speed ->
+            handle.speedKmh = speed
+            val next = DriveCamera.nextMode(handle.mode, speed)
+            if (next != handle.mode) {
+                handle.mode = next
+                if (next == DriveCamera.Mode.DRIVE) handle.following = true
+            }
+            handle.apply()
         }
-        handle.apply()
     }
     // While driving, re-follow the car 10 s after the last touch.
     LaunchedEffect(handle) {
@@ -502,12 +521,14 @@ private fun rasterMap(dark: Boolean, state: HomeUiState, modifier: Modifier): Ma
         RasterHandle(map, me)
     }
     LifecycleBinding({}, handle.map::onResume, handle.map::onPause, {}, { handle.me?.disableMyLocation(); handle.map.onDetach() })
-    val speed = state.displaySpeedKmh
-    LaunchedEffect(handle, speed) {
-        val next = DriveCamera.nextMode(handle.mode, speed)
-        if (next != handle.mode && next == DriveCamera.Mode.DRIVE) handle.recenter()
-        handle.mode = next
-        handle.apply(speed)
+    val current = rememberUpdatedState(state)
+    LaunchedEffect(handle) {
+        snapshotFlow { current.value.displaySpeedKmh }.collect { speed ->
+            val next = DriveCamera.nextMode(handle.mode, speed)
+            if (next != handle.mode && next == DriveCamera.Mode.DRIVE) handle.recenter()
+            handle.mode = next
+            handle.apply(speed)
+        }
     }
     // While driving, re-follow 10 s after a touch stopped following.
     LaunchedEffect(handle) {

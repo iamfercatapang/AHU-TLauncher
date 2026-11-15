@@ -6,6 +6,10 @@ import com.ahu.tlauncher.notify.MediaInfo
 import com.ahu.tlauncher.notify.NavCardState
 import com.ahu.tlauncher.obd.ObdState
 import com.ahu.tlauncher.system.VolumeState
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import java.time.LocalDateTime
 
 /** The call shown on the dashboard. */
@@ -18,9 +22,32 @@ data class CallUi(
     val canSwitchAudio: Boolean = false,
 )
 
+/**
+ * Values that change several times a second: engine data, GPS and trip fuel. They live in snapshot
+ * state instead of [HomeUiState], so a new reading only redraws the widgets that show it (speed,
+ * callouts, map camera), not the whole home screen. The same instance is kept for the app's life.
+ */
+@Stable
+class LiveState(
+    obd: ObdState = ObdState(),
+    fuel: com.ahu.tlauncher.obd.FuelStats = com.ahu.tlauncher.obd.FuelStats(),
+    gpsSpeedKmh: Int? = null,
+    locationLat: Double? = null,
+    locationLon: Double? = null,
+    locationBearing: Float? = null,
+) {
+    var obd by mutableStateOf(obd)
+    var fuel by mutableStateOf(fuel)
+    var gpsSpeedKmh by mutableStateOf(gpsSpeedKmh)
+    var locationLat by mutableStateOf(locationLat)
+    var locationLon by mutableStateOf(locationLon)
+    var locationBearing by mutableStateOf(locationBearing)
+}
+
 data class HomeUiState(
     val settings: Settings = Settings(),
-    val obd: ObdState = ObdState(),
+    /** Fast-changing values; read them through [obd], [fuel], [gpsSpeedKmh] and the location fields. */
+    val live: LiveState = LiveState(),
     val media: MediaInfo? = null,
     /** Last YouTube Music / Spotify song, shown when nothing is playing (e.g. after the head unit restarts). */
     val lastMedia: MediaInfo? = null,
@@ -30,16 +57,11 @@ data class HomeUiState(
     val notificationAccess: Boolean = false,
     val apps: List<AppEntry> = emptyList(),
     val volume: VolumeState = VolumeState(7, 15, false),
+    /** Updated once a minute (the clock shows hours and minutes). */
     val now: LocalDateTime = LocalDateTime.now(),
-    val locationLat: Double? = null,
-    val locationLon: Double? = null,
-    /** GPS course over ground (degrees), for the heading-up Google map. */
-    val locationBearing: Float? = null,
     /** Google map can run: API key built in and Google Play services present. */
     val googleMapsAvailable: Boolean = false,
     val locationPermission: Boolean = false,
-    /** Speed from GPS (km/h), null without a fresh fix. Used when no OBD adapter is connected. */
-    val gpsSpeedKmh: Int? = null,
     val bluetoothOn: Boolean = false,
     val bluetooth: com.ahu.tlauncher.system.BtStatus = com.ahu.tlauncher.system.BtStatus.OFF,
     val wifi: com.ahu.tlauncher.system.WifiStatus = com.ahu.tlauncher.system.WifiStatus(false, false, 0),
@@ -68,7 +90,6 @@ data class HomeUiState(
     val aaReceiver: String? = null,
     /** "Android Auto ready" prompt dismissed for this network. */
     val aaDismissed: Boolean = false,
-    val fuel: com.ahu.tlauncher.obd.FuelStats = com.ahu.tlauncher.obd.FuelStats(),
     // dashboard route (Google search + Routes)
     val route: com.ahu.tlauncher.route.RouteState? = null,
     val search: com.ahu.tlauncher.route.SearchState = com.ahu.tlauncher.route.SearchState(),
@@ -82,7 +103,31 @@ data class HomeUiState(
     val cell: com.ahu.tlauncher.system.CellStatus? = null,
     /** Notifications for the status-bar bell. */
     val inbox: List<com.ahu.tlauncher.notify.InboxItem> = emptyList(),
-)
+    /** Low-performance mode is on (set, or detected for this head unit). */
+    val lowPerf: Boolean = false,
+    /** RAM and cores of this head unit, for Settings. */
+    val deviceSpec: com.ahu.tlauncher.system.DeviceSpec? = null,
+) {
+    // Reading these in a composable redraws only that composable when they change.
+    val obd: ObdState get() = live.obd
+    val fuel: com.ahu.tlauncher.obd.FuelStats get() = live.fuel
+    /** Speed from GPS (km/h), null without a fresh fix. Used when no OBD adapter is connected. */
+    val gpsSpeedKmh: Int? get() = live.gpsSpeedKmh
+    val locationLat: Double? get() = live.locationLat
+    val locationLon: Double? get() = live.locationLon
+    /** GPS course over ground (degrees), for the heading-up Google map. */
+    val locationBearing: Float? get() = live.locationBearing
+
+    /** A copy with its own live values (previews and tests). */
+    fun withLive(
+        obd: ObdState = this.obd,
+        fuel: com.ahu.tlauncher.obd.FuelStats = this.fuel,
+        gpsSpeedKmh: Int? = this.gpsSpeedKmh,
+        locationLat: Double? = this.locationLat,
+        locationLon: Double? = this.locationLon,
+        locationBearing: Float? = this.locationBearing,
+    ) = copy(live = LiveState(obd, fuel, gpsSpeedKmh, locationLat, locationLon, locationBearing))
+}
 
 /** Route search and drawing need the Google key, Play services and the Google map selected. */
 val HomeUiState.routesEnabled: Boolean
@@ -157,6 +202,7 @@ interface HomeActions {
     fun setTempUnit(u: com.ahu.tlauncher.data.TempUnit) {}
     fun setNavApp(a: com.ahu.tlauncher.data.NavApp) {}
     fun setCarSide(side: com.ahu.tlauncher.data.CarSide) {}
+    fun setPerfMode(m: com.ahu.tlauncher.data.PerfMode) {}
     fun setHome(addr: String) {}
     fun setWork(addr: String) {}
     fun setObdSource(s: com.ahu.tlauncher.data.ObdSourceType) {}

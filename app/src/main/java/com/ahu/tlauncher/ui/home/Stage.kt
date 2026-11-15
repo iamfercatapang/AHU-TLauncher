@@ -59,6 +59,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -99,6 +100,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.drawscope.scale
 import com.ahu.tlauncher.ui.components.IconButtonT
 import com.ahu.tlauncher.ui.components.pressable
+import com.ahu.tlauncher.ui.theme.LocalLowPerf
 import com.ahu.tlauncher.ui.theme.T
 import com.ahu.tlauncher.ui.theme.TMotion
 import com.ahu.tlauncher.ui.theme.TShapes
@@ -197,7 +199,7 @@ private fun SpeedBlock(state: HomeUiState, modifier: Modifier, glideKey: Any) {
     val mph = state.settings.speedUnit == SpeedUnit.MPH
     val target = if (mph) (kmh * 0.621371).roundToInt() else kmh
     // Count to the new value instead of jumping (tabular figures keep the width steady).
-    val speed by animateIntAsState(target, TMotion.count(), label = "speed")
+    val speed by animateIntAsState(target, TMotion.live(), label = "speed")
     // Laid out like the prototype's speed card: number, then a row with the source where gears would be,
     // the unit in the middle and a battery-style fuel gauge on the right, then a thin RPM line.
     Column(modifier.padding(top = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -222,7 +224,7 @@ private fun SpeedBlock(state: HomeUiState, modifier: Modifier, glideKey: Any) {
 /** TLauncher's fuel gauge: pump icon, slim level bar and "62% · 335 km". Amber when low. */
 @Composable
 private fun FuelGauge(pct: Int, rangeKm: Int?, mph: Boolean, modifier: Modifier) {
-    val level by animateFloatAsState(pct.coerceIn(0, 100) / 100f, TMotion.count(), label = "fuel")
+    val level by animateFloatAsState(pct.coerceIn(0, 100) / 100f, TMotion.live(), label = "fuel")
     val low = pct < com.ahu.tlauncher.obd.FuelMath.LOW_FUEL_PCT
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Rounded.LocalGasStation, "Fuel", tint = if (low) TELL_AMBER else T.colors.muted, modifier = Modifier.size(14.dp))
@@ -239,7 +241,7 @@ private fun FuelGauge(pct: Int, rangeKm: Int?, mph: Boolean, modifier: Modifier)
 /** Thin track with a green marker that moves with engine RPM (the prototype's power line). */
 @Composable
 private fun RpmLine(rpm: Int?, modifier: Modifier) {
-    val frac by animateFloatAsState(((rpm ?: 0) / 7000f).coerceIn(0f, 1f), TMotion.count(), label = "rpm")
+    val frac by animateFloatAsState(((rpm ?: 0) / 7000f).coerceIn(0f, 1f), TMotion.live(), label = "rpm")
     BoxWithConstraints(modifier.height(4.dp)) {
         Box(Modifier.align(Alignment.Center).fillMaxWidth().height(1.dp).background(T.colors.muted))
         if (rpm != null) {
@@ -252,21 +254,24 @@ private fun RpmLine(rpm: Int?, modifier: Modifier) {
 /** Vehicle tell-tales: only shown when active, in conventional indicator colours. */
 @Composable
 private fun Telltales(state: HomeUiState, modifier: Modifier) {
-    val d = state.obd.data
-    val obd = ObdDisplay.show(state.obd.status)
-    val items = buildList {
-        // Lights on (head unit ILL wire): green, like the cluster's dipped-beam lamp.
-        if (!obd) return@buildList
-        if (state.obd.status == ObdStatus.CONNECTED) add(Triple(Icons.Rounded.SettingsInputComponent, TELL_GREEN, "OBD connected"))
+    // Derived, so new engine readings only redraw this when a light comes on or goes off.
+    val items by remember(state.live) { derivedStateOf { telltaleItems(state) } }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        items.forEach { (icon, color, desc) -> Icon(icon, desc, tint = color, modifier = Modifier.size(28.dp)) }
+    }
+}
+
+private fun telltaleItems(state: HomeUiState) = state.obd.let { o ->
+    val d = o.data
+    buildList {
+        if (!ObdDisplay.show(o.status)) return@buildList
+        if (o.status == ObdStatus.CONNECTED) add(Triple(Icons.Rounded.SettingsInputComponent, TELL_GREEN, "OBD connected"))
         d.coolantC?.let {
             if (it < 50) add(Triple(Icons.Rounded.Thermostat, TELL_BLUE, "Engine cold"))
             if (it >= 105) add(Triple(Icons.Rounded.Thermostat, TELL_RED, "Engine hot"))
         }
         d.batteryV?.let { if (it < 11.8 || it > 15.2) add(Triple(Icons.Rounded.BatteryAlert, TELL_RED, "Battery voltage")) }
         d.fuelPct?.let { if (it < com.ahu.tlauncher.obd.FuelMath.LOW_FUEL_PCT) add(Triple(Icons.Rounded.LocalGasStation, TELL_AMBER, "Low fuel")) }
-    }
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        items.forEach { (icon, color, desc) -> Icon(icon, desc, tint = color, modifier = Modifier.size(28.dp)) }
     }
 }
 
@@ -281,7 +286,18 @@ private const val CAR_SCALE = 0.85f
 /** Width the three callouts need to sit side by side without overlapping. */
 private val CALLOUT_MIN_W = 330.dp
 
-private data class Callout(val fraction: Float, val label: String, val value: String, val alert: Boolean = false)
+private enum class CalloutKind(val fraction: Float, val label: String) { RPM(0.2f, "Engine"), COOLANT(0.5f, "Coolant"), BATTERY(0.82f, "Battery") }
+
+/** Which callouts have data. Changes rarely, unlike the values themselves. */
+private fun calloutKinds(state: HomeUiState): List<CalloutKind> {
+    val o = state.obd
+    if (!ObdDisplay.show(o.status)) return emptyList()
+    return listOfNotNull(
+        CalloutKind.RPM.takeIf { o.data.rpm != null },
+        CalloutKind.COOLANT.takeIf { o.data.coolantC != null },
+        CalloutKind.BATTERY.takeIf { o.data.batteryV != null },
+    )
+}
 
 /** Car photo (tap to change view) with mirrored floor reflection and data callouts with leader lines. */
 @Composable
@@ -299,21 +315,16 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, glideKey: Any) {
     }
     val expanded = glideKey == true
     // 0 = front, 1 = 3/4. Like the prototype's turntable: the car swings round on a vertical axis.
+    // Low-performance mode: a short cross-fade instead of the 3D turn.
+    val low = LocalLowPerf.current
     val turn = remember { androidx.compose.animation.core.Animatable(if (expanded) 1f else 0f) }
-    LaunchedEffect(expanded) { turn.animateTo(if (expanded) 1f else 0f, tween(CAR_TURN_MS, easing = TMotion.EaseInOut)) }
+    LaunchedEffect(expanded) {
+        turn.animateTo(if (expanded) 1f else 0f, if (low) tween(LOW_PERF_FADE_MS) else tween(CAR_TURN_MS, easing = TMotion.EaseInOut))
+    }
 
-    val showObd = ObdDisplay.show(state.obd.status)
-    val d = state.obd.data
     val f = state.settings.tempUnit == TempUnit.F
-    // Readouts count to new values rather than jumping.
-    val rpm by animateIntAsState(d.rpm ?: 0, TMotion.count(), label = "rpm")
-    val coolant by animateIntAsState(d.coolantC ?: 0, TMotion.count(), label = "coolant")
-    val volts by animateFloatAsState((d.batteryV ?: 0.0).toFloat(), TMotion.count(), label = "volts")
-    val callouts = if (!showObd) emptyList() else listOfNotNull(
-        d.rpm?.let { Callout(0.2f, "Engine", "%,d rpm".format(rpm)) },
-        d.coolantC?.let { Callout(0.5f, "Coolant", "${if (f) (coolant * 9 / 5.0 + 32).roundToInt() else coolant}°${if (f) "F" else "C"}", alert = it >= 105) },
-        d.batteryV?.let { Callout(0.82f, "Battery", "%.1f V".format(volts), alert = it < 11.8 || it > 15.2) },
-    )
+    // The car and its layout only redraw when a callout appears or disappears, not on every reading.
+    val callouts by remember(state.live) { derivedStateOf { calloutKinds(state) } }
     val shadowColor = if (T.colors.isDark) Color.Black.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.32f)
 
     val front = rememberCarPainter(frontSrc)
@@ -344,7 +355,7 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, glideKey: Any) {
                             }
                         },
                 )
-                callouts.forEach { c -> CalloutView(c, rowW, calloutH, imgH, lines) }
+                callouts.forEach { c -> CalloutView(c, state, f, rowW, calloutH, imgH, lines) }
                 // Both photos sit on the same ground line; the turn swaps them mid-way.
                 val p = turn.value
                 listOf(front to (1f - p), side to p).forEach { (painter, weight) ->
@@ -359,8 +370,10 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, glideKey: Any) {
                             .size(w, h)
                             .graphicsLayer {
                                 // front swings away to the left; the 3/4 view swings in from the right
-                                rotationY = if (isFront) -60f * p else 60f * (1f - p)
-                                cameraDistance = 14f * density
+                                if (!low) {
+                                    rotationY = if (isFront) -60f * p else 60f * (1f - p)
+                                    cameraDistance = 14f * density
+                                }
                                 alpha = ((weight - 0.25f) / 0.5f).coerceIn(0f, 1f)
                             },
                     )
@@ -372,6 +385,8 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, glideKey: Any) {
 
 /** Length of the front ↔ 3/4 car turn (prototype's card transitions are ~0.6 s). */
 private const val CAR_TURN_MS = 600
+/** Cross-fade used instead of the turn in low-performance mode. */
+private const val LOW_PERF_FADE_MS = 200
 
 @Composable
 private fun rememberCarPainter(src: CarSource): Painter? {
@@ -391,15 +406,36 @@ private fun rememberCarPainter(src: CarSource): Painter? {
 private fun Size.isSpecified() = width.isFinite() && height.isFinite()
 
 @Composable
-private fun CalloutView(c: Callout, imgW: Dp, calloutH: Dp, imgH: Dp, line: Boolean) {
+private fun CalloutView(c: CalloutKind, state: HomeUiState, fahrenheit: Boolean, imgW: Dp, calloutH: Dp, imgH: Dp, line: Boolean) {
     val x = imgW * c.fraction
     val lineTop = 38.dp
     val lineEnd = calloutH + imgH * 0.22f
     if (line) Box(Modifier.offset(x = x - 0.5.dp, y = lineTop).width(1.dp).height(lineEnd - lineTop).background(T.colors.text.copy(alpha = 0.55f)))
     Column(Modifier.offset(x = x + 6.dp, y = 0.dp)) {
         Text(c.label, style = TType.caption, color = T.colors.muted, maxLines = 1)
-        Text(c.value, style = TType.button, color = if (c.alert) TELL_RED else T.colors.text, maxLines = 1)
+        CalloutValue(c, state, fahrenheit)
     }
+}
+
+/** The live number under a callout: the only part that redraws on each reading. Counts to new values. */
+@Composable
+private fun CalloutValue(c: CalloutKind, state: HomeUiState, fahrenheit: Boolean) {
+    val d = state.obd.data
+    val (text, alert) = when (c) {
+        CalloutKind.RPM -> {
+            val rpm by animateIntAsState(d.rpm ?: 0, TMotion.live(), label = "rpm")
+            "%,d rpm".format(rpm) to false
+        }
+        CalloutKind.COOLANT -> {
+            val coolant by animateIntAsState(d.coolantC ?: 0, TMotion.live(), label = "coolant")
+            "${if (fahrenheit) (coolant * 9 / 5.0 + 32).roundToInt() else coolant}°${if (fahrenheit) "F" else "C"}" to ((d.coolantC ?: 0) >= 105)
+        }
+        CalloutKind.BATTERY -> {
+            val volts by animateFloatAsState((d.batteryV ?: 0.0).toFloat(), TMotion.live(), label = "volts")
+            "%.1f V".format(volts) to (d.batteryV?.let { it < 11.8 || it > 15.2 } == true)
+        }
+    }
+    Text(text, style = TType.button, color = if (alert) TELL_RED else T.colors.text, maxLines = 1)
 }
 
 // ---------------------------------------------------------------- cards
@@ -535,9 +571,10 @@ fun AlbumArt(m: MediaInfo?, modifier: Modifier) {
 /** Live position = last reported position + elapsed time × speed (while playing). */
 @Composable
 fun livePosition(m: MediaInfo?): Long {
+    val low = LocalLowPerf.current
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     LaunchedEffect(m?.isPlaying, m?.updateTimeMs) {
-        while (m?.isPlaying == true) { now = SystemClock.elapsedRealtime(); delay(500) }
+        while (m?.isPlaying == true) { now = SystemClock.elapsedRealtime(); delay(if (low) 1_000 else 500) }
     }
     if (m == null) return 0
     if (!m.isPlaying || m.updateTimeMs <= 0) return m.positionMs

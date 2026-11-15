@@ -20,11 +20,12 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -35,6 +36,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.ahu.tlauncher.data.CarView
@@ -50,12 +52,20 @@ import com.ahu.tlauncher.ui.home.CANVAS_W
 import com.ahu.tlauncher.ui.home.HomeActions
 import com.ahu.tlauncher.ui.home.HomeScreen
 import com.ahu.tlauncher.ui.home.HomeUiState
+import com.ahu.tlauncher.ui.home.LiveState
 import com.ahu.tlauncher.ui.theme.DayNight
+import com.ahu.tlauncher.ui.theme.LocalLowPerf
 import com.ahu.tlauncher.ui.theme.TLauncherTheme
 import com.ahu.tlauncher.ui.theme.ThemeMode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 import java.time.ZonedDateTime
 import kotlin.math.min
@@ -146,31 +156,41 @@ class MainActivity : ComponentActivity(), HomeActions {
         }
     }
 
+    /**
+     * Builds the home screen state. Only slow-changing values go into [HomeUiState] (Root re-runs at most
+     * about once a minute while nothing is touched). Engine data, GPS and trip fuel go into [LiveState],
+     * which only the widgets that show them read. All collection pauses while the launcher is hidden.
+     */
     @Composable
     private fun Root() {
-        val settings by app.prefs.settings.collectAsState(initial = com.ahu.tlauncher.data.Settings())
-        val obd by app.obd.state.collectAsState()
-        val media by NotificationHub.media.collectAsState()
-        val nav by NotificationHub.nav.collectAsState()
-        val access by NotificationHub.accessGranted.collectAsState()
-        val apps by app.apps.apps.collectAsState()
-        val volume by app.volume.state.collectAsState()
-        val location by app.location.location.collectAsState()
-        val update by app.updater.state.collectAsState()
-        val weather by app.weather.weather.collectAsState()
-        val diag by app.obd.diag.collectAsState()
-        val fuel by app.fuel.stats.collectAsState()
-        val lights by app.lights.state.collectAsState()
-        val notifCall by NotificationHub.call.collectAsState()
-        val aa by app.androidAuto.state.collectAsState()
-        val route by app.routes.route.collectAsState()
-        val search by app.routes.search.collectAsState()
-        val recents by app.routes.recents.collectAsState()
-        val favourites by app.routes.favourites.collectAsState()
-        val etaMin by app.routes.etaMin.collectAsState()
-        val lastMedia by app.lastMedia.last.collectAsState()
-        val eqCaps by app.soundEq.caps.collectAsState()
-        val resumingMedia by app.lastMedia.resuming.collectAsState()
+        val settings by app.prefs.settings.collectAsStateWithLifecycle(initialValue = com.ahu.tlauncher.data.Settings())
+        val media by NotificationHub.media.collectAsStateWithLifecycle()
+        val nav by NotificationHub.nav.collectAsStateWithLifecycle()
+        val access by NotificationHub.accessGranted.collectAsStateWithLifecycle()
+        val apps by app.apps.apps.collectAsStateWithLifecycle()
+        val volume by app.volume.state.collectAsStateWithLifecycle()
+        val update by app.updater.state.collectAsStateWithLifecycle()
+        val weather by app.weather.weather.collectAsStateWithLifecycle()
+        val diag by app.obd.diag.collectAsStateWithLifecycle()
+        val lights by app.lights.state.collectAsStateWithLifecycle()
+        val notifCall by NotificationHub.call.collectAsStateWithLifecycle()
+        val aa by app.androidAuto.state.collectAsStateWithLifecycle()
+        val route by app.routes.route.collectAsStateWithLifecycle()
+        val search by app.routes.search.collectAsStateWithLifecycle()
+        val recents by app.routes.recents.collectAsStateWithLifecycle()
+        val favourites by app.routes.favourites.collectAsStateWithLifecycle()
+        val etaMin by app.routes.etaMin.collectAsStateWithLifecycle()
+        val lastMedia by app.lastMedia.last.collectAsStateWithLifecycle()
+        val eqCaps by app.soundEq.caps.collectAsStateWithLifecycle()
+        val resumingMedia by app.lastMedia.resuming.collectAsStateWithLifecycle()
+        val inbox by NotificationHub.inbox.collectAsStateWithLifecycle()
+
+        // Low-performance mode: set in Settings, or Auto from this unit's RAM and cores.
+        val spec = remember { com.ahu.tlauncher.system.DeviceSpec.read(this) }
+        val lowPerf = com.ahu.tlauncher.system.PerfPolicy.active(settings.perfMode, spec)
+        val live = remember { LiveState() }
+        LaunchedEffect(live, lowPerf) { lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { feedLive(live, lowPerf) } }
+
         // The trip ends when Google Maps / Waze stops navigating (their turn notification disappears for 20 s).
         val navOn = nav != null
         LaunchedEffect(navOn, route?.phase) {
@@ -180,31 +200,33 @@ class MainActivity : ComponentActivity(), HomeActions {
         }
         LaunchedEffect(navOn) { if (navOn && route?.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE) navSeenDuringTrip = true }
         LaunchedEffect(route == null) { if (route == null) navSeenDuringTrip = false }
-        val dismissedCode by app.updater.dismissedCode.collectAsState()
+        val dismissedCode by app.updater.dismissedCode.collectAsStateWithLifecycle()
+        // The clock only shows minutes, so it ticks on the minute.
         val now by produceState(LocalDateTime.now()) {
-            while (true) { value = LocalDateTime.now(); delay(1000 - (System.currentTimeMillis() % 1000)) }
+            while (true) { value = LocalDateTime.now(); delay(60_000 - (System.currentTimeMillis() % 60_000)) }
         }
         val tick = resumeTick
-        val btOn = remember(tick, now.minute) { bluetoothEnabled() }
-        // Bluetooth / Wi-Fi indicators refresh every 5 s (and on resume).
-        val bt = remember(tick, now.second / 5, now.minute) { com.ahu.tlauncher.system.Connectivity.bluetooth(this) }
-        val wifi = remember(tick, now.second / 5, now.minute) { com.ahu.tlauncher.system.Connectivity.wifi(this) }
-        val cell = remember(tick, now.second / 10, now.minute) { com.ahu.tlauncher.system.Connectivity.cell(this) }
-        val inbox by NotificationHub.inbox.collectAsState()
-        val gpsSpeed = location?.let { l ->
-            val age = (android.os.SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos) / 1_000_000
-            com.ahu.tlauncher.obd.GpsSpeed.kmh(l.hasSpeed(), l.speed, age)
-        }
+        // Status bar indicators, read off the main thread while the launcher is on screen.
+        val btOn by polled(false, tick, 5_000) { bluetoothEnabled() }
+        val bt by polled(com.ahu.tlauncher.system.BtStatus.OFF, tick, 5_000) { com.ahu.tlauncher.system.Connectivity.bluetooth(this) }
+        val wifi by polled(com.ahu.tlauncher.system.WifiStatus(false, false, 0), tick, 5_000) { com.ahu.tlauncher.system.Connectivity.wifi(this) }
+        val cell by polled<com.ahu.tlauncher.system.CellStatus?>(null, tick, 10_000) { com.ahu.tlauncher.system.Connectivity.cell(this) }
         val isDefault = remember(tick) { isDefaultLauncher() }
         val locPerm = remember(tick) { app.location.hasPermission() }
 
-        val dark = DayNight.isDark(settings.themeMode, ZonedDateTime.now(), location?.latitude, location?.longitude)
+        // Day/night only needs a rough position (0.1° ≈ 11 km), so GPS fixes don't redraw the screen.
+        val roughPlace by remember {
+            app.location.location.map { l -> l?.let { Math.round(it.latitude * 10) to Math.round(it.longitude * 10) } }.distinctUntilChanged()
+        }.collectAsStateWithLifecycle(null)
+        val lat = roughPlace?.first?.div(10.0)
+        val lon = roughPlace?.second?.div(10.0)
+        val dark = remember(now, settings.themeMode, roughPlace) { DayNight.isDark(settings.themeMode, ZonedDateTime.now(), lat, lon) }
         LaunchedEffect(dark) {
             WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = !dark
         }
 
         // Calls: the phone app's notification if there is one, else Android's call system (polled each second).
-        val telecom = remember(now) { app.calls.telecomState() }
+        val telecom by polled(com.ahu.tlauncher.system.TelecomCall.NONE, tick, 1_000) { app.calls.telecomState() }
         val n = notifCall
         val ringing = n?.info?.phase == com.ahu.tlauncher.notify.CallPhase.RINGING || (n == null && telecom == com.ahu.tlauncher.system.TelecomCall.RINGING)
         val callActive = n != null || telecom != com.ahu.tlauncher.system.TelecomCall.NONE
@@ -224,7 +246,7 @@ class MainActivity : ComponentActivity(), HomeActions {
         val returnPerm = remember(tick) { canReturnToFront() }
         // Brightness: one level for day, one for night (sunset to sunrise, same as the auto dark theme).
         val brightAllowed = remember(tick) { app.brightness.canWrite() }
-        val night = DayNight.isDark(ThemeMode.AUTO, ZonedDateTime.now(), location?.latitude, location?.longitude)
+        val night = remember(now, roughPlace) { DayNight.isDark(ThemeMode.AUTO, ZonedDateTime.now(), lat, lon) }
         LaunchedEffect(night, brightAllowed, settings.brightDay, settings.brightNight) {
             val level = if (night) settings.brightNight else settings.brightDay
             if (brightAllowed && level > 0 && level != brightnessNow) { app.brightness.set(level); brightnessNow = level }
@@ -234,15 +256,13 @@ class MainActivity : ComponentActivity(), HomeActions {
         val freeMap = !(googleMapsAvailable && settings.mapEngine == com.ahu.tlauncher.data.MapEngine.GOOGLE)
         app.freeMap = freeMap
         val state = HomeUiState(
-            settings = settings, obd = obd, media = media, nav = nav, notificationAccess = access,
+            settings = settings, live = live, media = media, nav = nav, notificationAccess = access,
             apps = apps, volume = volume, now = now,
-            locationLat = location?.latitude, locationLon = location?.longitude,
-            locationBearing = location?.takeIf { it.hasBearing() }?.bearing,
-            googleMapsAvailable = googleMapsAvailable, locationPermission = locPerm, gpsSpeedKmh = gpsSpeed,
+            googleMapsAvailable = googleMapsAvailable, locationPermission = locPerm,
             bluetoothOn = btOn, bluetooth = bt, wifi = wifi, isDefaultLauncher = isDefault,
             update = update, updateDismissedCode = dismissedCode, appVersion = BuildConfig.VERSION_NAME,
             weather = weather?.takeIf { System.currentTimeMillis() - it.fetchedAtMs < com.ahu.tlauncher.system.WeatherParser.MAX_AGE_MS },
-            diag = diag, fuel = fuel,
+            diag = diag,
             lastMedia = if (media == null) lastMedia else null, resumingMedia = resumingMedia,
             route = route, search = search, freeNav = freeMap, cell = cell, inbox = inbox, recents = recents, favourites = favourites, etaMin = etaMin,
             lights = lights,
@@ -251,8 +271,56 @@ class MainActivity : ComponentActivity(), HomeActions {
             brightness = brightnessNow, brightnessNight = night, brightnessAllowed = brightAllowed, callSource = remember(notifCall) { NotificationHub.lastCallPackage },
             aa = aa, aaReceiver = aaReceiver,
             aaDismissed = (aa as? com.ahu.tlauncher.system.AaState.Ready)?.gateway?.let { it == aaDismissedOn } == true,
+            lowPerf = lowPerf, deviceSpec = spec,
         )
-        TLauncherTheme(dark = dark) { ScaledCanvas { HomeScreen(state, this@MainActivity) } }
+        CompositionLocalProvider(LocalLowPerf provides lowPerf) {
+            TLauncherTheme(dark = dark) { ScaledCanvas { HomeScreen(state, this@MainActivity) } }
+        }
+    }
+
+    /**
+     * Copies engine data, trip fuel and GPS into [live] while the launcher is visible. OBD readings that
+     * change nothing on screen are skipped; low-performance mode passes at most two a second.
+     */
+    private suspend fun feedLive(live: LiveState, lowPerf: Boolean): Unit = coroutineScope {
+        val gap = if (lowPerf) com.ahu.tlauncher.system.PerfPolicy.LOW_PERF_UI_MS else 0L
+        launch {
+            app.obd.state.collect { s ->
+                if (com.ahu.tlauncher.obd.ObdDisplay.visiblyChanged(live.obd, s)) { live.obd = s; if (gap > 0) delay(gap) }
+            }
+        }
+        // Trip totals and range: once a second is plenty.
+        launch { app.fuel.stats.collect { live.fuel = it; delay(maxOf(gap, 1_000L)) } }
+        launch {
+            app.location.location.collectLatest { l ->
+                live.locationLat = l?.latitude
+                live.locationLon = l?.longitude
+                live.locationBearing = l?.takeIf { it.hasBearing() }?.bearing
+                live.gpsSpeedKmh = l?.let(::gpsKmh)
+                // No new fix: the GPS speed goes stale (and blank) after 10 s.
+                if (l != null) { delay(10_500); live.gpsSpeedKmh = gpsKmh(l) }
+            }
+        }
+        Unit
+    }
+
+    private fun gpsKmh(l: android.location.Location): Int? {
+        val age = (android.os.SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos) / 1_000_000
+        return com.ahu.tlauncher.obd.GpsSpeed.kmh(l.hasSpeed(), l.speed, age)
+    }
+
+    /** A value read every [everyMs] on a background thread while the launcher is on screen; re-read when [key] changes. */
+    @Composable
+    private fun <T> polled(initial: T, key: Any?, everyMs: Long, read: () -> T): State<T> {
+        val r = rememberUpdatedState(read)
+        return produceState(initial, key) {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    value = withContext(Dispatchers.IO) { runCatching { r.value() }.getOrDefault(value) }
+                    delay(everyMs)
+                }
+            }
+        }
     }
 
     // ---------------- HomeActions ----------------
@@ -505,6 +573,7 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun setTempUnit(u: TempUnit) { lifecycleScope.launch { app.prefs.setTempUnit(u) } }
     override fun setNavApp(a: NavApp) { lifecycleScope.launch { app.prefs.setNavApp(a) } }
     override fun setCarSide(side: com.ahu.tlauncher.data.CarSide) { lifecycleScope.launch { app.prefs.setCarSide(side) } }
+    override fun setPerfMode(m: com.ahu.tlauncher.data.PerfMode) { lifecycleScope.launch { app.prefs.setPerfMode(m) } }
     override fun setHome(addr: String) { lifecycleScope.launch { app.prefs.setHome(addr) } }
     override fun setWork(addr: String) { lifecycleScope.launch { app.prefs.setWork(addr) } }
 

@@ -22,6 +22,7 @@ These screenshots are rendered offline, so they show a placeholder street grid a
 - **Navigate / Home / Work shortcuts** that open Google Maps, Waze, or ask which app to use.
 - **Automatic day and night themes**, switched by sunrise and sunset at your location. You can also force light or dark.
 - **Volume control** in the dock.
+- **Light on slow head units**: engine and GPS readings only redraw the parts of the screen that show them, and nothing updates while another app is in front. *Settings → Display → Performance* has a low-performance mode for slow units. It turns off the car turn, panel sweep and counting numbers, sends engine data to the screen twice a second, and caps the map at 30 fps with no tilt. **Auto** (the default) turns it on for units with under ~2.5 GB of RAM or fewer than 4 cores.
 
 ## Install on the head unit
 1. On the head unit's browser, open **https://github.com/iamfercatapang/AHU-TLauncher/releases/latest/download/TLauncher.apk**. You can also find it on the [Releases page](https://github.com/iamfercatapang/AHU-TLauncher/releases/latest). Each change to `main` updates this file automatically.

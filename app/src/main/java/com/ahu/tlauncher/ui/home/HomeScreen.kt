@@ -126,7 +126,9 @@ fun HomeScreen(
     // at its split size underneath and fades in 200 ms behind the edge.
     val stageFraction = if (mapVisible) SPLIT_FRACTION else 1f
     val edge = remember { androidx.compose.animation.core.Animatable(stageFraction) }
-    LaunchedEffect(mapVisible) { edge.animateTo(stageFraction, TMotion.split()) }
+    // Low-performance mode: the panel jumps (the map still fades in behind it).
+    val lowPerf = com.ahu.tlauncher.ui.theme.LocalLowPerf.current
+    LaunchedEffect(mapVisible) { if (lowPerf) edge.snapTo(stageFraction) else edge.animateTo(stageFraction, TMotion.split()) }
     // Keep the map while the panel is still sweeping over it. Read per frame only by this derived flag.
     val mapComposed by remember { androidx.compose.runtime.derivedStateOf { mapVisible || edge.value < 0.999f } }
     val panelBrush = stageBrush()
@@ -369,7 +371,9 @@ private fun MapReveal(modifier: Modifier, content: @Composable () -> Unit) {
     val cover = remember { androidx.compose.animation.core.Animatable(1f) }
     if (LocalInspectionMode.current) { Box(modifier) { content() }; return }
     // Trails the car panel's edge, like the prototype's delayed map resize.
-    LaunchedEffect(Unit) { cover.animateTo(0f, androidx.compose.animation.core.tween(TMotion.ENTER_MS, delayMillis = TMotion.MAP_LAG_MS, easing = TMotion.EaseOut)) }
+    // Low-performance mode: no lag (the panel edge jumps), just the short fade.
+    val lag = if (com.ahu.tlauncher.ui.theme.LocalLowPerf.current) 0 else TMotion.MAP_LAG_MS
+    LaunchedEffect(Unit) { cover.animateTo(0f, androidx.compose.animation.core.tween(TMotion.ENTER_MS, delayMillis = lag, easing = TMotion.EaseOut)) }
     Box(modifier) {
         content()
         if (cover.value > 0f) Box(Modifier.fillMaxSize().background(T.colors.appBg.copy(alpha = cover.value)))
@@ -390,11 +394,13 @@ private fun StatusBar(
     mapSpan: Pair<androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp>? = null,
 ) {
     val time = state.now.format(DateTimeFormatter.ofPattern(if (is24h()) "HH:mm" else "h:mm a", Locale.US))
+    // Only the connection status, so engine readings don't redraw the status bar.
+    val obdStatus by remember(state.live) { androidx.compose.runtime.derivedStateOf { state.obd.status } }
     BoxWithConstraints(modifier) {
         // car panel, top-left: OBD badge
-        if (com.ahu.tlauncher.obd.ObdDisplay.show(state.obd.status)) {
+        if (com.ahu.tlauncher.obd.ObdDisplay.show(obdStatus)) {
             val obdX = if (mapSpan != null && mapSpan.first.value == 0f) mapSpan.second + 20.dp else 20.dp
-            ObdBadge(state.obd.status, Modifier.align(Alignment.CenterStart).padding(start = obdX).pressable(onClick = onObdClick))
+            ObdBadge(obdStatus, Modifier.align(Alignment.CenterStart).padding(start = obdX).pressable(onClick = onObdClick))
         }
         val links = @Composable { Connectivity(state, onBellClick, onStatusClick, onAnchor) }
         val clock = @Composable {

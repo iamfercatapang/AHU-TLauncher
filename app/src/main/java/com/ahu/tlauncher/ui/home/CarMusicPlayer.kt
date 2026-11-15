@@ -111,11 +111,25 @@ private fun Ctrl(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: St
 /** Four small bars that bounce while music plays (prototype's playing meter). */
 @Composable
 private fun LevelMeter(playing: Boolean) {
-    val t = rememberInfiniteTransition(label = "meter")
+    // The bouncing animation only exists while music plays (and not in low-performance mode),
+    // so a paused player draws nothing frame after frame.
+    val preview = LocalInspectionMode.current
+    val animate = playing && !preview && !com.ahu.tlauncher.ui.theme.LocalLowPerf.current
     Row(Modifier.height(14.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.Bottom) {
-        listOf(0, 400, 200, 600).forEach { delay ->
-            val h by t.animateFloat(4f, 14f, infiniteRepeatable(tween(750, delayMillis = delay), RepeatMode.Reverse), label = "bar")
-            Box(Modifier.width(3.dp).height(if (playing && !LocalInspectionMode.current) h.dp else 5.dp).clip(RoundedCornerShape(2.dp)).background(T.colors.text.copy(alpha = 0.8f)))
+        if (animate) {
+            val t = rememberInfiniteTransition(label = "meter")
+            listOf(0, 400, 200, 600).forEach { delay ->
+                val h by t.animateFloat(4f, 14f, infiniteRepeatable(tween(750, delayMillis = delay), RepeatMode.Reverse), label = "bar")
+                MeterBar(Modifier.height(h.dp))
+            }
+        } else {
+            // Still bars: uneven while playing (low-performance mode) so it still reads as "playing".
+            listOf(9, 13, 7, 11).forEach { h -> MeterBar(Modifier.height(if (playing && !preview) h.dp else 5.dp)) }
         }
     }
+}
+
+@Composable
+private fun MeterBar(modifier: Modifier) {
+    Box(modifier.width(3.dp).clip(RoundedCornerShape(2.dp)).background(T.colors.text.copy(alpha = 0.8f)))
 }

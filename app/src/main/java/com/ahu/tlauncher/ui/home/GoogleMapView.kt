@@ -7,6 +7,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -72,6 +74,9 @@ private fun carArrow(density: Float): com.google.android.gms.maps.model.BitmapDe
     return com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(b)
 }
 
+/** Position, course and speed of the car, for the map camera. */
+private data class CarFix(val lat: Double?, val lon: Double?, val bearing: Float?, val speed: Int?)
+
 private class GoogleHandle(val view: MapView) : MapControls {
     var map: GoogleMap? = null
     var mode = DriveCamera.Mode.PARK
@@ -85,6 +90,8 @@ private class GoogleHandle(val view: MapView) : MapControls {
     override val bearing: Float get() = bearingState.floatValue
     override fun northUp() { val m = map ?: return; following = false; m.animateCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder(m.cameraPosition).bearing(0f).tilt(0f).build()), 500, null) }
     var speedKmh: Int? = null
+    /** Low-performance mode: no tilt while driving. */
+    var lowPerf = false
     val routeShapes = ArrayList<Any>() // Polylines + destination Marker
     var fittedRoute: Any? = null
 
@@ -98,7 +105,7 @@ private class GoogleHandle(val view: MapView) : MapControls {
         if (!following) return
         val target = LatLng(lat ?: return, lon ?: return)
         val pos = if (mode == DriveCamera.Mode.DRIVE) {
-            CameraPosition(target, DriveCamera.zoomFor(speedKmh ?: 30).toFloat(), DriveCamera.DRIVE_TILT.toFloat(), gpsBearing ?: m.cameraPosition.bearing)
+            CameraPosition(target, DriveCamera.zoomFor(speedKmh ?: 30).toFloat(), DriveCamera.driveTilt(lowPerf).toFloat(), gpsBearing ?: m.cameraPosition.bearing)
         } else {
             CameraPosition(target, DriveCamera.PARK_ZOOM.toFloat(), DriveCamera.PARK_TILT.toFloat(), 0f)
         }
@@ -141,30 +148,33 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
     // The car is drawn as the prototype's red arrow (pointing along the GPS course) instead of Google's blue dot.
     val carDensity = LocalContext.current.resources.displayMetrics.density
     val car = remember { mutableStateOf<com.google.android.gms.maps.model.Marker?>(null) }
-    LaunchedEffect(m, state.locationLat, state.locationLon, state.locationBearing) {
-        val gm = m ?: return@LaunchedEffect
-        val lat = state.locationLat ?: return@LaunchedEffect
-        val lon = state.locationLon ?: return@LaunchedEffect
-        val pos = LatLng(lat, lon)
-        val marker = car.value ?: gm.addMarker(
-            com.google.android.gms.maps.model.MarkerOptions().position(pos).icon(carArrow(carDensity)).anchor(0.5f, 0.55f).flat(true).zIndex(10f),
-        )?.also { car.value = it }
-        marker?.position = pos
-        state.locationBearing?.let { marker?.rotation = it }
+    LaunchedEffect(handle, state.lowPerf) {
+        if (handle.lowPerf != state.lowPerf) { handle.lowPerf = state.lowPerf; handle.follow(animateMs = 600) }
     }
-
-    // Follow the car on every GPS update; speed decides park vs drive.
-    val speed = state.displaySpeedKmh
-    LaunchedEffect(m, state.locationLat, state.locationLon, state.locationBearing, speed) {
-        handle.lat = state.locationLat; handle.lon = state.locationLon
-        if ((speed ?: 0) >= 5) state.locationBearing?.let { handle.gpsBearing = it } // GPS course is noise when crawling
-        handle.speedKmh = speed
-        val next = DriveCamera.nextMode(handle.mode, speed)
-        if (next != handle.mode) {
-            handle.mode = next
-            if (next == DriveCamera.Mode.DRIVE) handle.following = true
+    // On every GPS fix (or new speed): move the car arrow and follow it; speed decides park vs drive.
+    // Watched here rather than read in composition, so a new fix doesn't recompose the map.
+    val current = rememberUpdatedState(state)
+    LaunchedEffect(m) {
+        val gm = m ?: return@LaunchedEffect
+        snapshotFlow { current.value.let { s -> CarFix(s.locationLat, s.locationLon, s.locationBearing, s.displaySpeedKmh) } }.collect { fix ->
+            if (fix.lat != null && fix.lon != null) {
+                val pos = LatLng(fix.lat, fix.lon)
+                val marker = car.value ?: gm.addMarker(
+                    com.google.android.gms.maps.model.MarkerOptions().position(pos).icon(carArrow(carDensity)).anchor(0.5f, 0.55f).flat(true).zIndex(10f),
+                )?.also { car.value = it }
+                marker?.position = pos
+                fix.bearing?.let { marker?.rotation = it }
+            }
+            handle.lat = fix.lat; handle.lon = fix.lon
+            if ((fix.speed ?: 0) >= 5) fix.bearing?.let { handle.gpsBearing = it } // GPS course is noise when crawling
+            handle.speedKmh = fix.speed
+            val next = DriveCamera.nextMode(handle.mode, fix.speed)
+            if (next != handle.mode) {
+                handle.mode = next
+                if (next == DriveCamera.Mode.DRIVE) handle.following = true
+            }
+            handle.follow()
         }
-        handle.follow()
     }
     // While driving, re-follow the car 10 s after the last touch.
     LaunchedEffect(handle) {

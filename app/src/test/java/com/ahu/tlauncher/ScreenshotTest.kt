@@ -66,8 +66,10 @@ class ScreenshotTest {
 
     private fun state(nav: Boolean = false, access: Boolean = true) = HomeUiState(
         settings = Settings(pinnedApps = apps.take(5).map { it.key }),
-        obd = ObdState(ObdStatus.DEMO, ObdData(speedKmh = 62, rpm = 2340, coolantC = 86, batteryV = 14.1, fuelPct = 62)),
-        fuel = com.ahu.tlauncher.obd.FuelStats(tripKm = 23.4, tripLitres = 1.9, avgKmPerL = 12.6, rangeKm = 335),
+        live = com.ahu.tlauncher.ui.home.LiveState(
+            obd = ObdState(ObdStatus.DEMO, ObdData(speedKmh = 62, rpm = 2340, coolantC = 86, batteryV = 14.1, fuelPct = 62)),
+            fuel = com.ahu.tlauncher.obd.FuelStats(tripKm = 23.4, tripLitres = 1.9, avgKmPerL = 12.6, rangeKm = 335),
+        ),
         media = MediaInfo("com.spotify.music", "Midnight Drive", "The Night Lines", art(), true, 95_000, 214_000, 0, 1f),
         nav = if (nav) NavCardState(NavInfo("com.google.android.apps.maps", "Google Maps", "300 m", "Turn right onto Ayala Ave", null, "12 min · 4.3 km · 10:42 ETA"), null, null) else null,
         notificationAccess = access,
@@ -89,8 +91,8 @@ class ScreenshotTest {
 
     @Test fun carDark() = shot("car_full_dark") { HomeScreen(state(), NoopActions, initialMapVisible = false) }
     @Test fun carLight() = shot("car_full_light", dark = false) { HomeScreen(state(), NoopActions, initialMapVisible = false) }
-    @Test fun noObdGps() = shot("no_obd_gps_speed") { HomeScreen(state().copy(obd = ObdState(ObdStatus.DISCONNECTED), gpsSpeedKmh = 47), NoopActions) }
-    @Test fun noObdNoFix() = shot("no_obd_no_fix", dark = false) { HomeScreen(state().copy(obd = ObdState(ObdStatus.DISCONNECTED), gpsSpeedKmh = null), NoopActions, initialMapVisible = false) }
+    @Test fun noObdGps() = shot("no_obd_gps_speed") { HomeScreen(state().withLive(obd = ObdState(ObdStatus.DISCONNECTED), gpsSpeedKmh = 47), NoopActions) }
+    @Test fun noObdNoFix() = shot("no_obd_no_fix", dark = false) { HomeScreen(state().withLive(obd = ObdState(ObdStatus.DISCONNECTED), gpsSpeedKmh = null), NoopActions, initialMapVisible = false) }
     @Test fun updateToast() = shot("update_available") {
         HomeScreen(state().copy(update = com.ahu.tlauncher.update.UpdateState.Available(com.ahu.tlauncher.update.RemoteVersion(12, "1.0.12"))), NoopActions)
     }
@@ -115,8 +117,9 @@ class ScreenshotTest {
     @Test fun diagnostics() = shot("settings_diagnostics") {
         val s = state()
         HomeScreen(
-            s.copy(
+            s.withLive(
                 obd = s.obd.copy(data = s.obd.data.copy(loadPct = 34, throttlePct = 18, intakeC = 34, mafGs = 6.2, timingDeg = 21.5, stftPct = -1.6, unsupported = setOf("07"))),
+            ).copy(
                 diag = com.ahu.tlauncher.obd.DiagState(milOn = true, stored = listOf("P0171", "P1349"), pending = emptyList()),
             ),
             NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.DIAGNOSTICS,
@@ -130,8 +133,7 @@ class ScreenshotTest {
     }
     @Test fun headlightsAndAa() = shot("headlights_android_auto") {
         HomeScreen(
-            state().copy(
-                obd = ObdState(ObdStatus.DISCONNECTED), gpsSpeedKmh = 38,
+            state().withLive(obd = ObdState(ObdStatus.DISCONNECTED), gpsSpeedKmh = 38).copy(
                 lights = com.ahu.tlauncher.system.LightsState(on = true),
                 aa = com.ahu.tlauncher.system.AaState.Ready("192.168.43.1"), aaReceiver = "Headunit Reloaded",
             ),
@@ -143,7 +145,7 @@ class ScreenshotTest {
     }
     @Test fun lowFuel() = shot("fuel_low", dark = false) {
         val st = state()
-        HomeScreen(st.copy(obd = st.obd.copy(data = st.obd.data.copy(fuelPct = 9)), fuel = st.fuel.copy(rangeKm = 48)), NoopActions)
+        HomeScreen(st.withLive(obd = st.obd.copy(data = st.obd.data.copy(fuelPct = 9)), fuel = st.fuel.copy(rangeKm = 48)), NoopActions)
     }
     @Test fun musicQueue() = shot("music_queue") {
         val st = state()
