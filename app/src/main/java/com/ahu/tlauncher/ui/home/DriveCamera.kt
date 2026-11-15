@@ -11,6 +11,9 @@ object DriveCamera {
     const val PARK_ZOOM = 16.0
     const val REFOLLOW_MS = 10_000L
 
+    /** Driving tilt; flat in low-performance mode (a tilted map draws far more tiles and labels). */
+    fun driveTilt(lowPerf: Boolean): Double = if (lowPerf) PARK_TILT else DRIVE_TILT
+
     /** Hysteresis so the view doesn't flip back and forth in slow traffic. Unknown speed keeps the mode. */
     fun nextMode(current: Mode, speedKmh: Int?): Mode = when {
         speedKmh == null -> current

@@ -1,8 +1,19 @@
 package com.ahu.tlauncher.ui.theme
 
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
+
+/**
+ * Low-performance mode (Settings → Display → Performance): readouts jump instead of counting,
+ * and big movements (car turn, panel sweep, glides) become short fades or jumps.
+ */
+val LocalLowPerf = staticCompositionLocalOf { false }
 
 /**
  * Motion tokens.
@@ -40,6 +51,9 @@ object TMotion {
     const val PANEL_MS = 220
     fun <T> panel() = tween<T>(PANEL_MS, easing = EaseOut)
     fun <T> count() = tween<T>(COUNT_MS, easing = EaseOut)
+    /** [count], or a jump in low-performance mode. Use for live readouts (speed, RPM, fuel). */
+    @Composable @ReadOnlyComposable
+    fun <T> live(): AnimationSpec<T> = if (LocalLowPerf.current) snap() else count()
 
     /** The prototype's `easeOutCubic`, 1 − (1 − t)³: used for its car-panel resize. */
     val EaseOutCubic = Easing { t -> 1f - (1f - t) * (1f - t) * (1f - t) }

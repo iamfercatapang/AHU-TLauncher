@@ -153,6 +153,13 @@ internal fun SmallTitle(text: String) {
 @Composable
 internal fun Divider() { Box(Modifier.fillMaxWidth().height(1.dp).background(T.colors.divider)) }
 
+/** Explains the Performance setting and what Auto picked for this head unit. */
+private fun performanceNote(state: HomeUiState): String {
+    val spec = state.deviceSpec?.label()?.let { " ($it)" } ?: ""
+    val now = if (state.lowPerf) "Low-performance mode is on$spec" else "Full animations$spec"
+    return "Low: fewer animations, slower engine readouts and a flat map, for slow head units. $now."
+}
+
 @Composable
 private fun DisplaySection(state: HomeUiState, a: HomeActions) {
     val s = state.settings
@@ -167,6 +174,13 @@ private fun DisplaySection(state: HomeUiState, a: HomeActions) {
     Divider()
     SettingRow("Speed") { Segmented(listOf(SpeedUnit.KMH to "km/h", SpeedUnit.MPH to "mph"), s.speedUnit, a::setSpeedUnit) }
     SettingRow("Temperature") { Segmented(listOf(TempUnit.C to "°C", TempUnit.F to "°F"), s.tempUnit, a::setTempUnit) }
+    Divider()
+    SettingRow("Performance", performanceNote(state)) {
+        Segmented(
+            listOf(com.ahu.tlauncher.data.PerfMode.AUTO to "Auto", com.ahu.tlauncher.data.PerfMode.ON to "Low", com.ahu.tlauncher.data.PerfMode.OFF to "Full"),
+            s.perfMode, a::setPerfMode,
+        )
+    }
     Divider()
     SmallTitle("Car images")
     Text(

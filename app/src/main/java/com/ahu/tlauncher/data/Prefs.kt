@@ -20,6 +20,8 @@ enum class NavApp { MAPS, WAZE, ASK }
 /** Which side the car panel sits on in the car + map split view. */
 enum class CarSide { LEFT, RIGHT }
 enum class MapEngine { GOOGLE, OPENFREEMAP }
+/** Low-performance mode: Auto turns it on for low-end head units. */
+enum class PerfMode { AUTO, ON, OFF }
 enum class CarView(val label: String) { SIDE("Side"), FRONT("Front"), REAR("Rear") }
 
 data class Settings(
@@ -58,6 +60,7 @@ data class Settings(
     val engineCc: Int = 1496,
     val onboardingDone: Boolean = false,
     val pinnedSeeded: Boolean = false,
+    val perfMode: PerfMode = PerfMode.AUTO,
 )
 
 class Prefs(private val context: Context) {
@@ -91,6 +94,7 @@ class Prefs(private val context: Context) {
         val fuelL = androidx.datastore.preferences.core.doublePreferencesKey("fuel_long_l")
         val onboarding = booleanPreferencesKey("onboarding_done")
         val pinnedSeeded = booleanPreferencesKey("pinned_seeded")
+        val perfMode = stringPreferencesKey("perf_mode")
     }
 
     val settings: Flow<Settings> = context.store.data.map { p -> p.toSettings() }
@@ -122,6 +126,7 @@ class Prefs(private val context: Context) {
         engineCc = this[K.engineCc] ?: 1496,
         onboardingDone = this[K.onboarding] ?: false,
         pinnedSeeded = this[K.pinnedSeeded] ?: false,
+        perfMode = enumOr(this[K.perfMode], PerfMode.AUTO),
     )
 
     suspend fun setTheme(m: ThemeMode) = context.store.edit { it[K.theme] = m.name }
@@ -161,6 +166,7 @@ class Prefs(private val context: Context) {
     }
     suspend fun setCarSide(side: CarSide) = context.store.edit { it[K.carSide] = side.name }
     suspend fun setNavApp(a: NavApp) = context.store.edit { it[K.navApp] = a.name }
+    suspend fun setPerfMode(m: PerfMode) = context.store.edit { it[K.perfMode] = m.name }
     suspend fun setOnboardingDone() = context.store.edit { it[K.onboarding] = true }
 
     private inline fun <reified E : Enum<E>> enumOr(v: String?, def: E): E =

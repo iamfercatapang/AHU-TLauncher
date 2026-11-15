@@ -23,6 +23,8 @@ import kotlinx.coroutines.launch
  * Interrupting mid-glide retargets from wherever it currently is.
  */
 fun Modifier.glideOnChange(key: Any): Modifier = composed {
+    // Low-performance mode: elements just jump to their new place.
+    if (com.ahu.tlauncher.ui.theme.LocalLowPerf.current) return@composed Modifier
     val scope = rememberCoroutineScope()
     val dx = remember { Animatable(0f) }
     val dy = remember { Animatable(0f) }
