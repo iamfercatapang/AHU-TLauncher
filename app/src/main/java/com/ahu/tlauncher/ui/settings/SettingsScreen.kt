@@ -278,6 +278,10 @@ private fun NavigationSection(state: HomeUiState, a: HomeActions) {
     SmallTitle("Saved places")
     AddressField("Home", s.homeAddress, a::setHome)
     AddressField("Work", s.workAddress, a::setWork)
+    Divider()
+    OnStartSettings(state, a)
+    Divider()
+    OfflineMapsSettings(state, a)
     Text(
         "While Google Maps or Waze is navigating, the next turn appears on the dashboard map. Requires notification access.",
         style = TType.label, color = T.colors.muted, modifier = Modifier.padding(top = 10.dp),

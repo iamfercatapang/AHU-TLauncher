@@ -61,6 +61,10 @@ data class Settings(
     val onboardingDone: Boolean = false,
     val pinnedSeeded: Boolean = false,
     val perfMode: PerfMode = PerfMode.AUTO,
+    /** When the car starts: play the last song again if it was playing when the car was switched off. */
+    val resumeMusic: Boolean = true,
+    /** When the car starts: offer to continue a trip that wasn't finished. */
+    val offerTrip: Boolean = true,
 )
 
 class Prefs(private val context: Context) {
@@ -95,6 +99,10 @@ class Prefs(private val context: Context) {
         val onboarding = booleanPreferencesKey("onboarding_done")
         val pinnedSeeded = booleanPreferencesKey("pinned_seeded")
         val perfMode = stringPreferencesKey("perf_mode")
+        val resumeMusic = booleanPreferencesKey("resume_music")
+        val offerTrip = booleanPreferencesKey("offer_trip")
+        val tripPlace = stringPreferencesKey("trip_place")
+        val tripStarted = androidx.datastore.preferences.core.longPreferencesKey("trip_started")
     }
 
     val settings: Flow<Settings> = context.store.data.map { p -> p.toSettings() }
@@ -127,6 +135,8 @@ class Prefs(private val context: Context) {
         onboardingDone = this[K.onboarding] ?: false,
         pinnedSeeded = this[K.pinnedSeeded] ?: false,
         perfMode = enumOr(this[K.perfMode], PerfMode.AUTO),
+        resumeMusic = this[K.resumeMusic] ?: true,
+        offerTrip = this[K.offerTrip] ?: true,
     )
 
     suspend fun setTheme(m: ThemeMode) = context.store.edit { it[K.theme] = m.name }
@@ -167,6 +177,18 @@ class Prefs(private val context: Context) {
     suspend fun setCarSide(side: CarSide) = context.store.edit { it[K.carSide] = side.name }
     suspend fun setNavApp(a: NavApp) = context.store.edit { it[K.navApp] = a.name }
     suspend fun setPerfMode(m: PerfMode) = context.store.edit { it[K.perfMode] = m.name }
+    suspend fun setResumeMusic(on: Boolean) = context.store.edit { it[K.resumeMusic] = on }
+    suspend fun setOfferTrip(on: Boolean) = context.store.edit { it[K.offerTrip] = on }
+
+    /** The trip in progress, kept so it can be offered again after the car is switched off mid-trip. */
+    suspend fun savedTrip(): com.ahu.tlauncher.system.SavedTrip? = context.store.data.first().let { p ->
+        val place = com.ahu.tlauncher.route.RouteMath.decodePlaces(p[K.tripPlace]).firstOrNull() ?: return null
+        com.ahu.tlauncher.system.SavedTrip(place, p[K.tripStarted] ?: 0L)
+    }
+    suspend fun saveTrip(place: com.ahu.tlauncher.route.Place, atMs: Long) = context.store.edit {
+        it[K.tripPlace] = com.ahu.tlauncher.route.RouteMath.encodePlaces(listOf(place)); it[K.tripStarted] = atMs
+    }
+    suspend fun clearTrip() = context.store.edit { it.remove(K.tripPlace); it.remove(K.tripStarted) }
     suspend fun setOnboardingDone() = context.store.edit { it[K.onboarding] = true }
 
     private inline fun <reified E : Enum<E>> enumOr(v: String?, def: E): E =

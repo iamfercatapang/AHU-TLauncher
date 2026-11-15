@@ -21,7 +21,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -93,8 +92,9 @@ import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 
 /** Free vector styles from OpenFreeMap: no API key, no usage limits. */
-private const val STYLE_LIGHT = "https://tiles.openfreemap.org/styles/positron"
-private const val STYLE_DARK = "https://tiles.openfreemap.org/styles/dark"
+// Same style addresses as the offline areas, so saved areas are found when there's no connection.
+private const val STYLE_LIGHT = com.ahu.tlauncher.map.STYLE_LIGHT
+private const val STYLE_DARK = com.ahu.tlauncher.map.STYLE_DARK
 private const val DEFAULT_LAT = 14.5995
 private const val DEFAULT_LON = 120.9842
 private const val ATTRIBUTION = "© OpenFreeMap © OpenMapTiles © OpenStreetMap contributors"
@@ -453,7 +453,7 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier, onL
     val current = rememberUpdatedState(state)
     val longPress = rememberUpdatedState(onLongPress)
     val handle = remember {
-        MapLibre.getInstance(ctx)
+        com.ahu.tlauncher.map.OfflineMaps.setUp(ctx)
         val opts = MapLibreMapOptions.createFromAttributes(ctx)
             .textureMode(false).attributionEnabled(false).logoEnabled(false).compassEnabled(false)
             .camera(CameraPosition.Builder().target(LatLng(state.locationLat ?: DEFAULT_LAT, state.locationLon ?: DEFAULT_LON)).zoom(15.0).build())

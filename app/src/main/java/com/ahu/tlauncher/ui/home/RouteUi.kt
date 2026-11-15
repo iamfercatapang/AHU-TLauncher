@@ -489,6 +489,33 @@ fun PinCard(state: HomeUiState, pin: Place, actions: HomeActions, modifier: Modi
     }
 }
 
+/** After the car starts: the trip that wasn't finished, with Continue and ✕ (forget it). */
+@Composable
+fun ResumeTripCard(state: HomeUiState, trip: com.ahu.tlauncher.system.SavedTrip, actions: HomeActions, modifier: Modifier = Modifier) {
+    val c = navColors
+    val p = trip.destination
+    val away = state.here?.let { h -> p.latLon?.let { RouteMath.distanceM(h, it).toInt() } }
+    Column(modifier.width(NAV_CARD_W).navPanel().padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Badge(Icons.Rounded.Navigation, c.good); Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Continue to ${p.name}?", style = TType.title, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val sub = listOfNotNull("Trip not finished", away?.let { fmtDistance(it, state.mph) + " away" }).joinToString(" · ")
+                Text(sub, style = TType.caption, color = c.faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            NavIconButton(Icons.Rounded.Close, "Forget this trip", onClick = actions::dismissTrip)
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            Modifier.fillMaxWidth().height(46.dp).clip(TileShape).background(c.cta).pressable(onClick = actions::continueTrip),
+            horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Rounded.Navigation, null, tint = c.onCta, modifier = Modifier.size(18.dp).rotate(45f)); Spacer(Modifier.width(8.dp))
+            Text("Continue", style = TType.button, color = c.onCta, maxLines = 1)
+        }
+    }
+}
+
 // ------------------------------------------------------------------------------------------------ trip
 
 /** During the trip: destination, time / distance left, arrival, End navigation and Change destination. */
@@ -583,6 +610,12 @@ fun RouteOverlays(state: HomeUiState, actions: HomeActions, modifier: Modifier, 
         if (pin != null) lastPin[0] = pin
         AnimatedVisibility(pin != null, enter = navEnter(), exit = navExit(), modifier = Modifier.align(bottom).padding(12.dp).padding(bottom = 4.dp)) {
             lastPin[0]?.let { PinCard(state, it, actions) }
+        }
+        val offer = state.tripOffer?.takeIf { r == null && pin == null }
+        val lastOffer = remember { arrayOfNulls<com.ahu.tlauncher.system.SavedTrip>(1) }
+        if (offer != null) lastOffer[0] = offer
+        AnimatedVisibility(offer != null, enter = navEnter(), exit = navExit(), modifier = Modifier.align(bottom).padding(12.dp).padding(bottom = 4.dp)) {
+            lastOffer[0]?.let { ResumeTripCard(state, it, actions) }
         }
     }
 }

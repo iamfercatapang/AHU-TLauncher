@@ -185,6 +185,15 @@ class MainActivity : ComponentActivity(), HomeActions {
         val eqCaps by app.soundEq.caps.collectAsStateWithLifecycle()
         val resumingMedia by app.lastMedia.resuming.collectAsStateWithLifecycle()
         val inbox by NotificationHub.inbox.collectAsStateWithLifecycle()
+        val tripOffer by app.resumeOnStart.offer.collectAsStateWithLifecycle()
+        val offlineAreas by app.offlineMaps.areas.collectAsStateWithLifecycle()
+        // "Continue" on the trip offer: start as soon as the route is found.
+        LaunchedEffect(route, autoStartTrip) {
+            val r = route
+            if (!autoStartTrip || r == null || r.phase != com.ahu.tlauncher.route.RoutePhase.PREVIEW || r.loading) return@LaunchedEffect
+            autoStartTrip = false
+            if (r.route != null) startRoute()
+        }
 
         // Low-performance mode: set in Settings, or Auto from this unit's RAM and cores.
         val spec = remember { com.ahu.tlauncher.system.DeviceSpec.read(this) }
@@ -197,7 +206,7 @@ class MainActivity : ComponentActivity(), HomeActions {
         LaunchedEffect(navOn, route?.phase) {
             if (navOn || !access || route?.phase != com.ahu.tlauncher.route.RoutePhase.ACTIVE || route?.guided == true) return@LaunchedEffect
             delay(if (navSeenDuringTrip) 20_000 else 120_000)
-            if (NotificationHub.nav.value == null) app.routes.end()
+            if (NotificationHub.nav.value == null) app.routes.end(byUser = false)
         }
         LaunchedEffect(navOn) { if (navOn && route?.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE) navSeenDuringTrip = true }
         LaunchedEffect(route == null) { if (route == null) navSeenDuringTrip = false }
@@ -286,6 +295,7 @@ class MainActivity : ComponentActivity(), HomeActions {
             aa = aa, aaReceiver = aaReceiver,
             aaDismissed = (aa as? com.ahu.tlauncher.system.AaState.Ready)?.gateway?.let { it == aaDismissedOn } == true,
             lowPerf = lowPerf, deviceSpec = spec,
+            tripOffer = tripOffer, offlineAreas = offlineAreas,
         )
         CompositionLocalProvider(LocalLowPerf provides lowPerf) {
             TLauncherTheme(dark = dark) { ScaledCanvas { HomeScreen(state, this@MainActivity) } }
@@ -675,6 +685,23 @@ class MainActivity : ComponentActivity(), HomeActions {
     }
     override fun setMapEngine(e: com.ahu.tlauncher.data.MapEngine) { lifecycleScope.launch { app.prefs.setMapEngine(e) } }
     override fun setMapTraffic(on: Boolean) { lifecycleScope.launch { app.prefs.setMapTraffic(on) } }
+    override fun setResumeMusic(on: Boolean) { lifecycleScope.launch { app.prefs.setResumeMusic(on) } }
+    override fun setOfferTrip(on: Boolean) { lifecycleScope.launch { app.prefs.setOfferTrip(on) } }
+    override fun loadOfflineAreas() = app.offlineMaps.load()
+    override fun saveOfflineArea(name: String, lat: Double, lon: Double, radiusKm: Int) = app.offlineMaps.save(name, lat, lon, radiusKm)
+    override fun updateOfflineArea(id: Long) = app.offlineMaps.update(id)
+    override fun deleteOfflineArea(id: Long) = app.offlineMaps.delete(id)
+    private var autoStartTrip by mutableStateOf(false)
+    override fun continueTrip() {
+        val t = app.resumeOnStart.take() ?: return
+        lifecycleScope.launch {
+            // Right after the car starts there may be no GPS fix yet; the route needs one.
+            kotlinx.coroutines.withTimeoutOrNull(20_000) { app.location.location.first { it != null } }
+            autoStartTrip = true
+            app.routes.preview(t.destination)
+        }
+    }
+    override fun dismissTrip() = app.resumeOnStart.dismiss()
     override fun setTankL(l: Int) { lifecycleScope.launch { app.prefs.setTankL(l) } }
     override fun setEngineCc(cc: Int) { lifecycleScope.launch { app.prefs.setEngineCc(cc) } }
     override fun resetCarImage(view: CarView) { lifecycleScope.launch { app.prefs.setCarImage(view, "") } }
