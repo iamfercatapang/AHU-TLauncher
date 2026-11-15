@@ -114,7 +114,7 @@ class ScreenshotTest {
             NoopActions, initialMapVisible = false,
         )
     }
-    @Test fun diagnostics() = shot("settings_diagnostics") {
+    @Test fun diagnostics() = shot("settings_car") {
         val s = state()
         HomeScreen(
             s.withLive(
@@ -122,7 +122,7 @@ class ScreenshotTest {
             ).copy(
                 diag = com.ahu.tlauncher.obd.DiagState(milOn = true, stored = listOf("P0171", "P1349"), pending = emptyList()),
             ),
-            NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.DIAGNOSTICS,
+            NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.CAR,
         )
     }
     @Test fun incomingCall() = shot("call_incoming") {
@@ -140,8 +140,8 @@ class ScreenshotTest {
             NoopActions,
         )
     }
-    @Test fun settingsAndroidAuto() = shot("settings_android_auto") {
-        HomeScreen(state().copy(aa = com.ahu.tlauncher.system.AaState.Searching("192.168.43.1")), NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.ANDROID_AUTO)
+    @Test fun settingsAndroidAuto() = shot("settings_connections") {
+        HomeScreen(state().copy(aa = com.ahu.tlauncher.system.AaState.Searching("192.168.43.1")), NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.CONNECTIONS)
     }
     @Test fun lowFuel() = shot("fuel_low", dark = false) {
         val st = state()

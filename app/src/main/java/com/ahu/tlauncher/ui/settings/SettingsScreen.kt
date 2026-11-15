@@ -77,13 +77,11 @@ import com.ahu.tlauncher.ui.theme.ThemeMode
 
 enum class Section(val label: String, val icon: ImageVector) {
     DISPLAY("Display", com.ahu.tlauncher.ui.components.TIcons.Display),
-    DOCK("Dock", com.ahu.tlauncher.ui.components.TIcons.DockBar),
+    HOME("Home screen", com.ahu.tlauncher.ui.components.TIcons.DockBar),
     NAVIGATION("Navigation", com.ahu.tlauncher.ui.components.TIcons.Navigate),
-    OBD("OBD-II", com.ahu.tlauncher.ui.components.TIcons.Plug),
-    DIAGNOSTICS("Diagnostics", com.ahu.tlauncher.ui.components.TIcons.Wrench),
-    ANDROID_AUTO("Android Auto", com.ahu.tlauncher.ui.components.TIcons.PhoneLink),
+    CAR("Car", com.ahu.tlauncher.ui.components.TIcons.Wrench),
     SOUND("Sound", com.ahu.tlauncher.ui.components.TIcons.EqBars),
-    PERMISSIONS("Permissions", com.ahu.tlauncher.ui.components.TIcons.Shield),
+    CONNECTIONS("Connections", com.ahu.tlauncher.ui.components.TIcons.PhoneLink),
     ABOUT("About", com.ahu.tlauncher.ui.components.TIcons.Info),
 }
 
@@ -120,13 +118,11 @@ fun SettingsScreen(state: HomeUiState, actions: HomeActions, onClose: () -> Unit
             ) {
                 when (section) {
                     Section.DISPLAY -> DisplaySection(state, actions)
-                    Section.DOCK -> DockSection(state, actions)
+                    Section.HOME -> HomeScreenSection(state, actions)
                     Section.NAVIGATION -> NavigationSection(state, actions)
-                    Section.OBD -> ObdSection(state, actions)
-                    Section.DIAGNOSTICS -> DiagnosticsSection(state, actions)
-                    Section.ANDROID_AUTO -> AndroidAutoSection(state, actions)
+                    Section.CAR -> CarSection(state, actions)
                     Section.SOUND -> SoundSection(state, actions)
-                    Section.PERMISSIONS -> PermissionsSection(state, actions)
+                    Section.CONNECTIONS -> ConnectionsSection(state, actions)
                     Section.ABOUT -> AboutSection(state, actions)
                 }
             }
@@ -166,11 +162,6 @@ private fun DisplaySection(state: HomeUiState, a: HomeActions) {
     SettingRow("Appearance", "Auto switches at sunrise and sunset") {
         Segmented(listOf(ThemeMode.AUTO to "Auto", ThemeMode.DARK to "Dark", ThemeMode.LIGHT to "Light"), s.themeMode, a::setTheme)
     }
-    SettingRow("Car panel", "Side of the car next to the map") {
-        Segmented(listOf(com.ahu.tlauncher.data.CarSide.LEFT to "Left", com.ahu.tlauncher.data.CarSide.RIGHT to "Right"), s.carSide, a::setCarSide)
-    }
-    Divider()
-    HeadlightSetup(state, a)
     Divider()
     SettingRow("Speed") { Segmented(listOf(SpeedUnit.KMH to "km/h", SpeedUnit.MPH to "mph"), s.speedUnit, a::setSpeedUnit) }
     SettingRow("Temperature") { Segmented(listOf(TempUnit.C to "°C", TempUnit.F to "°F"), s.tempUnit, a::setTempUnit) }
@@ -234,7 +225,12 @@ private fun CarSlot(view: CarView, customUri: String?, a: HomeActions, modifier:
 }
 
 @Composable
-private fun DockSection(state: HomeUiState, a: HomeActions) {
+private fun HomeScreenSection(state: HomeUiState, a: HomeActions) {
+    SettingRow("Car panel", "Side of the car next to the map") {
+        Segmented(listOf(com.ahu.tlauncher.data.CarSide.LEFT to "Left", com.ahu.tlauncher.data.CarSide.RIGHT to "Right"), state.settings.carSide, a::setCarSide)
+    }
+    Divider()
+    SmallTitle("Dock apps")
     val pinned = state.settings.pinnedApps.mapNotNull { k -> state.apps.firstOrNull { it.key == k } }
     Text("Long-press any app in the app drawer to pin or unpin it. Up to 6 apps are shown.", style = TType.label, color = T.colors.muted)
     Spacer(Modifier.height(8.dp))
@@ -279,7 +275,9 @@ private fun NavigationSection(state: HomeUiState, a: HomeActions) {
     AddressField("Home", s.homeAddress, a::setHome)
     AddressField("Work", s.workAddress, a::setWork)
     Divider()
-    OnStartSettings(state, a)
+    SettingRow("Offer to continue the trip", "If the car was switched off before arriving, the map asks whether to continue when it starts again") {
+        com.ahu.tlauncher.ui.components.TSwitch(s.offerTrip, a::setOfferTrip)
+    }
     Divider()
     OfflineMapsSettings(state, a)
     Text(
@@ -319,63 +317,16 @@ private fun AddressField(label: String, value: String, onSave: (String) -> Unit)
 }
 
 @Composable
-private fun ObdSection(state: HomeUiState, a: HomeActions) {
-    val s = state.settings
-    SettingRow("Data source", "Without a connected adapter, engine data is hidden and speed comes from GPS. Demo shows simulated data.") {
-        Segmented(listOf(ObdSourceType.DEMO to "Demo", ObdSourceType.BLUETOOTH to "Bluetooth"), s.obdSource, a::setObdSource)
-    }
-    SettingRow("Status", state.obd.message) { ObdBadge(state.obd.status) }
-    if (s.obdSource == ObdSourceType.BLUETOOTH) {
-        Divider()
-        SmallTitle("Paired adapters")
-        Text("Pair your ELM327 in Android Bluetooth settings first (PIN is usually 1234 or 0000).", style = TType.label, color = T.colors.muted)
-        var devices by remember { mutableStateOf(a.bondedDevices()) }
-        LaunchedEffect(Unit) { devices = a.bondedDevices() }
-        if (devices.isEmpty()) {
-            Text("No paired devices found.", style = TType.body, color = T.colors.secondary, modifier = Modifier.padding(vertical = 8.dp))
-        }
-        devices.forEach { (addr, name) ->
-            val sel = addr == s.obdDeviceAddress
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(TShapes.card)
-                    .background(if (sel) T.colors.cardPressed else T.colors.card)
-                    .pressable(pressedScale = 0.98f) { a.pickObdDevice(addr, name) }.padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Rounded.Bluetooth, null, tint = if (sel) T.colors.text else T.colors.secondary, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(name, style = TType.body, color = T.colors.text)
-                    Text(addr, style = TType.caption, color = T.colors.muted)
-                }
-                if (sel) Text("Selected", style = TType.button, color = T.colors.text)
-            }
-        }
-        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PillButton("Refresh list", onClick = { devices = a.bondedDevices() })
-            PillButton("Bluetooth settings", onClick = a::openAndroidSettings)
-        }
-    }
+private fun ConnectionsSection(state: HomeUiState, a: HomeActions) {
+    SmallTitle("Android Auto")
+    AndroidAutoSettings(state, a)
     Divider()
-    SmallTitle("Fuel")
-    SettingRow("Tank size", "For the range estimate. 2018 Avanza: 43 L") {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PillButton("−", height = 34.dp, onClick = { a.setTankL(s.tankL - 1) })
-            Text("${s.tankL} L", style = TType.button, color = T.colors.text, modifier = Modifier.width(44.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            PillButton("+", height = 34.dp, onClick = { a.setTankL(s.tankL + 1) })
-        }
-    }
-    SettingRow("Engine", "Only used for consumption if the car has no air-flow sensor") {
-        Segmented(listOf(1329 to "1.3 L", 1496 to "1.5 L"), s.engineCc, a::setEngineCc)
-    }
-    Text(
-        "Shown: speed, engine RPM, coolant temperature, battery voltage (standard OBD-II PIDs supported by petrol cars from ~2008). Trouble codes and more live data are under Diagnostics.",
-        style = TType.label, color = T.colors.muted, modifier = Modifier.padding(top = 12.dp),
-    )
+    SmallTitle("Permissions")
+    PermissionsSettings(state, a)
 }
 
 @Composable
-private fun PermissionsSection(state: HomeUiState, a: HomeActions) {
+private fun PermissionsSettings(state: HomeUiState, a: HomeActions) {
     SettingRow("Default home app", if (state.isDefaultLauncher) "This launcher opens when you press Home" else "Not set — press Home and choose TLauncher → Always") {
         if (!state.isDefaultLauncher) PillButton("Set", kind = com.ahu.tlauncher.ui.components.ButtonKind.PRIMARY, onClick = a::setDefaultLauncher) else Text("On", style = TType.button, color = T.colors.muted)
     }
@@ -424,5 +375,4 @@ private fun AboutSection(state: HomeUiState, a: HomeActions) {
             "Design language inspired by minimalist in-car displays; not affiliated with any car maker.",
         style = TType.label, color = T.colors.muted, modifier = Modifier.padding(vertical = 10.dp),
     )
-    PillButton("Android settings", onClick = a::openAndroidSettings)
 }

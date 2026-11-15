@@ -35,7 +35,7 @@ class ObdManager(private val scope: CoroutineScope, settings: Flow<Settings>) {
         }
         .stateIn(scope, SharingStarted.WhileSubscribed(5_000), ObdState())
 
-    /** Poll the extra live-data PIDs (only while the Diagnostics page is visible). */
+    /** Poll the extra live-data PIDs (only while the Car settings page is visible). */
     fun setExtended(on: Boolean) { link.extended.value = on }
 
     fun readCodes() = run("Reading codes…") {

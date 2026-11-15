@@ -14,7 +14,7 @@ import kotlin.random.Random
  */
 class SimulatedObdSource(private val tickMs: Long = 250) : ObdSource {
     override fun stream(link: ObdLink): Flow<ObdState> = flow {
-        // A pretend ECU with one stored and one pending code, so Diagnostics can be tried out.
+        // A pretend ECU with one stored and one pending code, so the Car page can be tried out.
         var codesCleared = false
         var speed = 0.0
         var coolant = 38.0

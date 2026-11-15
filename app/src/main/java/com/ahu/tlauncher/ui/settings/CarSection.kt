@@ -25,7 +25,14 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Bluetooth
+import androidx.compose.material3.Icon
+import androidx.compose.runtime.LaunchedEffect
+import com.ahu.tlauncher.data.ObdSourceType
 import com.ahu.tlauncher.data.TempUnit
+import com.ahu.tlauncher.ui.components.Segmented
+import com.ahu.tlauncher.ui.components.pressable
 import com.ahu.tlauncher.obd.Dtc
 import com.ahu.tlauncher.obd.ObdData
 import com.ahu.tlauncher.obd.ObdDisplay
@@ -43,14 +50,21 @@ private val AMBER = Color(0xFFF5A623)
 private val RED = Color(0xFFE5484D)
 private val GREEN = Color(0xFF25CB55)
 
-/** Trouble codes (read / clear, stored + pending) and extra live engine data. */
+/**
+ * Settings → Car: everything from the OBD-II adapter. Day-to-day readouts first (trouble codes, fuel,
+ * live data), then one-time setup (adapter pairing, headlight indicator).
+ */
 @Composable
-internal fun DiagnosticsSection(state: HomeUiState, a: HomeActions) {
+internal fun CarSection(state: HomeUiState, a: HomeActions) {
+    val s = state.settings
     val live = ObdDisplay.show(state.obd.status)
     // Poll the extra PIDs only while this page is on screen.
     DisposableEffect(Unit) { a.setObdExtended(true); onDispose { a.setObdExtended(false) } }
 
-    SettingRow("Adapter", if (live) null else "Connect an OBD-II adapter in OBD-II settings, or choose Demo to try this page.") { ObdBadge(state.obd.status) }
+    SettingRow("Data source", "Without a connected adapter, engine data is hidden and speed comes from GPS. Demo shows simulated data.") {
+        Segmented(listOf(ObdSourceType.DEMO to "Demo", ObdSourceType.BLUETOOTH to "Bluetooth"), s.obdSource, a::setObdSource)
+    }
+    SettingRow("Status", state.obd.message) { ObdBadge(state.obd.status) }
     Divider()
 
     // -------- trouble codes
@@ -95,9 +109,50 @@ internal fun DiagnosticsSection(state: HomeUiState, a: HomeActions) {
     SmallTitle("Live data")
     LiveGrid(state.obd.data, state.settings.tempUnit == TempUnit.F, state.settings.speedUnit == com.ahu.tlauncher.data.SpeedUnit.MPH, live)
     Text(
-        "Values the car's computer doesn't report show as \"Not supported\".",
+        "The dashboard shows speed, engine RPM, coolant temperature and battery voltage (standard OBD-II PIDs on petrol cars from ~2008). " +
+            "Values the car's computer doesn't report show as \"Not supported\".",
         style = TType.label, color = T.colors.muted, modifier = Modifier.padding(top = 8.dp),
     )
+
+    // -------- setup
+    if (s.obdSource == ObdSourceType.BLUETOOTH) {
+        Divider()
+        AdapterPairing(state, a)
+    }
+    Divider()
+    HeadlightSetup(state, a)
+}
+
+@Composable
+private fun AdapterPairing(state: HomeUiState, a: HomeActions) {
+    SmallTitle("Paired adapters")
+    Text("Pair your ELM327 in Android Bluetooth settings first (PIN is usually 1234 or 0000).", style = TType.label, color = T.colors.muted)
+    var devices by remember { mutableStateOf(a.bondedDevices()) }
+    LaunchedEffect(Unit) { devices = a.bondedDevices() }
+    if (devices.isEmpty()) {
+        Text("No paired devices found.", style = TType.body, color = T.colors.secondary, modifier = Modifier.padding(vertical = 8.dp))
+    }
+    devices.forEach { (addr, name) ->
+        val sel = addr == state.settings.obdDeviceAddress
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(TShapes.card)
+                .background(if (sel) T.colors.cardPressed else T.colors.card)
+                .pressable(pressedScale = 0.98f) { a.pickObdDevice(addr, name) }.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Rounded.Bluetooth, null, tint = if (sel) T.colors.text else T.colors.secondary, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(name, style = TType.body, color = T.colors.text)
+                Text(addr, style = TType.caption, color = T.colors.muted)
+            }
+            if (sel) Text("Selected", style = TType.button, color = T.colors.text)
+        }
+    }
+    Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        PillButton("Refresh list", onClick = { devices = a.bondedDevices() })
+        PillButton("Bluetooth settings", onClick = a::openAndroidSettings)
+    }
 }
 
 @Composable
@@ -120,6 +175,13 @@ private fun FuelBlock(state: HomeUiState, a: HomeActions) {
         PillButton("Reset trip", onClick = a::resetTrip)
     }
     SettingRow("Average", "${kpl(f.avgKmPerL)} (recent driving, used for the range)") {}
+    SettingRow("Tank size", "For the range estimate. 2018 Avanza: 43 L") {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PillButton("−", height = 34.dp, onClick = { a.setTankL(state.settings.tankL - 1) })
+            Text("${state.settings.tankL} L", style = TType.button, color = T.colors.text, modifier = Modifier.width(44.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            PillButton("+", height = 34.dp, onClick = { a.setTankL(state.settings.tankL + 1) })
+        }
+    }
     if ("10" in d.unsupported && d.mapKpa == null) {
         Text("This car reports neither air flow nor manifold pressure, so consumption can't be calculated.", style = TType.label, color = RED)
     }

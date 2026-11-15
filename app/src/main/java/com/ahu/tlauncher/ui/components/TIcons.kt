@@ -172,7 +172,7 @@ object TIcons {
         line { moveTo(6.5f, 9f); horizontalLineTo(17.5f); verticalLineTo(13f); arcTo(5.5f, 5.5f, 0f, false, true, 6.5f, 13f); close() }
         line { moveTo(9.5f, 9f); verticalLineTo(4f); moveTo(14.5f, 9f); verticalLineTo(4f); moveTo(12f, 18.5f); verticalLineTo(21f) }
     } }
-    /** Service wrench (Diagnostics). */
+    /** Service wrench (Car settings). */
     val Wrench by lazy { icon("Wrench") {
         line { moveTo(14.5f, 4f); arcTo(4.5f, 4.5f, 0f, false, false, 13.2f, 10.8f); lineTo(4.5f, 19.5f); lineTo(5.5f, 20.5f) ; lineTo(14.2f, 11.8f); arcTo(4.5f, 4.5f, 0f, false, false, 20f, 9.5f); lineTo(17f, 9.8f); lineTo(14.6f, 7.4f); close() }
     } }

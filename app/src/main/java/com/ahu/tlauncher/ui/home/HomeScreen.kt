@@ -268,7 +268,7 @@ fun HomeScreen(
             StatusBar(
                 state, Modifier.fillMaxWidth().height(STATUS_H),
                 mapSpan = if (!mapVisible) null else if (carRight) (0.dp to maxWidth - stageW) else (stageW to maxWidth),
-                onObdClick = { settingsStart = com.ahu.tlauncher.ui.settings.Section.DIAGNOSTICS; overlay = Overlay.SETTINGS },
+                onObdClick = { settingsStart = com.ahu.tlauncher.ui.settings.Section.CAR; overlay = Overlay.SETTINGS },
                 onBellClick = { toggle(Overlay.NOTIFICATIONS) },
                 onStatusClick = toggle,
                 onAnchor = { o, r -> if (anchors[o] != r) anchors[o] = r },

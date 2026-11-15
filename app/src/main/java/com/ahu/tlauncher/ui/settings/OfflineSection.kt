@@ -18,24 +18,10 @@ import com.ahu.tlauncher.map.OfflineMath
 import com.ahu.tlauncher.ui.components.ButtonKind
 import com.ahu.tlauncher.ui.components.PillButton
 import com.ahu.tlauncher.ui.components.Segmented
-import com.ahu.tlauncher.ui.components.TSwitch
 import com.ahu.tlauncher.ui.home.HomeActions
 import com.ahu.tlauncher.ui.home.HomeUiState
 import com.ahu.tlauncher.ui.theme.T
 import com.ahu.tlauncher.ui.theme.TType
-
-/** Settings → Navigation: what happens when the car starts. */
-@Composable
-internal fun OnStartSettings(state: HomeUiState, a: HomeActions) {
-    val s = state.settings
-    SmallTitle("When the car starts")
-    SettingRow("Resume music", "Plays YouTube Music or Spotify again if it was playing when the car was switched off") {
-        TSwitch(s.resumeMusic, a::setResumeMusic)
-    }
-    SettingRow("Offer to continue the trip", "If the car was switched off before arriving, the map asks whether to continue") {
-        TSwitch(s.offerTrip, a::setOfferTrip)
-    }
-}
 
 /** Settings → Navigation: offline areas for the free map. */
 @Composable
