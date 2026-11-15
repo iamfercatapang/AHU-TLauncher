@@ -55,6 +55,10 @@ internal fun SoundSection(state: HomeUiState, a: HomeActions) {
     val gains = if (eq.gainsDb.size == caps.freqsHz.size) eq.gainsDb else List(caps.freqsHz.size) { 0f }
     fun update(s: EqSettings) { eq = s; a.setEq(s) }
 
+    SettingRow("Resume music when the car starts", "Plays YouTube Music or Spotify again if it was playing when the car was switched off") {
+        TSwitch(state.settings.resumeMusic, a::setResumeMusic)
+    }
+    Divider()
     SettingRow(
         "Equalizer",
         if (caps.supported) "Applies to music and other sound played through Android" else "This head unit doesn't let apps change the sound. Use its own EQ app below.",

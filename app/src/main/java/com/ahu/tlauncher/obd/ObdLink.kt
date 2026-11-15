@@ -14,7 +14,7 @@ class ObdLink {
 
     private val jobs = Channel<Job>(Channel.UNLIMITED)
 
-    /** True while the Diagnostics page is open: poll the extra live-data PIDs too. */
+    /** True while the Car settings page is open: poll the extra live-data PIDs too. */
     val extended = MutableStateFlow(false)
 
     /** Runs [cmd] on the adapter; null when nothing answered in time. A timed-out command is dropped, never run later. */

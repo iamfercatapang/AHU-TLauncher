@@ -6,7 +6,7 @@ data class ObdData(
     val rpm: Int? = null,
     val coolantC: Int? = null,
     val batteryV: Double? = null,
-    // Extra live data, only polled while the Diagnostics page is open.
+    // Extra live data, only polled while the Car settings page is open.
     val loadPct: Int? = null,
     val throttlePct: Int? = null,
     val intakeC: Int? = null,

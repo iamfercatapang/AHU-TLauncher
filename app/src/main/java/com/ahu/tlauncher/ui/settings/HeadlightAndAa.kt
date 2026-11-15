@@ -70,7 +70,7 @@ internal fun HeadlightSetup(state: HomeUiState, a: HomeActions) {
 
 /** Wireless Android Auto through Headunit Reloaded. */
 @Composable
-internal fun AndroidAutoSection(state: HomeUiState, a: HomeActions) {
+internal fun AndroidAutoSettings(state: HomeUiState, a: HomeActions) {
     SettingRow(
         "Receiver app",
         state.aaReceiver?.let { "$it is installed" } ?: "Headunit Reloaded is not installed. It shows Android Auto on the head unit.",
@@ -91,12 +91,4 @@ internal fun AndroidAutoSection(state: HomeUiState, a: HomeActions) {
             is AaState.Ready -> "Head unit server found on ${s.gateway}"
         },
     ) {}
-    Divider()
-    SmallTitle("How to start it")
-    listOf(
-        "1. On the phone, turn on the Wi-Fi hotspot and connect the head unit to it.",
-        "2. In the phone's Android Auto settings, tap Version 10 times to unlock developer settings.",
-        "3. From the ⋮ menu, choose Start head unit server.",
-        "4. The dashboard shows \"Android Auto is ready\". Tap Open. In Headunit Reloaded, choose Wi-Fi (or turn on its Wi-Fi autostart).",
-    ).forEach { Text(it, style = TType.label, color = T.colors.muted, modifier = Modifier.padding(vertical = 2.dp)) }
 }
