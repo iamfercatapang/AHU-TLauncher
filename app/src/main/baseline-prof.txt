@@ -1,0 +1,6 @@
+# Baseline profile: code Android compiles ahead of time instead of interpreting it on first runs.
+# Compose and AndroidX ship their own profiles; these rules add all of TLauncher's own code.
+# The app is small, so compiling all of it costs little storage and makes every screen's first
+# frames smoother on slow head units.
+HSPLcom/ahu/tlauncher/**->**(**)**
+Lcom/ahu/tlauncher/**;

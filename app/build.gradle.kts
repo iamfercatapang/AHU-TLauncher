@@ -18,6 +18,9 @@ android {
         versionCode = run
         versionName = "1.0.$run"
 
+        // Head units are ARM: leave out MapLibre's x86 / x86_64 native libraries (~27 MB uncompressed).
+        ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
+
         // Google Maps API key: CI secret MAPS_API_KEY, or MAPS_API_KEY=... in local.properties. Empty = OpenFreeMap only.
         val mapsKey = System.getenv("MAPS_API_KEY")?.takeIf { it.isNotBlank() }
             ?: rootProject.file("local.properties").takeIf { it.exists() }?.readLines()
@@ -68,6 +71,8 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.core:core-ktx:1.15.0")
+    // Installs the baseline profile (src/main/baseline-prof.txt) on sideloaded installs too.
+    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.maplibre.gl:android-sdk:13.7.1")

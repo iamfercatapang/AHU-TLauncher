@@ -88,7 +88,17 @@ const val CANVAS_W = 1024f
 const val CANVAS_H = 600f
 val DOCK_H = 64.dp
 val STATUS_H = 40.dp
-private const val SPLIT_FRACTION = 0.36f
+/** Car panel width in split view: the prototype's 580 of 1920 px. */
+private const val SPLIT_FRACTION = 0.30f
+/**
+ * The split width the panel's contents are laid out for. At [SPLIT_FRACTION] they are drawn scaled
+ * down to fit (same layout, every element smaller), and grow back to full size as the panel widens.
+ */
+private const val SPLIT_DESIGN_FRACTION = 0.36f
+private const val SPLIT_SCALE = SPLIT_FRACTION / SPLIT_DESIGN_FRACTION
+
+/** Contents scale for a panel progress (0 = split view, 1 = full screen). */
+private fun panelScale(progress: Float): Float = SPLIT_SCALE + (1f - SPLIT_SCALE) * progress
 /** A release faster than this (panel widths per second) settles in the swipe's direction. */
 private const val FLING_PER_S = 0.8f
 private const val MIN_SETTLE_MS = 150
@@ -96,11 +106,22 @@ private const val LOW_PERF_SETTLE_MS = 150
 /** Strip of the map, next to the car panel, that also grabs the panel. */
 private val MAP_GRAB_W = 24.dp
 
-/** Lays the panel out at [edge] × the available width. */
-private fun Modifier.panelWidth(edge: () -> Float): Modifier = layout { measurable, constraints ->
+/**
+ * Lays the panel out at [edge] × the available width. Its contents are measured [scale] times larger
+ * and drawn scaled down by [scale] (a layer transform: no extra recomposition while the panel sweeps).
+ */
+private fun Modifier.panelWidth(edge: () -> Float, scale: () -> Float): Modifier = layout { measurable, constraints ->
     val w = (constraints.maxWidth * edge()).roundToInt().coerceIn(0, constraints.maxWidth)
-    val placeable = measurable.measure(constraints.copy(minWidth = w, maxWidth = w))
-    layout(w, placeable.height) { placeable.place(0, 0) }
+    val k = scale()
+    val inner = constraints.copy(minWidth = (w / k).roundToInt(), maxWidth = (w / k).roundToInt())
+        .let { c -> if (c.hasBoundedHeight) c.copy(minHeight = (c.maxHeight / k).roundToInt(), maxHeight = (c.maxHeight / k).roundToInt()) else c }
+    val placeable = measurable.measure(inner)
+    layout(w, (placeable.height * k).roundToInt()) {
+        placeable.placeWithLayer(0, 0) {
+            scaleX = k; scaleY = k
+            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+        }
+    }
 }
 
 /** What a horizontal swipe on the car panel does: start, move by dx px, end with a velocity in px/s. */
@@ -111,12 +132,12 @@ private class PanelSwipe(val onStart: () -> Unit, val onDrag: (Float) -> Unit, v
  * swipe first; a swipe also cancels a tap on whatever it started on. Velocity is tracked on the summed
  * movement, because the panel's own layout can move under the finger when a swipe starts from full screen.
  */
-private fun Modifier.panelSwipe(swipe: PanelSwipe): Modifier = pointerInput(swipe) {
+private fun Modifier.panelSwipe(swipe: PanelSwipe, scale: () -> Float = { 1f }): Modifier = pointerInput(swipe) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
         var over = 0f
         val start = awaitHorizontalTouchSlopOrCancellation(down.id) { change, o ->
-            change.consume(); over = o
+            change.consume(); over = o * scale()
         } ?: return@awaitEachGesture
         val tracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
         var moved = over
@@ -124,7 +145,8 @@ private fun Modifier.panelSwipe(swipe: PanelSwipe): Modifier = pointerInput(swip
         swipe.onStart()
         swipe.onDrag(over)
         val finished = horizontalDrag(start.id) { change ->
-            val dx = change.positionChange().x
+            // Inside the scaled panel, positions are in its own (larger) units: convert back to screen px.
+            val dx = change.positionChange().x * scale()
             change.consume()
             moved += dx
             tracker.addPosition(change.uptimeMillis, androidx.compose.ui.geometry.Offset(moved, 0f))
@@ -253,8 +275,9 @@ fun HomeScreen(
                     state, actions, expanded = !mapVisible, onToggleMap = { mapVisible = !mapVisible },
                     handleOnLeft = carRight,
                     drawBackground = false,
-                    modifier = Modifier.align(if (carRight) Alignment.TopEnd else Alignment.TopStart).panelWidth(panelEdge).fillMaxHeight(),
-                    panelSwipe = Modifier.panelSwipe(swipe),
+                    modifier = Modifier.align(if (carRight) Alignment.TopEnd else Alignment.TopStart)
+                        .panelWidth(panelEdge, scale = { panelScale(panelProgress()) }).fillMaxHeight(),
+                    panelSwipe = Modifier.panelSwipe(swipe, scale = { panelScale(panelProgress()) }),
                     progress = panelProgress,
                 )
             }
