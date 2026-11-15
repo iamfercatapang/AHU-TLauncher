@@ -133,6 +133,28 @@ object RouteMath {
         )
     }
 
+    /** "14.59950, 120.98420": a dropped pin before (or without) its address. */
+    fun coordText(lat: Double, lon: Double): String = String.format(java.util.Locale.US, "%.5f, %.5f", lat, lon)
+
+    /**
+     * Google reverse geocode for a dropped pin: the first street address ("123 Main St" over "Makati, Metro Manila").
+     * Reads the Geocoding v4 reply (formattedAddress) and the classic one (formatted_address). Plus codes are skipped.
+     * The pin keeps the spot that was pressed, not the address's own position.
+     */
+    fun parseReverse(json: String, lat: Double, lon: Double): Place? {
+        val arr = JSONObject(json).optJSONArray("results") ?: return null
+        for (i in 0 until arr.length()) {
+            val r = arr.getJSONObject(i)
+            val types = r.optJSONArray("types")?.let { t -> (0 until t.length()).map { t.optString(it) } }.orEmpty()
+            if ("plus_code" in types) continue
+            val formatted = r.optString("formattedAddress").ifBlank { r.optString("formatted_address") }.trim()
+            if (formatted.isBlank()) continue
+            val parts = formatted.split(", ")
+            return Place(parts.first(), parts.drop(1).joinToString(", "), lat, lon)
+        }
+        return null
+    }
+
     fun parseRoute(json: String): RouteData? {
         val r = JSONObject(json).optJSONArray("routes")?.optJSONObject(0) ?: return null
         val points = decode(r.optJSONObject("polyline")?.optString("encodedPolyline") ?: return null)

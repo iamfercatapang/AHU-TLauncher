@@ -10,6 +10,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FreeNavTest {
+    @Test fun parsesPhotonReverseForPin() {
+        val json = """{"features":[{"geometry":{"coordinates":[121.0001,14.5002]},"properties":{"osm_type":"N","osm_id":9,"street":"Ayala Avenue","housenumber":"6750","city":"Makati"}}]}"""
+        val p = FreeNav.parseReverse(json, 14.5, 121.0)!!
+        assertEquals("Ayala Avenue 6750", p.name); assertEquals("Makati", p.address)
+        assertEquals(14.5, p.lat!!, 1e-9); assertEquals(121.0, p.lon!!, 1e-9)
+        assertNull(p.placeId) // routed to the exact spot, not looked up again
+        assertNull(FreeNav.parseReverse("""{"features":[]}""", 14.5, 121.0))
+    }
+
     @Test fun parsesPhotonResults() {
         val json = """{"features":[{"geometry":{"coordinates":[121.056,14.585]},"properties":{"osm_type":"W","osm_id":123,"name":"SM Megamall","street":"EDSA","city":"Mandaluyong"}},
             {"geometry":{"coordinates":[121.0,14.5]},"properties":{"osm_type":"N","osm_id":9,"street":"Ayala Avenue","housenumber":"6750","city":"Makati"}}]}"""

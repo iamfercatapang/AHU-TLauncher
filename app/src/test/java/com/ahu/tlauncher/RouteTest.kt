@@ -10,6 +10,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RouteTest {
+    @Test fun parsesGoogleReverseGeocodeForPin() {
+        // Geocoding v4 shape; the plus code result is skipped, the pin keeps the pressed spot.
+        val v4 = """{"results":[{"formattedAddress":"8HX7+XX Makati","types":["plus_code"]},
+            {"formattedAddress":"6750 Ayala Ave, Makati, Metro Manila, Philippines","types":["street_address"],"location":{"latitude":14.55,"longitude":121.02}}]}"""
+        val p = RouteMath.parseReverse(v4, 14.5501, 121.0249)!!
+        assertEquals("6750 Ayala Ave", p.name); assertEquals("Makati, Metro Manila, Philippines", p.address)
+        assertEquals(14.5501, p.lat!!, 1e-9); assertEquals(121.0249, p.lon!!, 1e-9); assertNull(p.placeId)
+        // classic shape
+        val classic = """{"results":[{"formatted_address":"EDSA, Mandaluyong","types":["route"]}],"status":"OK"}"""
+        assertEquals("EDSA", RouteMath.parseReverse(classic, 14.0, 121.0)!!.name)
+        assertNull(RouteMath.parseReverse("""{"results":[]}""", 14.0, 121.0))
+        assertNull(RouteMath.parseReverse("{}", 14.0, 121.0))
+        assertEquals("14.59950, 120.98420", RouteMath.coordText(14.5995, 120.9842))
+    }
+
     @Test fun decodesGooglesExamplePolyline() {
         val p = RouteMath.decode("_p~iF~ps|U_ulLnnqC_mqNvxq`@")
         assertEquals(3, p.size)

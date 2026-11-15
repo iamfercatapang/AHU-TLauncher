@@ -20,6 +20,7 @@ These screenshots are rendered offline, so they show a placeholder street grid a
 - **Map**: a vector map (MapLibre + OpenFreeMap, no API key) with day/night styles. When parked it shows a flat, north-up view. Once you're moving (above ~8 km/h) it switches to a tilted, heading-up driving view that zooms out as speed rises. If you drag the map while driving, it re-centers after 10 s, or straight away with ⊙.
 - **Google Maps / Waze turn-by-turn on the dashboard**: while either app is navigating, the next turn, distance and arrival time appear on the map. Tap the card to open the full app.
 - **Navigate / Home / Work shortcuts** that open Google Maps, Waze, or ask which app to use.
+- **Drop a pin**: long-press anywhere on the map (Google or OpenFreeMap) to drop a pin. A card shows its address and how far away it is, with **Directions**, ★ favourite and ✕. Directions opens the usual route preview to that exact spot. Pins can't be dropped while a route is showing.
 - **Automatic day and night themes**, switched by sunrise and sunset at your location. You can also force light or dark.
 - **Volume control** in the dock.
 - **Light on slow head units**: engine and GPS readings only redraw the parts of the screen that show them, and nothing updates while another app is in front. *Settings → Display → Performance* has a low-performance mode for slow units. It turns off the car turn, panel sweep and counting numbers, sends engine data to the screen twice a second, and caps the map at 30 fps with no tilt. **Auto** (the default) turns it on for units with under ~2.5 GB of RAM or fewer than 4 cores.
@@ -56,10 +57,11 @@ The map pane uses Google Maps (with live traffic) when the build has an API key 
 Google Play services; otherwise it uses OpenFreeMap. *Settings → Navigation → Map* switches between them.
 
 1. In Google Cloud Console, create a project, enable **Maps SDK for Android**, **Routes API** and
-   **Places API (New)** (the last two power destination search and the route line), and create an API key.
+   **Places API (New)** (the last two power destination search and the route line), plus **Geocoding API**
+   (addresses for dropped pins; without it pins use OpenStreetMap addresses), and create an API key.
 2. Restrict the key to **Android apps**: package `com.ahu.tlauncher`, SHA-1
    `CC:77:49:8B:70:E9:D8:E1:4A:29:73:15:92:96:41:C7:A1:CD:30:61` (the release signing key), and to the
-   Maps SDK for Android, Routes API and Places API (New) only.
+   Maps SDK for Android, Routes API, Places API (New) and Geocoding API only.
 3. Add it as the repository secret **`MAPS_API_KEY`**. The next build includes it. Local builds read
    `MAPS_API_KEY=...` from `local.properties`.
 

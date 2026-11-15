@@ -117,12 +117,16 @@ fun MapPane(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modif
 
     // Google when chosen and available (API key + Play services); otherwise the free OpenFreeMap map.
     val useGoogle = !preview && state.googleMapsAvailable && state.settings.mapEngine == com.ahu.tlauncher.data.MapEngine.GOOGLE
+    // Long-press drops a pin (needs search/routing; not while a route is shown). Read through the updated state so
+    // the maps' listeners, set once, always see the current rules.
+    val pinRules = rememberUpdatedState(state.routesEnabled && state.route == null)
+    val onLongPress: (Double, Double) -> Unit = remember(actions) { { lat: Double, lon: Double -> if (pinRules.value) actions.dropPin(lat, lon) } }
     Box(modifier.clipToBounds().background(T.colors.appBg)) {
         val controls: MapControls? = when {
             preview -> { MapPlaceholder(Modifier.fillMaxSize()); null }
-            useGoogle -> googleMap(dark, state.settings.mapTraffic, state, Modifier.fillMaxSize())
-            vectorCapable -> vectorMap(dark, state, Modifier.fillMaxSize())
-            else -> rasterMap(dark, state, Modifier.fillMaxSize())
+            useGoogle -> googleMap(dark, state.settings.mapTraffic, state, Modifier.fillMaxSize(), onLongPress)
+            vectorCapable -> vectorMap(dark, state, Modifier.fillMaxSize(), onLongPress)
+            else -> rasterMap(dark, state, Modifier.fillMaxSize(), onLongPress)
         }
 
         // route preview / trip cards (route search needs the Google map)
@@ -203,6 +207,23 @@ private fun NavigatePill(onClick: () -> Unit, modifier: Modifier) {
     }
 }
 
+/** Red map pin for a long-pressed spot (TLauncher's drawing); its tip is the bottom centre. */
+internal fun pinBitmap(d: Float): Bitmap {
+    val w = (30 * d).toInt(); val h = (40 * d).toInt()
+    return Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { b ->
+        val c = Canvas(b); val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        val r = w / 2f - 2 * d
+        val cx = w / 2f; val cy = r + 2 * d
+        val path = Path().apply {
+            addCircle(cx, cy, r, Path.Direction.CW)
+            moveTo(cx - r * 0.62f, cy + r * 0.78f); lineTo(cx, h - 1.5f * d); lineTo(cx + r * 0.62f, cy + r * 0.78f); close()
+        }
+        p.style = Paint.Style.FILL; p.color = 0xFFE5484D.toInt(); c.drawPath(path, p)
+        p.style = Paint.Style.STROKE; p.strokeWidth = 2 * d; p.strokeJoin = Paint.Join.ROUND; p.color = 0xFFFFFFFF.toInt(); c.drawPath(path, p)
+        p.style = Paint.Style.FILL; c.drawCircle(cx, cy, r * 0.38f, p)
+    }
+}
+
 private fun supportsGles3(ctx: Context): Boolean = runCatching {
     val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     am.deviceConfigurationInfo.reqGlEsVersion >= 0x30000
@@ -277,6 +298,25 @@ private fun drawFreeRoute(style: Style, r: com.ahu.tlauncher.route.RouteState?, 
     style.getSourceAs<org.maplibre.android.style.sources.GeoJsonSource>(destSrc)?.setGeoJson(destGeo)
 }
 
+/** Adds (once per style) and moves the dropped-pin marker on the MapLibre map; empty when there's no pin. */
+private fun drawPin(style: Style, pin: com.ahu.tlauncher.route.Place?, density: Float) {
+    val src = "tl-pin"
+    if (style.getSource(src) == null) {
+        style.addImage("tl-pin-icon", pinBitmap(density))
+        style.addSource(org.maplibre.android.style.sources.GeoJsonSource(src))
+        style.addLayer(org.maplibre.android.style.layers.SymbolLayer("tl-pin", src).withProperties(
+            org.maplibre.android.style.layers.PropertyFactory.iconImage("tl-pin-icon"),
+            org.maplibre.android.style.layers.PropertyFactory.iconAnchor(org.maplibre.android.style.layers.Property.ICON_ANCHOR_BOTTOM),
+            org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap(true),
+            org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement(true),
+        ))
+    }
+    val at = pin?.latLon
+    style.getSourceAs<org.maplibre.android.style.sources.GeoJsonSource>(src)?.setGeoJson(org.maplibre.geojson.FeatureCollection.fromFeatures(
+        if (at == null) emptyArray() else arrayOf(org.maplibre.geojson.Feature.fromGeometry(org.maplibre.geojson.Point.fromLngLat(at.lon, at.lat))),
+    ))
+}
+
 private class VectorHandle(val view: MapView) : MapControls {
     var fittedRoute: Any? = null
     val bearingState = androidx.compose.runtime.mutableFloatStateOf(0f)
@@ -339,9 +379,10 @@ private class VectorHandle(val view: MapView) : MapControls {
 
 @SuppressLint("MissingPermission")
 @Composable
-private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier): MapControls {
+private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier, onLongPress: (Double, Double) -> Unit): MapControls {
     val ctx = LocalContext.current
     val current = rememberUpdatedState(state)
+    val longPress = rememberUpdatedState(onLongPress)
     val handle = remember {
         MapLibre.getInstance(ctx)
         val opts = MapLibreMapOptions.createFromAttributes(ctx)
@@ -358,6 +399,10 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier): Ma
             m.addOnCameraMoveListener { handle.bearingState.floatValue = m.cameraPosition.bearing.toFloat() }
             m.addOnCameraMoveStartedListener { reason ->
                 if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) handle.lastTouch = SystemClock.elapsedRealtime()
+            }
+            m.addOnMapLongClickListener { p ->
+                handle.view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                longPress.value(p.latitude, p.longitude); true
             }
         }
         handle.view.addOnDidFailLoadingMapListener {
@@ -425,6 +470,11 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier): Ma
         }
         if (active && handle.fittedRoute != null) { handle.fittedRoute = null; handle.recenter() }
     }
+    // Dropped pin (free map).
+    LaunchedEffect(m, styleTick, state.pin) {
+        val style = m?.style?.takeIf { it.isFullyLoaded } ?: return@LaunchedEffect
+        drawPin(style, state.pin, handle.view.resources.displayMetrics.density)
+    }
     // Low-performance mode: at most 30 fps, and a flat map while driving.
     val lowPerf = state.lowPerf
     LaunchedEffect(handle, lowPerf) {
@@ -479,6 +529,7 @@ private class RasterHandle(val map: org.osmdroid.views.MapView, val me: MyLocati
 
     var mode = DriveCamera.Mode.PARK
     var unfollowedAt = 0L
+    var pinMarker: org.osmdroid.views.overlay.Marker? = null
 
     /** Drive: heading-up + zoom by speed. Park: north-up at street zoom. */
     fun apply(speedKmh: Int?) {
@@ -493,8 +544,9 @@ private class RasterHandle(val map: org.osmdroid.views.MapView, val me: MyLocati
 }
 
 @Composable
-private fun rasterMap(dark: Boolean, state: HomeUiState, modifier: Modifier): MapControls {
+private fun rasterMap(dark: Boolean, state: HomeUiState, modifier: Modifier, onLongPress: (Double, Double) -> Unit): MapControls {
     val ctx = LocalContext.current
+    val longPress = rememberUpdatedState(onLongPress)
     val handle = remember(state.locationPermission) {
         Configuration.getInstance().apply {
             userAgentValue = ctx.packageName
@@ -518,7 +570,29 @@ private fun rasterMap(dark: Boolean, state: HomeUiState, modifier: Modifier): Ma
             enableMyLocation(); enableFollowLocation()
             map.overlays.add(this)
         } else null
+        // Long-press drops a pin.
+        map.overlays.add(0, org.osmdroid.views.overlay.MapEventsOverlay(object : org.osmdroid.events.MapEventsReceiver {
+            override fun singleTapConfirmedHelper(p: GeoPoint?) = false
+            override fun longPressHelper(p: GeoPoint?): Boolean {
+                p ?: return false
+                map.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                longPress.value(p.latitude, p.longitude); return true
+            }
+        }))
         RasterHandle(map, me)
+    }
+    // Dropped pin (raster map).
+    LaunchedEffect(handle, state.pin) {
+        handle.pinMarker?.let { handle.map.overlays.remove(it) }; handle.pinMarker = null
+        state.pin?.latLon?.let { at ->
+            handle.pinMarker = org.osmdroid.views.overlay.Marker(handle.map).apply {
+                position = GeoPoint(at.lat, at.lon)
+                icon = android.graphics.drawable.BitmapDrawable(ctx.resources, pinBitmap(ctx.resources.displayMetrics.density))
+                setAnchor(org.osmdroid.views.overlay.Marker.ANCHOR_CENTER, org.osmdroid.views.overlay.Marker.ANCHOR_BOTTOM)
+                setOnMarkerClickListener { _, _ -> true } // the card shows the details
+            }.also { handle.map.overlays.add(it) }
+        }
+        handle.map.invalidate()
     }
     LifecycleBinding({}, handle.map::onResume, handle.map::onPause, {}, { handle.me?.disableMyLocation(); handle.map.onDetach() })
     val current = rememberUpdatedState(state)

@@ -94,6 +94,7 @@ private class GoogleHandle(val view: MapView) : MapControls {
     var lowPerf = false
     val routeShapes = ArrayList<Any>() // Polylines + destination Marker
     var fittedRoute: Any? = null
+    var pinMarker: com.google.android.gms.maps.model.Marker? = null
 
     override fun zoomIn() { map?.animateCamera(CameraUpdateFactory.zoomIn(), 300, null) }
     override fun zoomOut() { map?.animateCamera(CameraUpdateFactory.zoomOut(), 300, null) }
@@ -116,8 +117,9 @@ private class GoogleHandle(val view: MapView) : MapControls {
 /** Google's map with live traffic, drawn by TLauncher (Google Maps SDK). Same drive/park behaviour as the free map. */
 @SuppressLint("MissingPermission")
 @Composable
-internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modifier: Modifier): MapControls {
+internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modifier: Modifier, onLongPress: (Double, Double) -> Unit): MapControls {
     val ctx = LocalContext.current
+    val longPress = rememberUpdatedState(onLongPress)
     val handle = remember {
         MapsInitializer.initialize(ctx.applicationContext, MapsInitializer.Renderer.LATEST) {}
         val opts = GoogleMapOptions()
@@ -138,6 +140,10 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
                     handle.following = false
                     handle.lastTouch = SystemClock.elapsedRealtime()
                 }
+            }
+            m.setOnMapLongClickListener { p ->
+                handle.view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                longPress.value(p.latitude, p.longitude)
             }
             handle.follow(animateMs = 1)
         }
@@ -224,6 +230,16 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
             runCatching { gm.animateCamera(CameraUpdateFactory.newLatLngBounds(b, (40 * density).toInt()), 700, null) }
         }
         if (active && handle.fittedRoute != null) { handle.fittedRoute = null; handle.recenter() }
+    }
+    // Dropped pin.
+    LaunchedEffect(m, state.pin) {
+        val gm = m ?: return@LaunchedEffect
+        handle.pinMarker?.remove(); handle.pinMarker = null
+        val at = state.pin?.latLon ?: return@LaunchedEffect
+        handle.pinMarker = gm.addMarker(
+            com.google.android.gms.maps.model.MarkerOptions().position(LatLng(at.lat, at.lon)).anchor(0.5f, 1f).zIndex(5f)
+                .icon(com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(pinBitmap(density))),
+        )
     }
     AndroidView(factory = { handle.view }, modifier = modifier.clipToBounds())
     return handle

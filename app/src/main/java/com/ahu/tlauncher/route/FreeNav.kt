@@ -21,6 +21,13 @@ object FreeNav {
         return "https://photon.komoot.io/api/?q=" + URLEncoder.encode(q, "UTF-8") + "&limit=6&lang=en" + bias
     }
 
+    fun reverseUrl(lat: Double, lon: Double): String =
+        String.format(Locale.US, "https://photon.komoot.io/reverse?lat=%.6f&lon=%.6f&lang=en", lat, lon)
+
+    /** Photon reverse geocode for a dropped pin. The pin keeps the spot that was pressed. */
+    fun parseReverse(json: String, lat: Double, lon: Double): Place? =
+        parseSearch(json, null).firstOrNull()?.let { Place(it.title, it.subtitle, lat, lon) }
+
     fun routeUrl(from: LatLon, to: LatLon): String = String.format(
         Locale.US, "https://routing.openstreetmap.de/routed-car/route/v1/driving/%.6f,%.6f;%.6f,%.6f?overview=full&geometries=polyline&steps=true",
         from.lon, from.lat, to.lon, to.lat,
