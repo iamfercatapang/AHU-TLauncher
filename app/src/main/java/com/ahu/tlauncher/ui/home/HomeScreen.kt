@@ -71,7 +71,9 @@ import com.ahu.tlauncher.ui.theme.T
 import com.ahu.tlauncher.ui.theme.TMotion
 import com.ahu.tlauncher.ui.theme.TShapes
 import com.ahu.tlauncher.ui.theme.TType
+import androidx.compose.ui.input.pointer.positionChange
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -81,6 +83,44 @@ const val CANVAS_H = 600f
 val DOCK_H = 64.dp
 val STATUS_H = 40.dp
 private const val SPLIT_FRACTION = 0.36f
+/** A release faster than this (panel widths per second) settles in the swipe's direction. */
+private const val FLING_PER_S = 0.8f
+private const val MIN_SETTLE_MS = 150
+private const val LOW_PERF_SETTLE_MS = 150
+/** Strip of the map, next to the car panel, that also grabs the panel. */
+private val MAP_GRAB_W = 24.dp
+
+/** What a horizontal swipe on the car panel does: start, move by dx px, end with a velocity in px/s. */
+private class PanelSwipe(val onStart: () -> Unit, val onDrag: (Float) -> Unit, val onEnd: (Float) -> Unit)
+
+/**
+ * Horizontal swipes for [PanelSwipe]. Children that scroll sideways themselves (the card pager) get the
+ * swipe first; a swipe also cancels a tap on whatever it started on. Velocity is tracked on the summed
+ * movement, because the panel's own layout can move under the finger when a swipe starts from full screen.
+ */
+private fun Modifier.panelSwipe(swipe: PanelSwipe): Modifier = pointerInput(swipe) {
+    androidx.compose.foundation.gestures.awaitEachGesture {
+        val down = androidx.compose.foundation.gestures.awaitFirstDown(requireUnconsumed = false)
+        var over = 0f
+        val start = androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation(down.id) { change, o ->
+            change.consume(); over = o
+        } ?: return@awaitEachGesture
+        val tracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
+        var moved = over
+        tracker.addPosition(start.uptimeMillis, androidx.compose.ui.geometry.Offset(moved, 0f))
+        swipe.onStart()
+        swipe.onDrag(over)
+        val finished = androidx.compose.foundation.gestures.horizontalDrag(start.id) { change ->
+            val dx = change.positionChange().x
+            change.consume()
+            moved += dx
+            tracker.addPosition(change.uptimeMillis, androidx.compose.ui.geometry.Offset(moved, 0f))
+            swipe.onDrag(dx)
+        }
+        swipe.onEnd(if (finished) tracker.calculateVelocity().x else 0f)
+    }
+}
+
 /** Width of the status bar popups (notifications, Bluetooth, Wi-Fi, mobile, weather). */
 internal val STATUS_POPUP_W = 380.dp
 
@@ -126,11 +166,19 @@ fun HomeScreen(
     // at its split size underneath and fades in 200 ms behind the edge.
     val stageFraction = if (mapVisible) SPLIT_FRACTION else 1f
     val edge = remember { androidx.compose.animation.core.Animatable(stageFraction) }
+    // Swiping the panel: while a finger holds it, the edge follows the finger (fraction of the width, else -1).
+    var dragEdge by remember { androidx.compose.runtime.mutableFloatStateOf(-1f) }
+    val panelEdge = { if (dragEdge >= 0f) dragEdge else edge.value }
     // Low-performance mode: the panel jumps (the map still fades in behind it).
     val lowPerf = com.ahu.tlauncher.ui.theme.LocalLowPerf.current
-    LaunchedEffect(mapVisible) { if (lowPerf) edge.snapTo(stageFraction) else edge.animateTo(stageFraction, TMotion.split()) }
+    LaunchedEffect(mapVisible) {
+        // A swipe moves the edge itself, and its release animation is already heading here.
+        if (dragEdge >= 0f || (edge.isRunning && edge.targetValue == stageFraction)) return@LaunchedEffect
+        if (lowPerf) edge.snapTo(stageFraction) else edge.animateTo(stageFraction, TMotion.split())
+    }
     // Keep the map while the panel is still sweeping over it. Read per frame only by this derived flag.
-    val mapComposed by remember { androidx.compose.runtime.derivedStateOf { mapVisible || edge.value < 0.999f } }
+    val mapComposed by remember { androidx.compose.runtime.derivedStateOf { mapVisible || panelEdge() < 0.999f } }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val panelBrush = stageBrush()
 
     Column(Modifier.fillMaxSize().background(T.colors.appBg)) {
@@ -141,13 +189,42 @@ fun HomeScreen(
             val stageW = maxWidth * stageFraction
             val sideRight = state.settings.carSide == com.ahu.tlauncher.data.CarSide.RIGHT
             val carRight = sideRight && mapVisible
+            // Swipe the car panel between split and full screen. The edge follows the finger; on release
+            // it settles on whichever side the swipe was heading (a quick flick) or is nearer to.
+            val widthPx = constraints.maxWidth.toFloat()
+            val swipe = remember(widthPx, sideRight, lowPerf) {
+                val toward = if (sideRight) -1f else 1f // finger direction that widens the panel
+                PanelSwipe(
+                    onStart = {
+                        scope.launch { edge.stop() }
+                        dragEdge = edge.value
+                        // From full screen the layout goes to split right away, so the map is there underneath.
+                        mapVisible = true
+                    },
+                    onDrag = { dx -> dragEdge = (dragEdge + toward * dx / widthPx).coerceIn(SPLIT_FRACTION, 1f) },
+                    onEnd = { vx ->
+                        val from = dragEdge
+                        val v = toward * vx / widthPx
+                        val full = if (kotlin.math.abs(v) >= FLING_PER_S) v > 0 else from > (SPLIT_FRACTION + 1f) / 2
+                        val target = if (full) 1f else SPLIT_FRACTION
+                        val ms = if (lowPerf) LOW_PERF_SETTLE_MS
+                        else (TMotion.SPLIT_MS * kotlin.math.abs(target - from) / (1f - SPLIT_FRACTION)).toInt().coerceAtLeast(MIN_SETTLE_MS)
+                        scope.launch {
+                            edge.snapTo(from)
+                            dragEdge = -1f
+                            mapVisible = !full
+                            edge.animateTo(target, androidx.compose.animation.core.tween(ms, easing = TMotion.EaseOutCubic))
+                        }
+                    },
+                )
+            }
             if (mapComposed) MapReveal(Modifier.align(if (sideRight) Alignment.TopStart else Alignment.TopEnd).width(maxWidth * (1 - SPLIT_FRACTION)).fillMaxHeight()) {
                 MapPane(state, actions, Modifier.fillMaxSize(), controlsOnLeft = sideRight)
             }
             // Panel: background and content clipped to the animated edge (draw phase only, no re-layout).
             Box(
                 Modifier.fillMaxSize().drawWithContent {
-                    val w = size.width * edge.value
+                    val w = size.width * panelEdge()
                     val left = if (sideRight) size.width - w else 0f
                     clipRect(left = left, right = left + w) {
                         drawRect(panelBrush)
@@ -160,8 +237,16 @@ fun HomeScreen(
                     handleOnLeft = carRight,
                     drawBackground = false,
                     modifier = Modifier.align(if (carRight) Alignment.TopEnd else Alignment.TopStart).width(stageW).fillMaxHeight(),
+                    panelSwipe = Modifier.panelSwipe(swipe),
                 )
             }
+            // In split view, a thin strip of the map next to the panel grabs it too (the rest of the map pans as usual).
+            if (mapVisible) Box(
+                Modifier.align(Alignment.TopStart).padding(top = STATUS_H)
+                    .offset(x = if (carRight) maxWidth - stageW - MAP_GRAB_W else stageW)
+                    .width(MAP_GRAB_W).fillMaxHeight()
+                    .panelSwipe(swipe),
+            )
             StatusBar(
                 state, Modifier.fillMaxWidth().height(STATUS_H),
                 mapSpan = if (!mapVisible) null else if (carRight) (0.dp to maxWidth - stageW) else (stageW to maxWidth),

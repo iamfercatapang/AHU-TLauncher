@@ -108,7 +108,6 @@ import com.ahu.tlauncher.ui.theme.TType
 import androidx.compose.foundation.clickable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** Studio backdrop behind the car: soft vertical fade towards a "floor". */
@@ -134,10 +133,12 @@ fun CarStage(
     handleOnLeft: Boolean = false,
     /** False when the caller paints [stageBrush] itself (the home screen sweeps it with the panel edge). */
     drawBackground: Boolean = true,
+    /** Swiping the panel between split and full screen (the home screen's gesture); not on the cards. */
+    panelSwipe: Modifier = Modifier,
 ) {
     val dark = T.colors.isDark
     Box(
-        modifier.then(if (drawBackground) Modifier.background(stageBrush()) else Modifier).clipToBounds().drawBehind {
+        modifier.then(panelSwipe).then(if (drawBackground) Modifier.background(stageBrush()) else Modifier).clipToBounds().drawBehind {
             // Night: a soft pool of light behind the car, like the prototype's lit stage.
             if (dark) drawCircle(
                 Brush.radialGradient(listOf(Color.White.copy(alpha = 0.09f), Color.Transparent), center = Offset(size.width / 2, size.height * 0.5f), radius = size.minDimension * 0.55f),
@@ -158,7 +159,12 @@ fun CarStage(
         )
 
         // bottom cards overlap the reflection, as in the reference layout
-        Box(Modifier.align(Alignment.BottomCenter).padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Box(
+            Modifier.align(Alignment.BottomCenter)
+                // Sideways swipes on the cards stay with the cards (the pager, or nothing) instead of moving the panel.
+                .pointerInput(Unit) { detectHorizontalDragGestures { change, _ -> change.consume() } }
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+        ) {
             AnimatedContent(
                 expanded,
                 transitionSpec = { (fadeIn(TMotion.enter()) togetherWith fadeOut(tween(120, easing = TMotion.EaseOut))).using(SizeTransform(clip = false) { _, _ -> snap() }) },
@@ -175,13 +181,9 @@ fun CarStage(
             }
         }
 
-        // drag handle on the right edge toggles the map
+        // Handle on the panel edge: tap to toggle the map (dragging it, like anywhere on the panel, swipes the panel).
         Box(
             Modifier.align(if (handleOnLeft) Alignment.CenterStart else Alignment.CenterEnd).width(28.dp).height(120.dp)
-                .pointerInput(Unit) {
-                    var total = 0f
-                    detectHorizontalDragGestures(onDragEnd = { if (abs(total) > 24) onToggleMap(); total = 0f }) { _, d -> total += d }
-                }
                 .pressable(onClick = onToggleMap),
             contentAlignment = Alignment.Center,
         ) {

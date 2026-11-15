@@ -12,7 +12,7 @@ These screenshots are rendered offline, so they show a placeholder street grid a
 
 ## Features
 - **Home launcher**: a dock with up to 6 pinned apps, and a searchable app drawer. Long-press an app in the drawer to pin or unpin it.
-- **Car view**: shows the Avanza photos bundled in the app, with a floor reflection and callouts for engine RPM, coolant temperature and battery voltage. Tap the car to switch between front, side and rear. Drag or tap the handle on the panel edge to switch between the full-screen car and the car + map split.
+- **Car view**: shows the Avanza photos bundled in the app, with a floor reflection and callouts for engine RPM, coolant temperature and battery voltage. Tap the car to switch between front, side and rear. Swipe the car panel sideways (anywhere except the cards, or from the map's edge next to it) to switch between the full-screen car and the car + map split: the edge follows your finger and settles when you let go. Tapping the handle on the panel edge does the same.
 - **Warning lights** that appear only when needed: OBD connected, engine cold or overheating, battery voltage out of range.
 - **Your own photos**: you can replace any view from the gallery in *Settings → Display → Car images*. Plain white photo backgrounds are removed automatically.
 - **Engine data from OBD-II**, read through a Bluetooth ELM327 adapter: speed, RPM, coolant temperature and battery voltage. There's no gear or transmission data, since the car is manual. With no adapter connected, all engine data is hidden and the speed comes from GPS. A **Demo** mode in Settings simulates driving data.
