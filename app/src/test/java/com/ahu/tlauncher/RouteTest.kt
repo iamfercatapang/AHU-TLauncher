@@ -44,6 +44,20 @@ class RouteTest {
         assertNull(RouteMath.parseRoute("""{"routes":[]}"""))
     }
 
+    @Test fun searchResultsNearestFirst() {
+        fun s(id: String, d: Int?) = com.ahu.tlauncher.route.Suggestion(id, id, "", d)
+        val sorted = RouteMath.nearestFirst(listOf(s("far", 331_800), s("none", null), s("near", 24_600), s("mid", 130_100), s("none2", null)))
+        assertEquals(listOf("near", "mid", "far", "none", "none2"), sorted.map { it.placeId })
+    }
+
+    @Test fun shortDistancesForSearchRows() {
+        assertEquals("332 km", com.ahu.tlauncher.ui.home.fmtDistanceShort(331_800, mph = false))
+        assertEquals("25 km", com.ahu.tlauncher.ui.home.fmtDistanceShort(24_600, mph = false)) // no decimal from 10 km up
+        assertEquals("9.5 km", com.ahu.tlauncher.ui.home.fmtDistanceShort(9_500, mph = false).replace(',', '.')) // decimal below 10 km
+        assertEquals("850 m", com.ahu.tlauncher.ui.home.fmtDistanceShort(850, mph = false))
+        assertEquals("21 mi", com.ahu.tlauncher.ui.home.fmtDistanceShort(33_800, mph = true))
+    }
+
     @Test fun parsesAlternativeRoutes() {
         val json = """{"routes":[
             {"distanceMeters":7400,"duration":"1080s","description":"EDSA","polyline":{"encodedPolyline":"_p~iF~ps|U_ulLnnqC_mqNvxq`@"}},

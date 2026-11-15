@@ -85,6 +85,7 @@ import com.ahu.tlauncher.ui.theme.T
 import com.ahu.tlauncher.ui.theme.TType
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /** Route line on the map: the prototype's lighter sky blue, with a darker casing. */
 val ROUTE_LINE = Color(0xFF4C9BF5)
@@ -96,6 +97,12 @@ val TRAFFIC_SLOW = Color(0xFFF29D38)
 val TRAFFIC_JAM = Color(0xFFE5484D)
 
 fun fmtDuration(s: Int): String { val m = (s + 30) / 60; return if (m >= 60) "${m / 60} h ${m % 60} min" else "$m min" }
+/** Like [fmtDistance] but without decimals from 10 km / 10 mi up ("332 km"), for narrow list rows. */
+fun fmtDistanceShort(m: Int, mph: Boolean): String = when {
+    mph && m >= 16_093 -> "${(m / 1609.34).roundToInt()} mi"
+    !mph && m >= 10_000 -> "${(m / 1000.0).roundToInt()} km"
+    else -> fmtDistance(m, mph)
+}
 fun fmtDistance(m: Int, mph: Boolean): String = if (mph) "%.1f mi".format(m / 1609.34) else if (m < 1000) "$m m" else "%.1f km".format(m / 1000.0)
 
 /** "6" + "min", or "1:20" + "h": the big number and its unit, for route tiles and the trip card. */
@@ -156,6 +163,8 @@ private val PanelShape = RoundedCornerShape(16.dp)
 private val TileShape = RoundedCornerShape(12.dp)
 /** Width of the floating navigation cards (prototype: ~270 px of an 840 px map). */
 val NAV_CARD_W = 340.dp
+/** The search card is wider, so place names and addresses have room to tell results apart. */
+val SEARCH_CARD_W = 440.dp
 
 /** Floating card over the map: frosted panel, hairline border, soft shadow (none in low-performance mode). */
 @Composable
@@ -206,7 +215,7 @@ fun SearchPanel(state: HomeUiState, actions: HomeActions, onClose: () -> Unit, m
     val focus = remember { FocusRequester() }
     val preview = LocalInspectionMode.current
     LaunchedEffect(Unit) { actions.refreshEtas(); if (!preview) runCatching { focus.requestFocus() } }
-    Column(modifier.widthIn(max = NAV_CARD_W).navPanel().padding(12.dp)) {
+    Column(modifier.widthIn(max = SEARCH_CARD_W).navPanel().padding(12.dp)) {
         Row(
             Modifier.fillMaxWidth().height(48.dp).clip(TileShape).background(c.tile).padding(start = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -286,7 +295,7 @@ private fun ColumnScope.SearchResults(state: HomeUiState, actions: HomeActions, 
         s.error != null -> EmptyState(s.error, "Check the connection and try again", tint = c.danger)
         s.suggestions.isEmpty() && !s.loading -> EmptyState("No places found", "Try a place name, a street or an address")
         else -> s.suggestions.forEach { sg ->
-            PlaceRow(Icons.Rounded.Place, c.sub, sg.title, sg.subtitle, sg.distanceM?.let { fmtDistance(it, state.mph) }) { actions.pickSuggestion(sg); onClose() }
+            PlaceRow(Icons.Rounded.Place, c.sub, sg.title, sg.subtitle, sg.distanceM?.let { fmtDistanceShort(it, state.mph) }) { actions.pickSuggestion(sg); onClose() }
         }
     }
 }
@@ -315,7 +324,7 @@ private fun SearchFooter(state: HomeUiState) {
 }
 
 private fun distanceTo(state: HomeUiState, p: Place): String? =
-    state.here?.let { h -> p.latLon?.let { fmtDistance(RouteMath.distanceM(h, it).toInt(), state.mph) } }
+    state.here?.let { h -> p.latLon?.let { fmtDistanceShort(RouteMath.distanceM(h, it).toInt(), state.mph) } }
 
 @Composable
 private fun PlaceRow(icon: ImageVector, iconTint: Color, title: String, subtitle: String, trailing: String?, onClick: () -> Unit) {
@@ -326,10 +335,11 @@ private fun PlaceRow(icon: ImageVector, iconTint: Color, title: String, subtitle
     ) {
         Badge(icon, iconTint); Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, style = TType.button, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (subtitle.isNotBlank() && subtitle != title) Text(subtitle, style = TType.caption, color = c.faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Two lines each: similar names ("Iglesia Ni Cristo - Lokal ng …") differ at the end.
+            Text(title, style = TType.button, color = c.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (subtitle.isNotBlank() && subtitle != title) Text(subtitle, style = TType.caption, color = c.faint, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
-        trailing?.let { Spacer(Modifier.width(8.dp)); Text(it, style = TType.caption, color = c.faint) }
+        trailing?.let { Spacer(Modifier.width(8.dp)); Text(it, style = TType.caption, color = c.faint, maxLines = 1) }
     }
 }
 
