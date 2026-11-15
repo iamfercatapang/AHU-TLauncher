@@ -18,6 +18,10 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import com.ahu.tlauncher.ui.components.avoidKeyboard
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Build
@@ -109,7 +113,11 @@ fun SettingsScreen(state: HomeUiState, actions: HomeActions, onClose: () -> Unit
                 Spacer(Modifier.weight(1f))
                 IconButtonT(Icons.Rounded.Close, "Close", size = 40.dp, iconSize = 22.dp, onClick = onClose)
             }
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(end = 10.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // The keyboard (Home / Work addresses) shrinks the list instead of covering it; the focused field stays in view.
+            Column(
+                Modifier.weight(1f).then(Modifier.avoidKeyboard()).verticalScroll(rememberScrollState()).padding(end = 10.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 when (section) {
                     Section.DISPLAY -> DisplaySection(state, actions)
                     Section.DOCK -> DockSection(state, actions)
@@ -262,11 +270,22 @@ private fun NavigationSection(state: HomeUiState, a: HomeActions) {
     )
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun AddressField(label: String, value: String, onSave: (String) -> Unit) {
     var text by remember(value) { mutableStateOf(value) }
     LaunchedEffect(text) { if (text != value) { kotlinx.coroutines.delay(800); onSave(text) } }
-    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    // Once the keyboard is up, scroll this row into the space left above it.
+    val bring = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    var focused by remember { mutableStateOf(false) }
+    val keyboardUp = androidx.compose.foundation.layout.WindowInsets.isImeVisible
+    LaunchedEffect(focused, keyboardUp) { if (focused && keyboardUp) { kotlinx.coroutines.delay(150); bring.bringIntoView() } }
+    Row(
+        Modifier.fillMaxWidth().bringIntoViewRequester(bring).onFocusChanged { focused = it.hasFocus }.padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(label, style = TType.body, color = T.colors.text, modifier = Modifier.width(64.dp))
         Box(Modifier.weight(1f).height(42.dp).clip(TShapes.inner).background(T.colors.card).padding(horizontal = 12.dp), contentAlignment = Alignment.CenterStart) {
             if (text.isEmpty()) Text("Address or place name", style = TType.body, color = T.colors.muted)
@@ -274,7 +293,7 @@ private fun AddressField(label: String, value: String, onSave: (String) -> Unit)
                 text, { text = it }, singleLine = true, textStyle = TType.body.copy(color = T.colors.text),
                 cursorBrush = SolidColor(T.colors.accent),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { onSave(text) }),
+                keyboardActions = KeyboardActions(onDone = { onSave(text); keyboard?.hide(); focus.clearFocus() }),
                 modifier = Modifier.fillMaxWidth(),
             )
         }

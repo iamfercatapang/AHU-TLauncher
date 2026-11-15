@@ -9,6 +9,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -43,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
 import com.ahu.tlauncher.ui.theme.T
 import com.ahu.tlauncher.ui.theme.TMotion
 import com.ahu.tlauncher.ui.theme.TShapes
@@ -212,4 +215,25 @@ fun ThinSlider(
         drawLine(fill, androidx.compose.ui.geometry.Offset(pad, cy), androidx.compose.ui.geometry.Offset(x, cy), w, androidx.compose.ui.graphics.StrokeCap.Round)
         drawCircle(fill.copy(alpha = if (enabled) 1f else 0.4f), 8.dp.toPx(), androidx.compose.ui.geometry.Offset(x, cy))
     }
+}
+
+/**
+ * Shrinks this element from the bottom by however much the on-screen keyboard covers it, so a
+ * scrolling list put after this modifier keeps the focused text field in view above the keyboard.
+ * The launcher draws edge-to-edge and the window never resizes, so only what uses this moves.
+ */
+@Composable
+fun Modifier.avoidKeyboard(): Modifier {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val imeBottom = WindowInsets.ime.getBottom(density)
+    // Distance from this element's bottom edge to the bottom of the window.
+    var gap by remember { mutableStateOf(0) }
+    val covered = (imeBottom - gap).coerceAtLeast(0)
+    return this
+        .onGloballyPositioned { c ->
+            val root = c.findRootCoordinates()
+            val bottom = root.localBoundingBoxOf(c, clipBounds = false).bottom
+            gap = (root.size.height - bottom).toInt().coerceAtLeast(0)
+        }
+        .padding(bottom = with(density) { covered.toDp() })
 }
