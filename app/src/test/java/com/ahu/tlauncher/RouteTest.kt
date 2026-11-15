@@ -44,6 +44,13 @@ class RouteTest {
         assertNull(RouteMath.parseRoute("""{"routes":[]}"""))
     }
 
+    @Test fun shortDistancesForSearchRows() {
+        assertEquals("332 km", com.ahu.tlauncher.ui.home.fmtDistanceShort(331_800, mph = false))
+        assertEquals("24.6 km", com.ahu.tlauncher.ui.home.fmtDistanceShort(24_600, mph = false).replace(',', '.'))
+        assertEquals("850 m", com.ahu.tlauncher.ui.home.fmtDistanceShort(850, mph = false))
+        assertEquals("21 mi", com.ahu.tlauncher.ui.home.fmtDistanceShort(33_800, mph = true))
+    }
+
     @Test fun parsesAlternativeRoutes() {
         val json = """{"routes":[
             {"distanceMeters":7400,"duration":"1080s","description":"EDSA","polyline":{"encodedPolyline":"_p~iF~ps|U_ulLnnqC_mqNvxq`@"}},
