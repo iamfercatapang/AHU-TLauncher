@@ -1,6 +1,7 @@
 package com.ahu.tlauncher.ui.theme
 
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.tween
 
 /**
@@ -39,4 +40,19 @@ object TMotion {
     const val PANEL_MS = 220
     fun <T> panel() = tween<T>(PANEL_MS, easing = EaseOut)
     fun <T> count() = tween<T>(COUNT_MS, easing = EaseOut)
+
+    /** The prototype's `easeOutCubic`, 1 − (1 − t)³: used for its car-panel resize. */
+    val EaseOutCubic = Easing { t -> 1f - (1f - t) * (1f - t) * (1f - t) }
+    /** CSS `ease-out` (the prototype's `--easing-default`). */
+    val CssEaseOut = CubicBezierEasing(0f, 0f, 0.58f, 1f)
+
+    /** Car panel edge sweeping between full screen and split (prototype: 500 ms). */
+    const val SPLIT_MS = 500
+    /** The map trails the panel edge by this much (prototype's `mapDelay`). */
+    const val MAP_LAG_MS = 200
+    fun <T> split() = tween<T>(SPLIT_MS, easing = EaseOutCubic)
+    /** Card carousel slide (prototype: `duration-600 ease-out`). */
+    fun <T> carousel() = tween<T>(600, easing = CssEaseOut)
+    /** Pagination dot colour (prototype: 300 ms ease-out). */
+    fun <T> dot() = tween<T>(300, easing = CssEaseOut)
 }

@@ -103,13 +103,15 @@ import com.ahu.tlauncher.ui.theme.T
 import com.ahu.tlauncher.ui.theme.TMotion
 import com.ahu.tlauncher.ui.theme.TShapes
 import com.ahu.tlauncher.ui.theme.TType
+import androidx.compose.foundation.clickable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** Studio backdrop behind the car: soft vertical fade towards a "floor". */
 @Composable
-private fun stageBrush(): Brush = if (T.colors.isDark) {
+internal fun stageBrush(): Brush = if (T.colors.isDark) {
     // Prototype: near-black side panel.
     Brush.verticalGradient(0f to Color(0xFF0E0E0E), 1f to Color(0xFF0E0E0E))
 } else {
@@ -128,10 +130,12 @@ fun CarStage(
     onToggleMap: () -> Unit,
     modifier: Modifier = Modifier,
     handleOnLeft: Boolean = false,
+    /** False when the caller paints [stageBrush] itself (the home screen sweeps it with the panel edge). */
+    drawBackground: Boolean = true,
 ) {
     val dark = T.colors.isDark
     Box(
-        modifier.background(stageBrush()).clipToBounds().drawBehind {
+        modifier.then(if (drawBackground) Modifier.background(stageBrush()) else Modifier).clipToBounds().drawBehind {
             // Night: a soft pool of light behind the car, like the prototype's lit stage.
             if (dark) drawCircle(
                 Brush.radialGradient(listOf(Color.White.copy(alpha = 0.09f), Color.Transparent), center = Offset(size.width / 2, size.height * 0.5f), radius = size.minDimension * 0.55f),
@@ -410,8 +414,21 @@ private fun CardPager(state: HomeUiState, actions: HomeActions) {
         HorizontalPager(pager, pageSpacing = 12.dp) { page ->
             if (page == 0) MusicCard(state, actions, Modifier.fillMaxWidth()) else NavigateCard(actions, Modifier.fillMaxWidth())
         }
-        Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            repeat(2) { i -> Box(Modifier.size(5.dp).clip(CircleShape).background(if (pager.currentPage == i) T.colors.text else T.colors.secondary.copy(alpha = 0.4f))) }
+        // Prototype pagination: dots fade between states (300 ms); tapping one slides the cards (600 ms ease-out).
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
+        Row(Modifier.padding(top = 1.dp)) {
+            repeat(2) { i ->
+                val dot by androidx.compose.animation.animateColorAsState(
+                    if (pager.currentPage == i) T.colors.text else T.colors.secondary.copy(alpha = 0.4f), TMotion.dot(), label = "dot",
+                )
+                Box(
+                    Modifier
+                        .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) {
+                            scope.launch { pager.animateScrollToPage(i, animationSpec = TMotion.carousel()) }
+                        }
+                        .padding(start = 2.5.dp, end = 2.5.dp, top = 5.dp),
+                ) { Box(Modifier.size(5.dp).clip(CircleShape).background(dot)) }
+            }
         }
     }
 }

@@ -54,6 +54,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.unit.dp
@@ -108,21 +110,42 @@ fun HomeScreen(
         if (!mapVisible && overlay in setOf(Overlay.SETTINGS, Overlay.MUSIC, Overlay.SEARCH)) overlay = Overlay.NONE
     }
     val toggle = { o: Overlay -> overlay = if (overlay == o) Overlay.NONE else o }
-    // Instant switch: animating the width would re-layout the map every frame (janky on head units).
+    // Layout still switches instantly: resizing the map every frame is janky on head units.
+    // The prototype's motion is drawn on top instead. The car panel's edge sweeps between split
+    // and full screen (500 ms, ease-out cubic) by clipping the panel, while the map stays laid out
+    // at its split size underneath and fades in 200 ms behind the edge.
     val stageFraction = if (mapVisible) SPLIT_FRACTION else 1f
+    val edge = remember { androidx.compose.animation.core.Animatable(stageFraction) }
+    LaunchedEffect(mapVisible) { edge.animateTo(stageFraction, TMotion.split()) }
+    // Keep the map while the panel is still sweeping over it. Read per frame only by this derived flag.
+    val mapComposed by remember { androidx.compose.runtime.derivedStateOf { mapVisible || edge.value < 0.999f } }
+    val panelBrush = stageBrush()
 
     Column(Modifier.fillMaxSize().background(T.colors.appBg)) {
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val stageW = maxWidth * stageFraction
-            val carRight = state.settings.carSide == com.ahu.tlauncher.data.CarSide.RIGHT && mapVisible
-            Row(Modifier.fillMaxSize()) {
-                if (carRight) MapReveal(Modifier.weight(1f).fillMaxHeight()) { MapPane(state, actions, Modifier.fillMaxSize(), controlsOnLeft = true) }
+            val sideRight = state.settings.carSide == com.ahu.tlauncher.data.CarSide.RIGHT
+            val carRight = sideRight && mapVisible
+            if (mapComposed) MapReveal(Modifier.align(if (sideRight) Alignment.TopStart else Alignment.TopEnd).width(maxWidth * (1 - SPLIT_FRACTION)).fillMaxHeight()) {
+                MapPane(state, actions, Modifier.fillMaxSize(), controlsOnLeft = sideRight)
+            }
+            // Panel: background and content clipped to the animated edge (draw phase only, no re-layout).
+            Box(
+                Modifier.fillMaxSize().drawWithContent {
+                    val w = size.width * edge.value
+                    val left = if (sideRight) size.width - w else 0f
+                    clipRect(left = left, right = left + w) {
+                        drawRect(panelBrush)
+                        this@drawWithContent.drawContent()
+                    }
+                },
+            ) {
                 CarStage(
                     state, actions, expanded = !mapVisible, onToggleMap = { mapVisible = !mapVisible },
                     handleOnLeft = carRight,
-                    modifier = Modifier.width(stageW).fillMaxHeight(),
+                    drawBackground = false,
+                    modifier = Modifier.align(if (carRight) Alignment.TopEnd else Alignment.TopStart).width(stageW).fillMaxHeight(),
                 )
-                if (!carRight && mapVisible) MapReveal(Modifier.weight(1f).fillMaxHeight()) { MapPane(state, actions, Modifier.fillMaxSize()) }
             }
             StatusBar(
                 state, Modifier.fillMaxWidth().height(STATUS_H),
@@ -297,7 +320,8 @@ private fun MapReveal(modifier: Modifier, content: @Composable () -> Unit) {
     // Previews/screenshots show the map straight away (they capture the first frame).
     val cover = remember { androidx.compose.animation.core.Animatable(1f) }
     if (LocalInspectionMode.current) { Box(modifier) { content() }; return }
-    LaunchedEffect(Unit) { cover.animateTo(0f, TMotion.enter()) }
+    // Trails the car panel's edge, like the prototype's delayed map resize.
+    LaunchedEffect(Unit) { cover.animateTo(0f, androidx.compose.animation.core.tween(TMotion.ENTER_MS, delayMillis = TMotion.MAP_LAG_MS, easing = TMotion.EaseOut)) }
     Box(modifier) {
         content()
         if (cover.value > 0f) Box(Modifier.fillMaxSize().background(T.colors.appBg.copy(alpha = cover.value)))
