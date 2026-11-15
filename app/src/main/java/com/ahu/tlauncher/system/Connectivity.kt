@@ -12,6 +12,7 @@ import android.os.Build
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -39,18 +40,62 @@ data class WifiDetails(val status: WifiStatus, val ssid: String? = null, val nea
 
 data class CellDetails(val status: CellStatus, val carrier: String? = null, val roaming: Boolean = false)
 
+/** Pure rule for the Bluetooth status icon, unit tested. */
+object BtRule {
+    /**
+     * [profileConnected]: any audio/call profile reports a connection. Both directions count: a head unit
+     * is usually the A2DP sink / hands-free client of the phone, not the source.
+     */
+    fun status(enabled: Boolean, canQuery: Boolean, profileConnected: Boolean): BtStatus = when {
+        !enabled -> BtStatus.OFF
+        canQuery && profileConnected -> BtStatus.CONNECTED
+        else -> BtStatus.ON
+    }
+}
+
 object Connectivity {
+    /**
+     * Status for the status bar icon and the Bluetooth popup (the same answer for both). Asks the adapter's
+     * cached state first, then the profiles themselves, which also covers the head-unit (sink) side.
+     */
     @SuppressLint("MissingPermission")
-    fun bluetooth(ctx: Context): BtStatus = runCatching {
-        val adapter = ctx.getSystemService(BluetoothManager::class.java)?.adapter ?: return BtStatus.OFF
-        if (!adapter.isEnabled) return BtStatus.OFF
-        val canQuery = Build.VERSION.SDK_INT < 31 ||
-            ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
-        if (!canQuery) return BtStatus.ON
-        val connected = listOf(BluetoothProfile.A2DP, BluetoothProfile.HEADSET)
-            .any { adapter.getProfileConnectionState(it) == BluetoothProfile.STATE_CONNECTED }
-        if (connected) BtStatus.CONNECTED else BtStatus.ON
-    }.getOrDefault(BtStatus.OFF)
+    suspend fun bluetoothStatus(ctx: Context): BtStatus {
+        val adapter = runCatching { ctx.getSystemService(BluetoothManager::class.java)?.adapter }.getOrNull() ?: return BtStatus.OFF
+        val enabled = runCatching { adapter.isEnabled }.getOrDefault(false)
+        val canQuery = canQueryBt(ctx)
+        if (!enabled || !canQuery) return BtRule.status(enabled, canQuery, false)
+        val cached = AUDIO_PROFILES.any { p -> runCatching { adapter.getProfileConnectionState(p) == BluetoothProfile.STATE_CONNECTED }.getOrDefault(false) }
+        val connected = cached || connectedAddresses(ctx.applicationContext, adapter).isNotEmpty()
+        return BtRule.status(enabled, canQuery, connected)
+    }
+
+    private fun canQueryBt(ctx: Context) = Build.VERSION.SDK_INT < 31 ||
+        ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+
+    /** Broadcasts that can change the Bluetooth status (adapter on/off, a device or audio/call profile connecting). */
+    private val BT_ACTIONS = listOf(
+        android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED,
+        android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED,
+        android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED,
+        android.bluetooth.BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED,
+        android.bluetooth.BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED,
+        // Head-unit side (hidden in the SDK): A2DP sink and hands-free client.
+        "android.bluetooth.a2dp-sink.profile.action.CONNECTION_STATE_CHANGED",
+        "android.bluetooth.headsetclient.profile.action.CONNECTION_STATE_CHANGED",
+    )
+
+    /** Emits once at the start and on every Bluetooth change, until collection stops. */
+    fun bluetoothChanges(ctx: Context): kotlinx.coroutines.flow.Flow<Unit> = kotlinx.coroutines.flow.callbackFlow {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: Context?, i: android.content.Intent?) { trySend(Unit) }
+        }
+        val filter = android.content.IntentFilter().apply { BT_ACTIONS.forEach(::addAction) }
+        val app = ctx.applicationContext
+        // System broadcasts: exported is right (and required on Android 14 for the hidden actions).
+        runCatching { ContextCompat.registerReceiver(app, receiver, filter, ContextCompat.RECEIVER_EXPORTED) }
+        trySend(Unit)
+        awaitClose { runCatching { app.unregisterReceiver(receiver) } }
+    }
 
     /** Null when there's no SIM / no mobile radio (most head units without a SIM). */
     @SuppressLint("MissingPermission")
@@ -80,16 +125,16 @@ object Connectivity {
      */
     @SuppressLint("MissingPermission")
     suspend fun bluetoothDetails(ctx: Context): BtDetails {
-        val status = bluetooth(ctx)
-        val permitted = Build.VERSION.SDK_INT < 31 ||
-            ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
-        if (status == BtStatus.OFF || !permitted) return BtDetails(status, permitted = permitted)
-        val adapter = ctx.getSystemService(BluetoothManager::class.java)?.adapter ?: return BtDetails(status)
+        val adapter = runCatching { ctx.getSystemService(BluetoothManager::class.java)?.adapter }.getOrNull()
+        val enabled = adapter != null && runCatching { adapter.isEnabled }.getOrDefault(false)
+        val permitted = canQueryBt(ctx)
+        if (adapter == null || !enabled || !permitted) return BtDetails(BtRule.status(enabled, permitted, false), permitted = permitted)
         val bonded = runCatching { adapter.bondedDevices.orEmpty().toList() }.getOrDefault(emptyList())
         val connected = connectedAddresses(ctx.applicationContext, adapter)
         val devices = bonded.map { BtDevice(it.name ?: it.address, it.address in connected) }
             .sortedWith(compareByDescending<BtDevice> { it.connected }.thenBy { it.name.lowercase() })
-        return BtDetails(status, devices)
+        // Same rule as the icon, from the same profiles, so the popup's heading matches its list.
+        return BtDetails(BtRule.status(enabled, permitted, connected.isNotEmpty()), devices)
     }
 
     /** HEADSET, A2DP, A2DP_SINK and HEADSET_CLIENT (the last two are hidden constants; unsupported ones answer nothing). */
