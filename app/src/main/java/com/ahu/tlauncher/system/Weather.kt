@@ -17,7 +17,20 @@ import java.util.Locale
 
 enum class WeatherKind { CLEAR, PARTLY_CLOUDY, CLOUDY, FOG, DRIZZLE, RAIN, SNOW, STORM }
 
-data class Weather(val tempC: Double, val kind: WeatherKind, val isDay: Boolean, val fetchedAtMs: Long)
+/** One hour of forecast. [hour] is 0–23 local time; [rainPct] is the chance of precipitation. */
+data class HourForecast(val hour: Int, val tempC: Double, val kind: WeatherKind, val isDay: Boolean, val rainPct: Int?)
+
+data class Weather(
+    val tempC: Double,
+    val kind: WeatherKind,
+    val isDay: Boolean,
+    val fetchedAtMs: Long,
+    val feelsC: Double? = null,
+    val humidityPct: Int? = null,
+    val windKmh: Double? = null,
+    /** The next hours after the current one, for the status bar's weather popup. */
+    val hourly: List<HourForecast> = emptyList(),
+)
 
 /** Pure parsing helpers, unit tested. */
 object WeatherParser {
@@ -42,12 +55,50 @@ object WeatherParser {
         val t = num("temperature_2m") ?: return null
         val code = num("weather_code")?.toInt() ?: return null
         val day = (num("is_day") ?: 1.0) >= 1.0
-        return Weather(t, kind(code), day, nowMs)
+        val now = Regex("\"time\":\"([^\"]+)\"").find(block)?.groupValues?.get(1)
+        return Weather(
+            t, kind(code), day, nowMs,
+            feelsC = num("apparent_temperature"),
+            humidityPct = num("relative_humidity_2m")?.toInt(),
+            windKmh = num("wind_speed_10m"),
+            hourly = hourly(json, now),
+        )
     }
+
+    /** Reads the `"hourly":{…}` arrays: hours strictly after [now] (local ISO time), at most [max]. */
+    fun hourly(json: String, now: String?, max: Int = HOURS): List<HourForecast> {
+        val start = json.indexOf("\"hourly\":{").takeIf { it >= 0 } ?: return emptyList()
+        val end = json.indexOf('}', start).takeIf { it > 0 } ?: return emptyList()
+        val block = json.substring(start, end)
+        fun arr(key: String): List<String> =
+            Regex("\"$key\":\\[([^\\]]*)\\]").find(block)?.groupValues?.get(1)?.split(',')?.map { it.trim().removeSurrounding("\"") } ?: emptyList()
+        val times = arr("time")
+        val temps = arr("temperature_2m")
+        val codes = arr("weather_code")
+        val rain = arr("precipitation_probability")
+        val days = arr("is_day")
+        return times.indices.mapNotNull { i ->
+            val time = times[i]
+            if (now != null && time <= now) return@mapNotNull null
+            val hour = time.substringAfter('T', "").take(2).toIntOrNull() ?: return@mapNotNull null
+            val temp = temps.getOrNull(i)?.toDoubleOrNull() ?: return@mapNotNull null
+            val code = codes.getOrNull(i)?.toDoubleOrNull()?.toInt() ?: return@mapNotNull null
+            HourForecast(hour, temp, kind(code), (days.getOrNull(i)?.toDoubleOrNull() ?: 1.0) >= 1.0, rain.getOrNull(i)?.toDoubleOrNull()?.toInt())
+        }.take(max)
+    }
+
+    /** Forecast hours shown in the popup. */
+    const val HOURS = 6
 
     fun url(lat: Double, lon: Double): String =
         // ~1 km precision is plenty for weather and keeps the exact position private.
-        String.format(Locale.US, "https://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f&current=temperature_2m,weather_code,is_day", lat, lon)
+        String.format(
+            Locale.US,
+            "https://api.open-meteo.com/v1/forecast?latitude=%.2f&longitude=%.2f" +
+                "&current=temperature_2m,weather_code,is_day,apparent_temperature,relative_humidity_2m,wind_speed_10m" +
+                "&hourly=temperature_2m,weather_code,precipitation_probability,is_day&forecast_hours=${HOURS + 1}&timezone=auto",
+            lat, lon,
+        )
 
     /** Hide readings older than this (e.g. no internet for a while). */
     const val MAX_AGE_MS = 2 * 60 * 60 * 1000L

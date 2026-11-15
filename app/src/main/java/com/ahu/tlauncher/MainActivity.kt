@@ -473,6 +473,29 @@ class MainActivity : ComponentActivity(), HomeActions {
     }
 
     override fun openAndroidSettings() { startSafely(Intent(AndroidSettings.ACTION_SETTINGS)) }
+
+    override suspend fun bluetoothDetails(): com.ahu.tlauncher.system.BtDetails {
+        val d = com.ahu.tlauncher.system.Connectivity.bluetoothDetails(this)
+        // Android 12+: listing paired devices needs "Nearby devices". Ask once while the launcher runs.
+        if (!d.permitted && d.status != com.ahu.tlauncher.system.BtStatus.OFF && !askedBtForPopup) {
+            askedBtForPopup = true
+            bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        return d
+    }
+    private var askedBtForPopup = false
+    override fun wifiDetails(scan: Boolean) = com.ahu.tlauncher.system.Connectivity.wifiDetails(this, scan)
+    override fun cellDetails() = com.ahu.tlauncher.system.Connectivity.cellDetails(this)
+    override fun openBluetoothSettings() { openFirst(AndroidSettings.ACTION_BLUETOOTH_SETTINGS) }
+    override fun openWifiSettings() { openFirst(AndroidSettings.ACTION_WIFI_SETTINGS) }
+    override fun openMobileSettings() {
+        openFirst(AndroidSettings.ACTION_NETWORK_OPERATOR_SETTINGS, AndroidSettings.ACTION_DATA_ROAMING_SETTINGS, AndroidSettings.ACTION_WIRELESS_SETTINGS)
+    }
+
+    /** Opens the first settings page this head unit has, else Android's main settings. */
+    private fun openFirst(vararg actions: String) {
+        if (actions.none { startSafely(Intent(it)) } && !startSafely(Intent(AndroidSettings.ACTION_SETTINGS))) toastMissing("Settings")
+    }
     override fun startUpdate() = app.updater.install()
     override fun dismissUpdate() = app.updater.dismiss()
     override fun checkForUpdates() { lifecycleScope.launch { app.updater.check(manual = true) } }

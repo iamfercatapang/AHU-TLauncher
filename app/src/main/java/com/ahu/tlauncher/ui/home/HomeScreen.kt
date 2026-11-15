@@ -77,7 +77,10 @@ val DOCK_H = 64.dp
 val STATUS_H = 40.dp
 private const val SPLIT_FRACTION = 0.36f
 
-enum class Overlay { NONE, APPS, SETTINGS, MUSIC, SEARCH, BRIGHTNESS, VOLUME, CARD_MUSIC, NOTIFICATIONS }
+enum class Overlay { NONE, APPS, SETTINGS, MUSIC, SEARCH, BRIGHTNESS, VOLUME, CARD_MUSIC, NOTIFICATIONS, BLUETOOTH, WIFI, CELL, WEATHER }
+
+/** Small popups under the status bar: no dimmed backdrop, like the notifications list. */
+private val STATUS_POPUPS = setOf(Overlay.NOTIFICATIONS, Overlay.BLUETOOTH, Overlay.WIFI, Overlay.CELL, Overlay.WEATHER)
 
 @Composable
 fun HomeScreen(
@@ -152,6 +155,7 @@ fun HomeScreen(
                 mapSpan = if (!mapVisible) null else if (carRight) (0.dp to maxWidth - stageW) else (stageW to maxWidth),
                 onObdClick = { settingsStart = com.ahu.tlauncher.ui.settings.Section.DIAGNOSTICS; overlay = Overlay.SETTINGS },
                 onBellClick = { toggle(Overlay.NOTIFICATIONS) },
+                onStatusClick = toggle,
             )
 
             // Prototype motion: panels rise 18 dp while fading in over a dimmed backdrop.
@@ -159,7 +163,7 @@ fun HomeScreen(
             val panelIn = fadeIn(TMotion.panel()) + androidx.compose.animation.slideInVertically(TMotion.panel()) { rise }
             val panelOut = fadeOut(androidx.compose.animation.core.tween(150))
             androidx.compose.animation.AnimatedVisibility(
-                visible = overlay !in setOf(Overlay.NONE, Overlay.BRIGHTNESS, Overlay.VOLUME, Overlay.CARD_MUSIC, Overlay.NOTIFICATIONS),
+                visible = overlay !in setOf(Overlay.NONE, Overlay.BRIGHTNESS, Overlay.VOLUME, Overlay.CARD_MUSIC) + STATUS_POPUPS,
                 enter = fadeIn(TMotion.panel()), exit = panelOut,
             ) { Box(Modifier.fillMaxSize().background(T.colors.scrim)) }
             // Tap anywhere outside an open panel to close it (that tap does nothing else).
@@ -177,6 +181,27 @@ fun HomeScreen(
                 modifier = Modifier.align(Alignment.TopStart).padding(top = STATUS_H, start = (if (mapVisible && !carRight) stageW else 0.dp) + 12.dp),
             ) {
                 NotificationsPopup(state, actions, onClose = { overlay = Overlay.NONE })
+            }
+            // Bluetooth / Wi-Fi / mobile under their icons (map's top-left in split view, top-right
+            // when the car fills the screen); weather under the temperature at the top-right.
+            val linksAnchor = if (mapVisible) Modifier.align(Alignment.TopStart).padding(top = STATUS_H, start = (if (!carRight) stageW else 0.dp) + 12.dp)
+                else Modifier.align(Alignment.TopEnd).padding(top = STATUS_H, end = 12.dp)
+            val closeStatus = { overlay = Overlay.NONE }
+            androidx.compose.animation.AnimatedVisibility(overlay == Overlay.BLUETOOTH, linksAnchor, enter = panelIn, exit = panelOut) {
+                BluetoothPopup(state, actions, onClose = closeStatus)
+            }
+            androidx.compose.animation.AnimatedVisibility(overlay == Overlay.WIFI, linksAnchor, enter = panelIn, exit = panelOut) {
+                WifiPopup(state, actions, onClose = closeStatus)
+            }
+            androidx.compose.animation.AnimatedVisibility(overlay == Overlay.CELL, linksAnchor, enter = panelIn, exit = panelOut) {
+                CellPopup(state, actions, onClose = closeStatus)
+            }
+            androidx.compose.animation.AnimatedVisibility(
+                overlay == Overlay.WEATHER,
+                Modifier.align(Alignment.TopEnd).padding(top = STATUS_H, end = (if (mapVisible && carRight) stageW else 0.dp) + 12.dp),
+                enter = panelIn, exit = panelOut,
+            ) {
+                WeatherPopup(state, onClose = closeStatus)
             }
             // volume slider, above the dock's speaker
             androidx.compose.animation.AnimatedVisibility(
@@ -335,6 +360,7 @@ private fun StatusBar(
     modifier: Modifier,
     onObdClick: () -> Unit = {},
     onBellClick: () -> Unit = {},
+    onStatusClick: (Overlay) -> Unit = {},
     /** Map area (start, end) when the map is visible; null when the car fills the screen. */
     mapSpan: Pair<androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp>? = null,
 ) {
@@ -345,15 +371,18 @@ private fun StatusBar(
             val obdX = if (mapSpan != null && mapSpan.first.value == 0f) mapSpan.second + 20.dp else 20.dp
             ObdBadge(state.obd.status, Modifier.align(Alignment.CenterStart).padding(start = obdX).pressable(onClick = onObdClick))
         }
-        val links = @Composable { Connectivity(state, onBellClick) }
+        val links = @Composable { Connectivity(state, onBellClick, onStatusClick) }
         val clock = @Composable {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 state.weather?.let { w ->
                     val f = state.settings.tempUnit == com.ahu.tlauncher.data.TempUnit.F
                     val t = if (f) w.tempC * 9 / 5 + 32 else w.tempC
-                    Icon(weatherIcon(w), w.kind.name.lowercase().replace('_', ' '), tint = T.colors.text, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("${Math.round(t)} °${if (f) "F" else "C"}", style = TType.button, color = T.colors.text)
+                    // Tap for the weather popup (details and the next hours).
+                    Row(Modifier.pressable { onStatusClick(Overlay.WEATHER) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(weatherIcon(w), w.kind.name.lowercase().replace('_', ' '), tint = T.colors.text, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("${Math.round(t)} °${if (f) "F" else "C"}", style = TType.button, color = T.colors.text)
+                    }
                     Spacer(Modifier.width(20.dp))
                 }
                 Text(state.now.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())), style = TType.button, color = T.colors.muted)
@@ -375,25 +404,30 @@ private fun StatusBar(
 
 /** Bluetooth and Wi-Fi status icons (TLauncher's own line icons). */
 @Composable
-private fun Connectivity(state: HomeUiState, onBellClick: () -> Unit = {}) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+private fun Connectivity(state: HomeUiState, onBellClick: () -> Unit = {}, onStatusClick: (Overlay) -> Unit = {}) {
+    // Each item sits in a 28 dp tap target; 6 dp between targets keeps the icons 14 dp apart as before.
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         val (btIcon, btDesc) = when (state.bluetooth) {
             BtStatus.CONNECTED -> com.ahu.tlauncher.ui.components.TIcons.Bluetooth to "Bluetooth connected"
             BtStatus.ON -> com.ahu.tlauncher.ui.components.TIcons.Bluetooth to "Bluetooth on"
             BtStatus.OFF -> com.ahu.tlauncher.ui.components.TIcons.BluetoothOff to "Bluetooth off"
         }
-        Icon(btIcon, btDesc, tint = if (state.bluetooth == BtStatus.CONNECTED) T.colors.text else T.colors.muted, modifier = Modifier.size(20.dp))
+        Box(Modifier.size(28.dp).pressable { onStatusClick(Overlay.BLUETOOTH) }, contentAlignment = Alignment.Center) {
+            Icon(btIcon, btDesc, tint = if (state.bluetooth == BtStatus.CONNECTED) T.colors.text else T.colors.muted, modifier = Modifier.size(20.dp))
+        }
         val w = state.wifi
         val icon = when {
             !w.enabled -> com.ahu.tlauncher.ui.components.TIcons.WifiOff
             !w.connected -> com.ahu.tlauncher.ui.components.TIcons.wifi(0)
             else -> com.ahu.tlauncher.ui.components.TIcons.wifi(w.level.coerceIn(1, 4).let { if (it >= 3) 3 else it })
         }
-        Icon(icon, if (w.connected) "Wi-Fi connected" else if (w.enabled) "Wi-Fi not connected" else "Wi-Fi off",
-            tint = if (w.connected) T.colors.text else T.colors.muted, modifier = Modifier.size(20.dp))
+        Box(Modifier.size(28.dp).pressable { onStatusClick(Overlay.WIFI) }, contentAlignment = Alignment.Center) {
+            Icon(icon, if (w.connected) "Wi-Fi connected" else if (w.enabled) "Wi-Fi not connected" else "Wi-Fi off",
+                tint = if (w.connected) T.colors.text else T.colors.muted, modifier = Modifier.size(20.dp))
+        }
         // mobile signal (only with a SIM): type label + four bars
         state.cell?.let { c ->
-            Row(verticalAlignment = Alignment.Bottom) {
+            Row(Modifier.height(28.dp).pressable { onStatusClick(Overlay.CELL) }.padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.Bottom) {
                 c.type?.let { Text(it, style = TType.caption, color = T.colors.text, modifier = Modifier.padding(end = 1.dp)) }
                 Box(Modifier.size(20.dp)) {
                     Icon(com.ahu.tlauncher.ui.components.TIcons.signalBars(c.level, false), null, tint = T.colors.muted, modifier = Modifier.size(20.dp))
@@ -409,9 +443,11 @@ private fun Connectivity(state: HomeUiState, onBellClick: () -> Unit = {}) {
     }
 }
 
-private fun weatherIcon(w: com.ahu.tlauncher.system.Weather) = when (w.kind) {
-    com.ahu.tlauncher.system.WeatherKind.CLEAR -> if (w.isDay) Icons.Rounded.WbSunny else Icons.Rounded.NightsStay
-    com.ahu.tlauncher.system.WeatherKind.PARTLY_CLOUDY -> if (w.isDay) Icons.Rounded.WbCloudy else Icons.Rounded.NightsStay
+private fun weatherIcon(w: com.ahu.tlauncher.system.Weather) = weatherIcon(w.kind, w.isDay)
+
+internal fun weatherIcon(kind: com.ahu.tlauncher.system.WeatherKind, isDay: Boolean) = when (kind) {
+    com.ahu.tlauncher.system.WeatherKind.CLEAR -> if (isDay) Icons.Rounded.WbSunny else Icons.Rounded.NightsStay
+    com.ahu.tlauncher.system.WeatherKind.PARTLY_CLOUDY -> if (isDay) Icons.Rounded.WbCloudy else Icons.Rounded.NightsStay
     com.ahu.tlauncher.system.WeatherKind.CLOUDY -> Icons.Rounded.Cloud
     com.ahu.tlauncher.system.WeatherKind.FOG -> Icons.Rounded.Dehaze
     com.ahu.tlauncher.system.WeatherKind.DRIZZLE, com.ahu.tlauncher.system.WeatherKind.RAIN -> Icons.Rounded.Umbrella

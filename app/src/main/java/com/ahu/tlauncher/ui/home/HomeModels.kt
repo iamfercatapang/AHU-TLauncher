@@ -141,6 +141,13 @@ interface HomeActions {
     fun requestLocation() {}
     fun setDefaultLauncher() {}
     fun openAndroidSettings() {}
+    // Status bar popups: details are read when a popup is open; the settings pages are Android's own.
+    suspend fun bluetoothDetails(): com.ahu.tlauncher.system.BtDetails? = null
+    fun wifiDetails(scan: Boolean): com.ahu.tlauncher.system.WifiDetails? = null
+    fun cellDetails(): com.ahu.tlauncher.system.CellDetails? = null
+    fun openBluetoothSettings() {}
+    fun openWifiSettings() {}
+    fun openMobileSettings() {}
     fun startUpdate() {}
     fun dismissUpdate() {}
     fun checkForUpdates() {}

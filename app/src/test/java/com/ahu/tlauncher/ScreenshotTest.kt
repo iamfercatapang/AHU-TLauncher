@@ -229,4 +229,61 @@ class ScreenshotTest {
         ), NoopActions, initialOverlay = Overlay.NOTIFICATIONS)
     }
     @Test fun settingsLight() = shot("settings_display_light", dark = false) { HomeScreen(state(), NoopActions, initialOverlay = Overlay.SETTINGS) }
+
+    // Status bar popups. The home screen shows where they open; the details (read from Android
+    // at runtime) are rendered through each popup's content with sample data.
+    private val fetched = LocalDateTime.of(2026, 11, 13, 21, 20).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+    private val sampleWeather = com.ahu.tlauncher.system.Weather(
+        27.6, com.ahu.tlauncher.system.WeatherKind.PARTLY_CLOUDY, false, fetched,
+        feelsC = 30.9, humidityPct = 84, windKmh = 9.4,
+        hourly = listOf(22 to 27.1, 23 to 26.8, 0 to 26.4, 1 to 26.0, 2 to 25.7, 3 to 25.5).mapIndexed { i, (h, t) ->
+            com.ahu.tlauncher.system.HourForecast(h, t, if (i in 2..3) com.ahu.tlauncher.system.WeatherKind.RAIN else com.ahu.tlauncher.system.WeatherKind.CLOUDY, false, listOf(5, 20, 60, 45, 10, 0)[i])
+        },
+    )
+    @Test fun weatherPopup() = shot("status_weather") { HomeScreen(state().copy(weather = sampleWeather), NoopActions, initialOverlay = Overlay.WEATHER) }
+    @Test fun weatherPopupFull() = shot("status_weather_full", dark = false) {
+        HomeScreen(state().copy(weather = sampleWeather), NoopActions, initialOverlay = Overlay.WEATHER, initialMapVisible = false)
+    }
+    @Test fun bluetoothPopup() = shot("status_bluetooth") {
+        com.ahu.tlauncher.ui.home.BluetoothPopupContent(
+            com.ahu.tlauncher.system.BtStatus.CONNECTED,
+            com.ahu.tlauncher.system.BtDetails(
+                com.ahu.tlauncher.system.BtStatus.CONNECTED,
+                listOf(
+                    com.ahu.tlauncher.system.BtDevice("Pixel 8", true),
+                    com.ahu.tlauncher.system.BtDevice("Galaxy A54", false),
+                    com.ahu.tlauncher.system.BtDevice("OBDII", false),
+                ),
+            ),
+            openSettings = {}, onClose = {},
+        )
+    }
+    @Test fun wifiPopup() = shot("status_wifi") {
+        com.ahu.tlauncher.ui.home.WifiPopupContent(
+            com.ahu.tlauncher.system.WifiStatus(true, true, 3),
+            com.ahu.tlauncher.system.WifiDetails(
+                com.ahu.tlauncher.system.WifiStatus(true, true, 3), "Avanza Hotspot",
+                listOf(
+                    com.ahu.tlauncher.system.WifiNetwork("Jollibee Free WiFi", 3, false),
+                    com.ahu.tlauncher.system.WifiNetwork("PLDTHOMEFIBR_5G", 2, true),
+                    com.ahu.tlauncher.system.WifiNetwork("Globe_LTE_ABCD", 1, true),
+                ),
+            ),
+            openSettings = {}, onClose = {},
+        )
+    }
+    @Test fun wifiPopupNoLocation() = shot("status_wifi_no_location", dark = false) {
+        com.ahu.tlauncher.ui.home.WifiPopupContent(
+            com.ahu.tlauncher.system.WifiStatus(true, true, 2),
+            com.ahu.tlauncher.system.WifiDetails(com.ahu.tlauncher.system.WifiStatus(true, true, 2), canScan = false),
+            openSettings = {}, onClose = {},
+        )
+    }
+    @Test fun cellPopup() = shot("status_mobile") {
+        com.ahu.tlauncher.ui.home.CellPopupContent(
+            com.ahu.tlauncher.system.CellStatus(3, "4G"),
+            com.ahu.tlauncher.system.CellDetails(com.ahu.tlauncher.system.CellStatus(3, "4G"), "Smart", roaming = false),
+            openSettings = {}, onClose = {},
+        )
+    }
 }
