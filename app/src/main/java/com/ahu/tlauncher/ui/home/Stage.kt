@@ -133,6 +133,11 @@ fun CarStage(
     panelSwipe: Modifier = Modifier,
     /** 0 = split view, 1 = full screen, in between while swiping or sweeping. Read at draw/layout time. */
     progress: () -> Float = { if (expanded) 1f else 0f },
+    /**
+     * How much smaller each part is drawn (read at draw time). The caller lays this panel out 1 / scale
+     * times wider than it shows; every part shrinks toward the panel's left edge and its own anchor height.
+     */
+    contentScale: () -> Float = { 1f },
 ) {
     val dark = T.colors.isDark
     val prog = androidx.compose.runtime.rememberUpdatedState(progress)
@@ -142,28 +147,33 @@ fun CarStage(
     val showRow by remember { derivedStateOf { prog.value() > 0f } }
     Box(
         modifier.then(panelSwipe).then(if (drawBackground) Modifier.background(stageBrush()) else Modifier).clipToBounds().drawBehind {
-            // Night: a soft pool of light behind the car, like the prototype's lit stage.
+            // Night: a soft pool of light behind the car, like the prototype's lit stage (centred on the visible width).
+            val vw = size.width * contentScale()
+            val r = kotlin.math.min(vw, size.height) * 0.55f
             if (dark) drawCircle(
-                Brush.radialGradient(listOf(Color.White.copy(alpha = 0.09f), Color.Transparent), center = Offset(size.width / 2, size.height * 0.5f), radius = size.minDimension * 0.55f),
-                radius = size.minDimension * 0.55f, center = Offset(size.width / 2, size.height * 0.5f),
+                Brush.radialGradient(listOf(Color.White.copy(alpha = 0.09f), Color.Transparent), center = Offset(vw / 2, size.height * 0.5f), radius = r),
+                radius = r, center = Offset(vw / 2, size.height * 0.5f),
             )
         },
     ) {
         Column(Modifier.fillMaxSize().padding(top = STATUS_H)) {
-            SpeedBlock(state, Modifier.fillMaxWidth())
-            CarHero(state, Modifier.fillMaxWidth().weight(1f), progress)
+            // Each part shrinks around its own anchor, so it stays at its full-screen height while the panel glides.
+            SpeedBlock(state, Modifier.fillMaxWidth().shrinkInPanel(contentScale, pivotY = 0.5f))
+            CarHero(state, Modifier.fillMaxWidth().weight(1f), progress, contentScale)
         }
-        Telltales(state, Modifier.align(Alignment.TopStart).padding(start = 18.dp, top = STATUS_H + 8.dp))
+        Telltales(state, Modifier.align(Alignment.TopStart).padding(start = 18.dp, top = STATUS_H + 8.dp).shrinkInPanel(contentScale, pivotY = 0f))
         // Lights-on tell-tale sits at the panel's top-right corner, in the status row (as in the prototype).
-        if (state.lights.on) Icon(
-            com.ahu.tlauncher.ui.components.LowBeamIcon, "Headlights on", tint = TELL_GREEN,
-            modifier = Modifier.align(if (handleOnLeft || wide) Alignment.TopStart else Alignment.TopEnd)
-                .padding(start = if (wide) 150.dp else 18.dp, end = 18.dp, top = 9.dp).size(22.dp),
-        )
+        if (state.lights.on) Box(Modifier.matchParentSize().shrinkInPanel(contentScale, pivotY = 0f)) {
+            Icon(
+                com.ahu.tlauncher.ui.components.LowBeamIcon, "Headlights on", tint = TELL_GREEN,
+                modifier = Modifier.align(if (handleOnLeft || wide) Alignment.TopStart else Alignment.TopEnd)
+                    .padding(start = if (wide) 150.dp else 18.dp, end = 18.dp, top = 9.dp).size(22.dp),
+            )
+        }
 
-        // bottom cards overlap the reflection, as in the reference layout
-        Box(
-            Modifier.align(Alignment.BottomCenter)
+        // bottom cards overlap the reflection, as in the reference layout; they shrink toward the bottom edge
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().shrinkInPanel(contentScale, pivotY = 1f), contentAlignment = Alignment.BottomCenter) { Box(
+            Modifier
                 // Sideways swipes on the cards stay with the cards (the pager, or nothing) instead of moving the panel.
                 .pointerInput(Unit) { detectHorizontalDragGestures { change, _ -> change.consume() } }
                 .padding(horizontal = 16.dp, vertical = 10.dp),
@@ -177,17 +187,30 @@ fun CarStage(
                     NavigateCard(actions, Modifier.weight(1f))
                 }
             }
-        }
+        } }
 
         // Handle on the panel edge: tap to toggle the map (dragging it, like anywhere on the panel, swipes the panel).
-        Box(
-            Modifier.align(if (handleOnLeft) Alignment.CenterStart else Alignment.CenterEnd).width(28.dp).height(120.dp)
-                .pressable(onClick = onToggleMap),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(Modifier.width(4.dp).height(56.dp).clip(CircleShape).background(T.colors.secondary.copy(alpha = 0.5f)))
+        Box(Modifier.matchParentSize().shrinkInPanel(contentScale, pivotY = 0.5f)) {
+            Box(
+                Modifier.align(if (handleOnLeft) Alignment.CenterStart else Alignment.CenterEnd).width(28.dp).height(120.dp)
+                    .pressable(onClick = onToggleMap),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(Modifier.width(4.dp).height(56.dp).clip(CircleShape).background(T.colors.secondary.copy(alpha = 0.5f)))
+            }
         }
     }
+}
+
+/**
+ * Draws a part of the car panel [scale] times smaller, toward the panel's left edge (x = 0, so the part
+ * must start there) and around [pivotY] (a fraction of its own height), which keeps that point at the
+ * same height in split view and full screen. Draw phase only: cheap while the panel glides.
+ */
+private fun Modifier.shrinkInPanel(scale: () -> Float, pivotY: Float): Modifier = graphicsLayer {
+    val k = scale()
+    scaleX = k; scaleY = k
+    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, pivotY)
 }
 
 @Composable
@@ -283,6 +306,9 @@ private val TELL_AMBER = Color(0xFFF5A623)
 /** The car is drawn a bit smaller than the space allows, leaving air around it. */
 private const val CAR_SCALE = 0.85f
 
+/** Middle of a callout's label and value, from the top of the callout row: the point that keeps its height. */
+private val CALLOUT_TEXT_MID = 17.dp
+
 /** Width the three callouts need to sit side by side without overlapping. */
 private val CALLOUT_MIN_W = 330.dp
 
@@ -301,7 +327,7 @@ private fun calloutKinds(state: HomeUiState): List<CalloutKind> {
 
 /** Car photo (tap to change view) with mirrored floor reflection and data callouts with leader lines. */
 @Composable
-private fun CarHero(state: HomeUiState, modifier: Modifier, progress: () -> Float) {
+private fun CarHero(state: HomeUiState, modifier: Modifier, progress: () -> Float, contentScale: () -> Float = { 1f }) {
     val ctx = LocalContext.current
     val preview = LocalInspectionMode.current
     val custom = state.settings.carImages
@@ -341,8 +367,15 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, progress: () -> Floa
         val carX = (rowW - imgW) / 2
         val lines = rowW == imgW
         val density = androidx.compose.ui.platform.LocalDensity.current.density
-        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.width(rowW).height(calloutH + imgH)) {
+        Box(Modifier.fillMaxWidth().height(calloutH + imgH)) {
+            // Callouts shrink around their text's centre line (drawn first: the car covers the ends of the leader lines).
+            if (callouts.isNotEmpty()) Box(Modifier.fillMaxWidth().height(calloutH).shrinkInPanel(contentScale, pivotY = CALLOUT_TEXT_MID / calloutH)) {
+                Box(Modifier.align(Alignment.TopCenter).width(rowW).height(calloutH)) {
+                    callouts.forEach { c -> CalloutView(c, state, f, rowW, calloutH, imgH, lines) }
+                }
+            }
+            // The car and its ground shadow shrink toward the ground line, so the car stays standing on the same floor.
+            Box(Modifier.matchParentSize().shrinkInPanel(contentScale, pivotY = 1f)) { Box(Modifier.align(Alignment.TopCenter).width(rowW).fillMaxHeight()) {
                 Box(
                     Modifier.offset(x = carX + imgW * 0.06f, y = calloutH + imgH - shadowH).size(imgW * 0.88f, shadowH)
                         .drawBehind {
@@ -351,7 +384,6 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, progress: () -> Floa
                             }
                         },
                 )
-                callouts.forEach { c -> CalloutView(c, state, f, rowW, calloutH, imgH, lines) }
                 // Both photos sit on the same ground line; the turn swaps them mid-way.
                 listOf(front to (1f - p), side to p).forEach { (painter, weight) ->
                     if (painter == null || weight <= 0.001f) return@forEach
@@ -373,7 +405,7 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, progress: () -> Floa
                             },
                     )
                 }
-            }
+            } }
         }
     }
 }
