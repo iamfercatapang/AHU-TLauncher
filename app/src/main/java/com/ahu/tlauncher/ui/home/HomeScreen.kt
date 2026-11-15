@@ -71,6 +71,10 @@ import com.ahu.tlauncher.ui.theme.T
 import com.ahu.tlauncher.ui.theme.TMotion
 import com.ahu.tlauncher.ui.theme.TShapes
 import com.ahu.tlauncher.ui.theme.TType
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.ui.input.pointer.positionChange
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -99,10 +103,10 @@ private class PanelSwipe(val onStart: () -> Unit, val onDrag: (Float) -> Unit, v
  * movement, because the panel's own layout can move under the finger when a swipe starts from full screen.
  */
 private fun Modifier.panelSwipe(swipe: PanelSwipe): Modifier = pointerInput(swipe) {
-    androidx.compose.foundation.gestures.awaitEachGesture {
-        val down = androidx.compose.foundation.gestures.awaitFirstDown(requireUnconsumed = false)
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
         var over = 0f
-        val start = androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation(down.id) { change, o ->
+        val start = awaitHorizontalTouchSlopOrCancellation(down.id) { change, o ->
             change.consume(); over = o
         } ?: return@awaitEachGesture
         val tracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
@@ -110,7 +114,7 @@ private fun Modifier.panelSwipe(swipe: PanelSwipe): Modifier = pointerInput(swip
         tracker.addPosition(start.uptimeMillis, androidx.compose.ui.geometry.Offset(moved, 0f))
         swipe.onStart()
         swipe.onDrag(over)
-        val finished = androidx.compose.foundation.gestures.horizontalDrag(start.id) { change ->
+        val finished = horizontalDrag(start.id) { change ->
             val dx = change.positionChange().x
             change.consume()
             moved += dx
