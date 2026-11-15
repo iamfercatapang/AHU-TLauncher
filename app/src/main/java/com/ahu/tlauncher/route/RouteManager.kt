@@ -64,6 +64,10 @@ class RouteManager(
     private val speak: (String) -> Unit = {},
     private val stopSpeaking: () -> Unit = {},
     private val mph: () -> Boolean = { false },
+    /** A trip started (remember it in case the car is switched off before arriving). */
+    private val onTripStarted: (Place) -> Unit = {},
+    /** The trip is finished or was ended by the user: forget it. */
+    private val onTripFinished: () -> Unit = {},
 ) {
     private val _route = MutableStateFlow<RouteState?>(null)
     val route: StateFlow<RouteState?> = _route.asStateFlow()
@@ -229,13 +233,25 @@ class RouteManager(
             speak("Starting route to ${s.destination.name}." + (first?.let { " " + FreeNav.instruction(it) + "." } ?: ""))
         }
         val p = s.destination
+        onTripStarted(p)
         val list = (listOf(p) + _recents.value.filterNot { it.sameAs(p) }).take(8)
         _recents.value = list
         scope.launch { store.saveRecents(list) }
         return p
     }
 
-    fun end() { routeJob?.cancel(); if (_route.value?.guided == true) stopSpeaking(); _route.value = null }
+    /**
+     * Clears the route. [byUser] is false when it ends because Google Maps / Waze stopped navigating, which is
+     * often just the car being switched off: then the trip is kept to offer again, unless the car is already there.
+     */
+    fun end(byUser: Boolean = true) {
+        val s = _route.value
+        if (s?.phase == RoutePhase.ACTIVE) {
+            val left = s.car?.let { car -> s.route?.points?.lastOrNull()?.let { RouteMath.distanceM(car, it) } }
+            if (com.ahu.tlauncher.system.DriveStartRules.forgetOnEnd(byUser, left)) onTripFinished()
+        }
+        routeJob?.cancel(); if (s?.guided == true) stopSpeaking(); _route.value = null
+    }
 
     fun toggleFavourite(p: Place) {
         val list = if (_favourites.value.any { it.sameAs(p) }) _favourites.value.filterNot { it.sameAs(p) } else (_favourites.value + p).take(12)

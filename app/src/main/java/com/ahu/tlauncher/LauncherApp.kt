@@ -32,6 +32,8 @@ class LauncherApp : Application() {
     lateinit var brightness: com.ahu.tlauncher.system.BrightnessControl; private set
     lateinit var soundEq: com.ahu.tlauncher.system.SoundEq; private set
     lateinit var updater: com.ahu.tlauncher.update.Updater; private set
+    lateinit var resumeOnStart: com.ahu.tlauncher.system.ResumeOnStart; private set
+    lateinit var offlineMaps: com.ahu.tlauncher.map.OfflineMaps; private set
 
     override fun onCreate() {
         super.onCreate()
@@ -52,6 +54,8 @@ class LauncherApp : Application() {
             freeMode = { freeMap },
             speak = { voice.speak(it) }, stopSpeaking = { voice.stop() },
             mph = { fuelSettings.speedUnit == com.ahu.tlauncher.data.SpeedUnit.MPH },
+            onTripStarted = { p -> appScope.launch { prefs.saveTrip(p, System.currentTimeMillis()) } },
+            onTripFinished = { appScope.launch { prefs.clearTrip() } },
         )
         androidAuto = com.ahu.tlauncher.system.AndroidAutoDetector(this, appScope)
         fuel = com.ahu.tlauncher.obd.FuelTracker(
@@ -67,5 +71,7 @@ class LauncherApp : Application() {
             }
         }
         updater = com.ahu.tlauncher.update.Updater(this, appScope).also { it.startPeriodicChecks() }
+        resumeOnStart = com.ahu.tlauncher.system.ResumeOnStart(this, appScope)
+        offlineMaps = com.ahu.tlauncher.map.OfflineMaps(this, appScope)
     }
 }

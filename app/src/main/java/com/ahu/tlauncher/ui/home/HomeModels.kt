@@ -109,6 +109,10 @@ data class HomeUiState(
     val lowPerf: Boolean = false,
     /** RAM and cores of this head unit, for Settings. */
     val deviceSpec: com.ahu.tlauncher.system.DeviceSpec? = null,
+    /** Unfinished trip offered after the car starts ("Continue to X?"), null when none. */
+    val tripOffer: com.ahu.tlauncher.system.SavedTrip? = null,
+    /** Saved offline map areas (free map). */
+    val offlineAreas: List<com.ahu.tlauncher.map.OfflineArea> = emptyList(),
 ) {
     // Reading these in a composable redraws only that composable when they change.
     val obd: ObdState get() = live.obd
@@ -221,6 +225,16 @@ interface HomeActions {
     fun setTankL(l: Int) {}
     fun setMapEngine(e: com.ahu.tlauncher.data.MapEngine) {}
     fun setMapTraffic(on: Boolean) {}
+    fun setResumeMusic(on: Boolean) {}
+    fun setOfferTrip(on: Boolean) {}
+    // offline maps (free map)
+    fun loadOfflineAreas() {}
+    fun saveOfflineArea(name: String, lat: Double, lon: Double, radiusKm: Int) {}
+    fun updateOfflineArea(id: Long) {}
+    fun deleteOfflineArea(id: Long) {}
+    /** "Continue to X?" after the car starts: route there and start. */
+    fun continueTrip() {}
+    fun dismissTrip() {}
     // route
     fun searchPlaces(query: String) {}
     fun clearSearch() {}

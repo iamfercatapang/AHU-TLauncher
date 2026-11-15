@@ -42,9 +42,14 @@ class LastMedia(private val context: Context, private val scope: CoroutineScope)
 
     private var savedTitle: String? = null
     private var savedAt = 0L
+    private var savedPlaying: Boolean? = null
+    /** Whether the song was playing when last seen (or when the screen went off), for resuming when the car starts. */
+    @Volatile var wasPlaying = false; private set
+    /** Set when the screen goes off: apps pause as the unit shuts down, and that pause shouldn't count. */
+    @Volatile private var frozen = false
 
     init {
-        scope.launch { _last.value = withContext(Dispatchers.IO) { load() } }
+        scope.launch { _last.value = withContext(Dispatchers.IO) { load() }.also { if (savedPlaying == null) wasPlaying = loadedPlaying } }
         scope.launch { NotificationHub.media.collect { m -> m?.let(::remember) } }
     }
 
@@ -52,16 +57,18 @@ class LastMedia(private val context: Context, private val scope: CoroutineScope)
     private fun remember(m: MediaInfo) {
         if (m.packageName !in REMEMBERED || m.title.isBlank()) return
         _last.value = m.copy(isPlaying = false, queue = emptyList(), shuffleOn = null, repeatMode = null)
+        if (!frozen) wasPlaying = m.isPlaying
         val now = System.currentTimeMillis()
         val newSong = m.title != savedTitle
-        if (!newSong && now - savedAt < 15_000 && m.isPlaying) return
-        savedTitle = m.title; savedAt = now
+        if (!newSong && now - savedAt < 15_000 && m.isPlaying && savedPlaying == wasPlaying) return
+        savedTitle = m.title; savedAt = now; savedPlaying = wasPlaying
+        val playing = wasPlaying
         val art = if (newSong) m.art else null
         scope.launch(Dispatchers.IO) {
             runCatching {
                 infoFile.writeText(
                     JSONObject().put("pkg", m.packageName).put("title", m.title).put("artist", m.artist)
-                        .put("pos", m.positionMs).put("dur", m.durationMs).toString(),
+                        .put("pos", m.positionMs).put("dur", m.durationMs).put("playing", playing).toString(),
                 )
                 if (newSong) {
                     if (art != null) artFile.outputStream().use { scaled(art).compress(Bitmap.CompressFormat.PNG, 100, it) } else artFile.delete()
@@ -75,8 +82,25 @@ class LastMedia(private val context: Context, private val scope: CoroutineScope)
         return if (s >= 1f) b else Bitmap.createScaledBitmap(b, (b.width * s).toInt(), (b.height * s).toInt(), true)
     }
 
+    /** Screen off: keep [wasPlaying] as it is now until the screen comes back on. */
+    fun freeze() {
+        frozen = true
+        val playing = NotificationHub.media.value?.let { it.isPlaying && it.packageName in REMEMBERED } ?: wasPlaying
+        wasPlaying = playing
+        if (savedPlaying != playing) {
+            savedPlaying = playing
+            scope.launch(Dispatchers.IO) { runCatching { infoFile.writeText(JSONObject(infoFile.readText()).put("playing", playing).toString()) } }
+        }
+    }
+
+    /** Screen back on: follow the player again. */
+    fun unfreeze() { frozen = false }
+
+    private var loadedPlaying = false
+
     private fun load(): MediaInfo? = runCatching {
         val o = JSONObject(infoFile.readText())
+        loadedPlaying = o.optBoolean("playing", false)
         MediaInfo(
             packageName = o.getString("pkg"), title = o.getString("title"), artist = o.optString("artist"),
             art = if (artFile.exists()) BitmapFactory.decodeFile(artFile.path) else null,
