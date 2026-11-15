@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The car on the free map: a red navigation arrow with a white edge (TLauncher's own drawing). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="34dp" android:height="34dp" android:viewportWidth="34" android:viewportHeight="34">
+    <path android:pathData="M17,3 L29.2,30.6 L17,24.5 L4.8,30.6 Z"
+        android:fillColor="#E5484D" android:strokeColor="#FFFFFF" android:strokeWidth="2" android:strokeLineJoin="round" />
+</vector>

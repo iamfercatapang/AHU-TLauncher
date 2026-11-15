@@ -1,6 +1,7 @@
 package com.ahu.tlauncher.ui.home
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.shape.CircleShape
@@ -74,6 +75,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.ahu.tlauncher.notify.NavCardState
 import com.ahu.tlauncher.notify.NavParser
@@ -104,6 +106,8 @@ internal interface MapControls {
     fun recenter()
     /** Map rotation in degrees (0 = north up), for the compass. */
     val bearing: Float get() = 0f
+    /** Ground metres per dp at the map's centre, for the scale bar; null when unknown. */
+    val metersPerDp: Float? get() = null
     /** Compass tap: turn the map back to north-up. */
     fun northUp() {}
 }
@@ -130,7 +134,7 @@ fun MapPane(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modif
         }
 
         // route preview / trip cards (route search needs the Google map)
-        RouteOverlays(state, actions, Modifier.fillMaxSize())
+        RouteOverlays(state, actions, Modifier.fillMaxSize(), controlsOnLeft)
 
         // top-left: live turn-by-turn card while Google Maps / Waze is navigating; otherwise the Navigate pill
         val side = if (controlsOnLeft) Alignment.TopEnd else Alignment.TopStart
@@ -138,9 +142,9 @@ fun MapPane(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modif
         val freeTurn = state.route?.takeIf { it.guided && it.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE && it.turn != null }
         if (freeTurn != null) {
             FreeTurnCard(state, freeTurn, Modifier.align(side).padding(horizontal = 12.dp).padding(top = STATUS_H + 4.dp))
-        } else if (nav != null) {
+        } else if (nav != null && state.route?.phase != com.ahu.tlauncher.route.RoutePhase.PREVIEW) {
             Box(Modifier.align(side).padding(horizontal = 12.dp).padding(top = STATUS_H + 4.dp)) { NavCard(nav, onClick = actions::openNavCard) }
-        } else if (state.route?.phase != com.ahu.tlauncher.route.RoutePhase.ACTIVE) {
+        } else if (state.route == null) {
             NavigatePill(actions::openNavApp, Modifier.align(side).padding(horizontal = 12.dp).padding(top = STATUS_H + 4.dp))
         }
 
@@ -159,6 +163,16 @@ fun MapPane(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modif
                 if (!state.locationPermission) actions.requestLocation()
                 controls?.recenter()
             }
+        }
+        // bottom, on the cards' side: scale bar (hidden under the trip and pin cards)
+        val scale = controls?.metersPerDp ?: if (preview) 4.5f else null
+        if (scale != null && state.route?.phase != com.ahu.tlauncher.route.RoutePhase.ACTIVE && state.pin == null) {
+            ScaleBar(
+                scale, state.settings.speedUnit == com.ahu.tlauncher.data.SpeedUnit.MPH,
+                Modifier.align(if (controlsOnLeft) Alignment.BottomEnd else Alignment.BottomStart)
+                    // Google's logo sits in the bottom-left corner
+                    .padding(start = if (useGoogle && !controlsOnLeft) 84.dp else 14.dp, end = 14.dp, bottom = if (!controlsOnLeft || useGoogle) 12.dp else 24.dp),
+            )
         }
         MapRound(
             TIcons.Gear, "Map settings",
@@ -182,13 +196,36 @@ private fun MapRound(icon: ImageVector, desc: String, modifier: Modifier = Modif
     ) { Icon(icon, desc, tint = if (T.colors.isDark) Color.White.copy(alpha = 0.75f) else T.colors.text, modifier = Modifier.size(20.dp)) }
 }
 
-/** Compass disc with an "N" and a small north arrow; rotates with the map. Tap to turn north-up. */
+/** Compass: an "N" under a small red north marker, turning with the map (prototype style). Tap to turn north-up. */
 @Composable
 private fun Compass(bearing: Float, onClick: () -> Unit) {
     Box(Modifier.size(44.dp).clip(CircleShape).background(T.colors.chrome).pressable(onClick = onClick), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(28.dp).graphicsLayer { rotationZ = -bearing }.clip(CircleShape).background(T.colors.muted), contentAlignment = Alignment.Center) {
-            Text("N", style = TType.caption, color = Color.White)
-            Icon(TIcons.ChevronUp, null, tint = Color.White, modifier = Modifier.align(Alignment.TopCenter).size(10.dp))
+        val ink = if (T.colors.isDark) Color.White else T.colors.text
+        Box(Modifier.size(34.dp).graphicsLayer { rotationZ = -bearing }, contentAlignment = Alignment.Center) {
+            ComposeCanvas(Modifier.align(Alignment.TopCenter).padding(top = 3.dp).size(6.dp, 5.dp)) {
+                drawPath(androidx.compose.ui.graphics.Path().apply { moveTo(size.width / 2, 0f); lineTo(size.width, size.height); lineTo(0f, size.height); close() }, TRAFFIC_JAM)
+            }
+            Text("N", style = TType.caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium), color = ink, modifier = Modifier.padding(top = 4.dp))
+        }
+    }
+}
+
+/** Map scale: a round length ("500 m", "1 km", "0.5 mi") over a thin bar of that length. */
+@Composable
+private fun ScaleBar(metersPerDp: Float, mph: Boolean, modifier: Modifier = Modifier) {
+    val steps = if (mph) listOf(50 to "50 ft", 100 to "100 ft", 200 to "200 ft", 500 to "500 ft", 1000 to "1000 ft").map { (ft, l) -> ft * 0.3048f to l } +
+        listOf(0.25f to "¼ mi", 0.5f to "½ mi", 1f to "1 mi", 2f to "2 mi", 5f to "5 mi", 10f to "10 mi", 20f to "20 mi", 50f to "50 mi").map { (mi, l) -> mi * 1609.34f to l }
+    else listOf(10, 20, 50, 100, 200, 300, 500, 1000, 2000, 3000, 5000, 10_000, 20_000, 50_000, 100_000).map { m -> m.toFloat() to if (m >= 1000) "${m / 1000} km" else "$m m" }
+    val (meters, label) = steps.lastOrNull { it.first / metersPerDp <= 80f } ?: steps.first()
+    val widthDp = (meters / metersPerDp).coerceIn(12f, 120f)
+    val ink = if (T.colors.isDark) Color.White.copy(alpha = 0.7f) else T.colors.body
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, style = TType.caption.copy(fontSize = 10.sp), color = ink)
+        ComposeCanvas(Modifier.width(widthDp.dp).height(5.dp)) {
+            val w = 1.2.dp.toPx()
+            drawLine(ink, Offset(0f, size.height - w / 2), Offset(size.width, size.height - w / 2), w)
+            drawLine(ink, Offset(w / 2, 0f), Offset(w / 2, size.height), w)
+            drawLine(ink, Offset(size.width - w / 2, 0f), Offset(size.width - w / 2, size.height), w)
         }
     }
 }
@@ -255,48 +292,78 @@ internal fun LifecycleBinding(onStart: () -> Unit, onResume: () -> Unit, onPause
 
 // ---------------------------------------------------------------- MapLibre (vector)
 
-/** Adds (once per style) and updates the route line and destination dot on the MapLibre map. */
-private fun drawFreeRoute(style: Style, r: com.ahu.tlauncher.route.RouteState?, data: com.ahu.tlauncher.route.RouteData?) {
-    val lineSrc = "tl-route"; val destSrc = "tl-route-dest"
+/** Adds (once per style) and updates the route line, the other route choices and the destination flag on the MapLibre map. */
+private fun drawFreeRoute(style: Style, r: com.ahu.tlauncher.route.RouteState?, data: com.ahu.tlauncher.route.RouteData?, density: Float) {
+    val lineSrc = "tl-route"; val altSrc = "tl-route-alts"; val destSrc = "tl-route-dest"
     if (style.getSource(lineSrc) == null) {
-        style.addSource(org.maplibre.android.style.sources.GeoJsonSource(lineSrc))
-        style.addSource(org.maplibre.android.style.sources.GeoJsonSource(destSrc))
-        val casing = org.maplibre.android.style.layers.LineLayer("tl-route-casing", lineSrc).withProperties(
-            org.maplibre.android.style.layers.PropertyFactory.lineColor("#1E3E9A"),
-            org.maplibre.android.style.layers.PropertyFactory.lineWidth(9f),
-            org.maplibre.android.style.layers.PropertyFactory.lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND),
-            org.maplibre.android.style.layers.PropertyFactory.lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND),
-        )
-        val line = org.maplibre.android.style.layers.LineLayer("tl-route-line", lineSrc).withProperties(
-            org.maplibre.android.style.layers.PropertyFactory.lineColor("#3E6AE1"),
-            org.maplibre.android.style.layers.PropertyFactory.lineWidth(6f),
-            org.maplibre.android.style.layers.PropertyFactory.lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND),
-            org.maplibre.android.style.layers.PropertyFactory.lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND),
-        )
-        val dest = org.maplibre.android.style.layers.CircleLayer("tl-route-dest", destSrc).withProperties(
-            org.maplibre.android.style.layers.PropertyFactory.circleColor("#E5484D"),
-            org.maplibre.android.style.layers.PropertyFactory.circleRadius(8f),
-            org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor("#FFFFFF"),
-            org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth(3f),
+        listOf(lineSrc, altSrc, destSrc).forEach { style.addSource(org.maplibre.android.style.sources.GeoJsonSource(it)) }
+        style.addImage("tl-dest-flag", destinationBitmap(density))
+        fun lineLayer(id: String, src: String, color: androidx.compose.ui.graphics.Color, width: Float) =
+            org.maplibre.android.style.layers.LineLayer(id, src).withProperties(
+                org.maplibre.android.style.layers.PropertyFactory.lineColor(color.toArgb()),
+                org.maplibre.android.style.layers.PropertyFactory.lineWidth(width),
+                org.maplibre.android.style.layers.PropertyFactory.lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND),
+                org.maplibre.android.style.layers.PropertyFactory.lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND),
+            )
+        val dest = org.maplibre.android.style.layers.SymbolLayer("tl-route-dest", destSrc).withProperties(
+            org.maplibre.android.style.layers.PropertyFactory.iconImage("tl-dest-flag"),
+            org.maplibre.android.style.layers.PropertyFactory.iconAllowOverlap(true),
+            org.maplibre.android.style.layers.PropertyFactory.iconIgnorePlacement(true),
         )
         // under the car puck when it's there
         val under = org.maplibre.android.location.LocationComponentConstants.SHADOW_LAYER
-        listOf(casing, line, dest).forEach { if (style.getLayer(under) != null) style.addLayerBelow(it, under) else style.addLayer(it) }
+        listOf(
+            lineLayer("tl-route-alt-casing", altSrc, ROUTE_ALT_CASING, 9f), lineLayer("tl-route-alt-line", altSrc, ROUTE_ALT, 5.5f),
+            lineLayer("tl-route-casing", lineSrc, ROUTE_LINE_CASING, 10f), lineLayer("tl-route-line", lineSrc, ROUTE_LINE, 6.5f), dest,
+        ).forEach { if (style.getLayer(under) != null) style.addLayerBelow(it, under) else style.addLayer(it) }
     }
+    fun line(points: List<com.ahu.tlauncher.route.LatLon>) =
+        org.maplibre.geojson.Feature.fromGeometry(org.maplibre.geojson.LineString.fromLngLats(points.map { org.maplibre.geojson.Point.fromLngLat(it.lon, it.lat) }))
     val pts = if (data == null || r == null) emptyList() else {
         val active = r.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE
         val start = if (active) (r.progressSeg + 1).coerceAtMost(data.points.size - 1) else 0
         buildList { if (active) r.car?.let { add(it) }; addAll(data.points.drop(start)) }
     }
-    val lineGeo = org.maplibre.geojson.FeatureCollection.fromFeatures(
-        if (pts.size < 2) emptyArray() else arrayOf(org.maplibre.geojson.Feature.fromGeometry(org.maplibre.geojson.LineString.fromLngLats(pts.map { org.maplibre.geojson.Point.fromLngLat(it.lon, it.lat) }))),
-    )
-    val destGeo = org.maplibre.geojson.FeatureCollection.fromFeatures(
+    val alts = r?.takeIf { it.phase == com.ahu.tlauncher.route.RoutePhase.PREVIEW }?.alternatives
+        ?.filterIndexed { i, _ -> i != r.selected }?.filter { it.points.size >= 2 }.orEmpty()
+    style.getSourceAs<org.maplibre.android.style.sources.GeoJsonSource>(lineSrc)?.setGeoJson(
+        org.maplibre.geojson.FeatureCollection.fromFeatures(if (pts.size < 2) emptyArray() else arrayOf(line(pts))))
+    style.getSourceAs<org.maplibre.android.style.sources.GeoJsonSource>(altSrc)?.setGeoJson(
+        org.maplibre.geojson.FeatureCollection.fromFeatures(alts.map { line(it.points) }.toTypedArray()))
+    style.getSourceAs<org.maplibre.android.style.sources.GeoJsonSource>(destSrc)?.setGeoJson(org.maplibre.geojson.FeatureCollection.fromFeatures(
         data?.points?.lastOrNull()?.let { arrayOf(org.maplibre.geojson.Feature.fromGeometry(org.maplibre.geojson.Point.fromLngLat(it.lon, it.lat))) } ?: emptyArray(),
-    )
-    style.getSourceAs<org.maplibre.android.style.sources.GeoJsonSource>(lineSrc)?.setGeoJson(lineGeo)
-    style.getSourceAs<org.maplibre.android.style.sources.GeoJsonSource>(destSrc)?.setGeoJson(destGeo)
+    ))
 }
+
+/**
+ * Destination marker: a white tile with a flag above a blue dot (TLauncher's drawing of the prototype's marker).
+ * The dot is the bitmap's centre, so anchor it at the centre.
+ */
+internal fun destinationBitmap(d: Float): Bitmap {
+    val box = 26 * d; val gap = 5 * d; val dot = 7 * d
+    val w = (box + 4 * d).toInt(); val half = box + gap + dot; val h = (2 * half).toInt()
+    return Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { b ->
+        val c = Canvas(b); val p = Paint(Paint.ANTI_ALIAS_FLAG)
+        val cx = w / 2f; val cy = h / 2f
+        val top = cy - half
+        p.color = 0x40000000; c.drawRoundRect(cx - box / 2, top + d, cx + box / 2, top + box + d, 6 * d, 6 * d, p)
+        p.color = 0xFFFFFFFF.toInt(); c.drawRoundRect(cx - box / 2, top, cx + box / 2, top + box, 6 * d, 6 * d, p)
+        // flag: pole and pennant
+        p.color = 0xFF171A20.toInt(); p.style = Paint.Style.STROKE; p.strokeWidth = 1.8f * d; p.strokeJoin = Paint.Join.ROUND; p.strokeCap = Paint.Cap.ROUND
+        val fx = cx - 6 * d; val fy = top + 6 * d
+        c.drawLine(fx, fy, fx, fy + 14 * d, p)
+        c.drawPath(Path().apply { moveTo(fx, fy); lineTo(fx + 12 * d, fy + 1 * d); lineTo(fx + 9 * d, fy + 4.5f * d); lineTo(fx + 12 * d, fy + 8 * d); lineTo(fx, fy + 8 * d); close() }, p)
+        // stem from tile to dot
+        p.color = 0xFFFFFFFF.toInt(); p.strokeWidth = 2 * d; c.drawLine(cx, top + box, cx, cy - dot, p)
+        p.style = Paint.Style.FILL
+        p.color = 0xFFFFFFFF.toInt(); c.drawCircle(cx, cy, dot, p)
+        p.color = ROUTE_LINE.toArgb(); c.drawCircle(cx, cy, dot - 2.5f * d, p)
+    }
+}
+
+/** Ground metres per dp: [tile] is the world's width in dp at zoom 0 (MapLibre 512, Google 256). */
+internal fun metersPerDp(zoom: Double, lat: Double, tile: Int): Float =
+    (40_075_016.686 * kotlin.math.cos(Math.toRadians(lat)) / (tile * Math.pow(2.0, zoom))).toFloat()
 
 /** Adds (once per style) and moves the dropped-pin marker on the MapLibre map; empty when there's no pin. */
 private fun drawPin(style: Style, pin: com.ahu.tlauncher.route.Place?, density: Float) {
@@ -321,6 +388,8 @@ private class VectorHandle(val view: MapView) : MapControls {
     var fittedRoute: Any? = null
     val bearingState = androidx.compose.runtime.mutableFloatStateOf(0f)
     override val bearing: Float get() = bearingState.floatValue
+    val scaleState = androidx.compose.runtime.mutableFloatStateOf(0f)
+    override val metersPerDp: Float? get() = scaleState.floatValue.takeIf { it > 0f }
     override fun northUp() { following = false; map?.animateCamera(CameraUpdateFactory.bearingTo(0.0), 500) }
     var map: MapLibreMap? = null
     var locationActive = false
@@ -367,7 +436,7 @@ private class VectorHandle(val view: MapView) : MapControls {
             }
         } else if (appliedMode != mode) {
             lc.cameraMode = CameraMode.TRACKING
-            lc.renderMode = RenderMode.NORMAL
+            lc.renderMode = RenderMode.GPS // the arrow keeps pointing along the course
             lc.tiltWhileTracking(DriveCamera.PARK_TILT, 750)
             lc.zoomWhileTracking(DriveCamera.PARK_ZOOM, 750)
             m.animateCamera(CameraUpdateFactory.bearingTo(0.0), 750)
@@ -396,7 +465,14 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier, onL
     DisposableEffect(handle) {
         handle.view.getMapAsync { m ->
             handle.map = m; map = m
-            m.addOnCameraMoveListener { handle.bearingState.floatValue = m.cameraPosition.bearing.toFloat() }
+            val onCamera = {
+                val cp = m.cameraPosition
+                handle.bearingState.floatValue = cp.bearing.toFloat()
+                cp.target?.let { handle.scaleState.floatValue = metersPerDp(cp.zoom, it.latitude, 512) }
+            }
+            onCamera()
+            m.addOnCameraMoveListener { onCamera() }
+            m.addOnCameraIdleListener { onCamera() }
             m.addOnCameraMoveStartedListener { reason ->
                 if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) handle.lastTouch = SystemClock.elapsedRealtime()
             }
@@ -426,7 +502,12 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier, onL
                         LocationComponentActivationOptions.builder(ctx, style)
                             .locationComponentOptions(
                                 LocationComponentOptions.builder(ctx)
-                                    .foregroundTintColor(BLUE).bearingTintColor(BLUE).accuracyAlpha(0.12f)
+                                    // the prototype's red arrow instead of MapLibre's blue dot
+                                    .foregroundDrawable(com.ahu.tlauncher.R.drawable.puck_arrow).gpsDrawable(com.ahu.tlauncher.R.drawable.puck_arrow)
+                                    .foregroundDrawableStale(com.ahu.tlauncher.R.drawable.puck_arrow)
+                                    .backgroundDrawable(com.ahu.tlauncher.R.drawable.puck_none).backgroundDrawableStale(com.ahu.tlauncher.R.drawable.puck_none)
+                                    .bearingDrawable(com.ahu.tlauncher.R.drawable.puck_none)
+                                    .accuracyColor(ROUTE_LINE.toArgb()).accuracyAlpha(0.10f)
                                     .pulseEnabled(false).trackingGesturesManagement(true).elevation(0f)
                                     .build()
                             )
@@ -458,15 +539,19 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier, onL
         val style = gm.style?.takeIf { it.isFullyLoaded } ?: return@LaunchedEffect
         val r = state.route
         val data = r?.route
-        drawFreeRoute(style, r, data)
+        val d = handle.view.resources.displayMetrics.density
+        drawFreeRoute(style, r, data, d)
         if (data == null) { handle.fittedRoute = null; return@LaunchedEffect }
         val active = r.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE
         if (!active && handle.fittedRoute !== data) {
             handle.fittedRoute = data
             handle.following = false
-            val b = org.maplibre.android.geometry.LatLngBounds.Builder().includes(data.points.map { LatLng(it.lat, it.lon) }).build()
-            val d = handle.view.resources.displayMetrics.density
-            runCatching { gm.animateCamera(CameraUpdateFactory.newLatLngBounds(b, (40 * d).toInt(), (70 * d).toInt(), (40 * d).toInt(), (180 * d).toInt()), 700) }
+            val all = r.alternatives.ifEmpty { listOf(data) }.flatMap { it.points }
+            val b = org.maplibre.android.geometry.LatLngBounds.Builder().includes(all.map { LatLng(it.lat, it.lon) }).build()
+            // Leave room for the route card (top, on the side away from the map buttons) and the buttons.
+            val card = ((NAV_CARD_W.value + 36) * d).toInt(); val edge = (70 * d).toInt()
+            val cardsRight = state.settings.carSide == com.ahu.tlauncher.data.CarSide.RIGHT
+            runCatching { gm.animateCamera(CameraUpdateFactory.newLatLngBounds(b, if (cardsRight) edge else card, (60 * d).toInt(), if (cardsRight) card else edge, (40 * d).toInt()), 700) }
         }
         if (active && handle.fittedRoute != null) { handle.fittedRoute = null; handle.recenter() }
     }
@@ -506,7 +591,6 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier, onL
     return handle
 }
 
-private const val BLUE = 0xFF3E6AE1.toInt()
 
 /** Night look for raster OSM tiles: invert, then dim and cool slightly. */
 private val DARK_TILES = android.graphics.ColorMatrixColorFilter(
@@ -628,7 +712,7 @@ private fun dotBitmap(d: Float): Bitmap {
     return Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888).also { b ->
         val c = Canvas(b); val p = Paint(Paint.ANTI_ALIAS_FLAG)
         p.color = 0xFFFFFFFF.toInt(); c.drawCircle(s / 2f, s / 2f, s / 2.2f, p)
-        p.color = 0xFF3E6AE1.toInt(); c.drawCircle(s / 2f, s / 2f, s / 3.2f, p)
+        p.color = 0xFFE5484D.toInt(); c.drawCircle(s / 2f, s / 2f, s / 3.2f, p)
     }
 }
 
@@ -641,7 +725,7 @@ private fun arrowBitmap(d: Float): Bitmap {
         }
         p.color = 0xFFFFFFFF.toInt(); p.style = Paint.Style.STROKE; p.strokeWidth = 3 * d; p.strokeJoin = Paint.Join.ROUND
         c.drawPath(path, p)
-        p.color = 0xFF3E6AE1.toInt(); p.style = Paint.Style.FILL; c.drawPath(path, p)
+        p.color = 0xFFE5484D.toInt(); p.style = Paint.Style.FILL; c.drawPath(path, p)
     }
 }
 
@@ -662,37 +746,24 @@ private fun MapPlaceholder(modifier: Modifier) {
     }
 }
 
+/** Google Maps / Waze's next turn, read from their notification, in the same card as TLauncher's own guidance. */
 @Composable
 fun NavCard(nav: NavCardState, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val i = nav.info
-    Column(
-        modifier.widthIn(min = 280.dp, max = 340.dp).clip(TShapes.surface).background(T.colors.frost)
-            .pressable(onClick = onClick),
-    ) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
-                val icon = nav.icon
-                if (icon != null) {
-                    Image(
-                        icon.asImageBitmap(), null, modifier = Modifier.size(48.dp),
-                        colorFilter = if (i.packageName == NavParser.MAPS) ColorFilter.tint(T.colors.text) else null,
-                    )
-                } else {
-                    Icon(Icons.Rounded.Navigation, null, tint = T.colors.text, modifier = Modifier.size(40.dp))
-                }
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f, fill = false)) {
-                if (i.distance != null) Text(i.distance, style = TType.display, color = T.colors.text, maxLines = 1)
-                Text(i.instruction, style = TType.button, color = T.colors.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (i.detail != null) Text(i.detail, style = TType.label, color = T.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-        Box(Modifier.height(1.dp).widthIn(min = 280.dp, max = 340.dp).background(T.colors.divider))
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(i.eta ?: "Navigating", style = TType.label, color = T.colors.body, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-            Spacer(Modifier.width(8.dp))
-            Text(i.appLabel, style = TType.label, color = T.colors.muted)
-        }
-    }
+    val c = navColors
+    TurnCardFrame(
+        icon = {
+            val icon = nav.icon
+            if (icon != null) Image(
+                icon.asImageBitmap(), null, modifier = Modifier.size(44.dp),
+                colorFilter = if (i.packageName == NavParser.MAPS) ColorFilter.tint(c.text) else null,
+            ) else Icon(Icons.Rounded.Navigation, null, tint = c.text, modifier = Modifier.size(36.dp))
+        },
+        distance = i.distance,
+        instruction = i.instruction,
+        footer = i.detail ?: i.eta ?: "Navigating",
+        footerRight = i.appLabel,
+        modifier = modifier,
+        onClick = onClick,
+    )
 }

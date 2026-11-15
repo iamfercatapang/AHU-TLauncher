@@ -17,7 +17,12 @@ enum class RoutePhase { PREVIEW, ACTIVE }
 data class RouteState(
     val destination: Place,
     val phase: RoutePhase,
+    /** The chosen route (one of [alternatives] while previewing). */
     val route: RouteData? = null,
+    /** Every route found for the preview, recommended first. Empty once the trip starts or is rerouted. */
+    val alternatives: List<RouteData> = emptyList(),
+    /** Index of [route] in [alternatives]. */
+    val selected: Int = 0,
     val loading: Boolean = true,
     val error: String? = null,
     /** Segment the car is on (points before it are already driven). */
@@ -193,20 +198,30 @@ class RouteManager(
                     val json = web.get("https://places.googleapis.com/v1/places/${dest.placeId}$q", "id,displayName,formattedAddress,location", "Places API (New)")
                     dest = RouteMath.parsePlace(json, dest.placeId!!)?.let { it.copy(name = it.name.ifBlank { place.name }) } ?: dest
                 }
-                dest to computeRoute(origin, dest, location.value?.takeIf { it.hasBearing() }?.bearing)
-            }.onSuccess { (dest, r) ->
-                _route.value = RouteState(dest, RoutePhase.PREVIEW, r, loading = false, car = origin, remainingM = r.distanceM, remainingS = r.durationS, guided = freeMode())
+                dest to computeRoutes(origin, dest, location.value?.takeIf { it.hasBearing() }?.bearing, alternatives = true)
+            }.onSuccess { (dest, all) ->
+                val r = all.first()
+                _route.value = RouteState(dest, RoutePhase.PREVIEW, r, alternatives = all, loading = false, car = origin,
+                    remainingM = r.distanceM, remainingS = r.durationS, guided = freeMode())
             }.onFailure { e ->
                 _route.value = _route.value?.copy(loading = false, error = e.message)
             }
         }
     }
 
+    /** Route tile tapped in the preview. */
+    fun selectRoute(index: Int) {
+        val s = _route.value ?: return
+        if (s.phase != RoutePhase.PREVIEW) return
+        val r = s.alternatives.getOrNull(index) ?: return
+        _route.value = s.copy(route = r, selected = index, remainingM = r.distanceM, remainingS = r.durationS)
+    }
+
     /** Start pressed: track progress, remember the place. */
     fun start(): Place? {
         val s = _route.value ?: return null
         if (s.route == null) return null
-        _route.value = s.copy(phase = RoutePhase.ACTIVE)
+        _route.value = s.copy(phase = RoutePhase.ACTIVE, alternatives = emptyList(), selected = 0)
         offRouteSince = 0; lastReroute = System.currentTimeMillis(); arriving = false
         spoken.clear()
         if (s.guided) {
@@ -296,10 +311,14 @@ class RouteManager(
         return p.copy(lat = hit.lat, lon = hit.lon, placeId = hit.placeId)
     }
 
-    private suspend fun computeRoute(origin: LatLon, dest: Place, heading: Float?): RouteData {
+    private suspend fun computeRoute(origin: LatLon, dest: Place, heading: Float?): RouteData =
+        computeRoutes(origin, dest, heading, alternatives = false).first()
+
+    /** The recommended route first; with [alternatives], up to two more. Never empty (throws instead). */
+    private suspend fun computeRoutes(origin: LatLon, dest: Place, heading: Float?, alternatives: Boolean): List<RouteData> {
         if (freeMode()) {
             val d = freePlace(dest).latLon!!
-            return FreeNav.parseRoute(FreeNav.get(FreeNav.routeUrl(origin, d))) ?: throw ApiException("No route found")
+            return FreeNav.parseRoutes(FreeNav.get(FreeNav.routeUrl(origin, d, alternatives))).take(3).ifEmpty { throw ApiException("No route found") }
         }
         fun ll(p: LatLon) = JSONObject().put("latLng", JSONObject().put("latitude", p.lat).put("longitude", p.lon))
         val o = ll(origin).apply { heading?.let { put("heading", it.toInt()) } }
@@ -310,9 +329,10 @@ class RouteManager(
             .put("origin", JSONObject().put("location", o)).put("destination", d)
             .put("travelMode", "DRIVE").put("routingPreference", "TRAFFIC_AWARE")
             .put("extraComputations", JSONArray().put("TRAFFIC_ON_POLYLINE"))
+            .put("computeAlternativeRoutes", alternatives)
         val json = web.post("https://routes.googleapis.com/directions/v2:computeRoutes", body.toString(),
             "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.description,routes.travelAdvisory.speedReadingIntervals", "Routes API")
-        return RouteMath.parseRoute(json) ?: throw ApiException("No route found")
+        return RouteMath.parseRoutes(json).take(3).ifEmpty { throw ApiException("No route found") }
     }
 
     private fun here(): LatLon? = location.value?.let { LatLon(it.latitude, it.longitude) }

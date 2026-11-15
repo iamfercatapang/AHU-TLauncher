@@ -88,6 +88,8 @@ private class GoogleHandle(val view: MapView) : MapControls {
     /** Map rotation for the compass. */
     val bearingState = androidx.compose.runtime.mutableFloatStateOf(0f)
     override val bearing: Float get() = bearingState.floatValue
+    val scaleState = androidx.compose.runtime.mutableFloatStateOf(0f)
+    override val metersPerDp: Float? get() = scaleState.floatValue.takeIf { it > 0f }
     override fun northUp() { val m = map ?: return; following = false; m.animateCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder(m.cameraPosition).bearing(0f).tilt(0f).build()), 500, null) }
     var speedKmh: Int? = null
     /** Low-performance mode: no tilt while driving. */
@@ -134,7 +136,14 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
             handle.map = m; map = m
             m.uiSettings.isMyLocationButtonEnabled = false
             m.uiSettings.isRotateGesturesEnabled = true
-            m.setOnCameraMoveListener { handle.bearingState.floatValue = m.cameraPosition.bearing }
+            val onCamera = {
+                val cp = m.cameraPosition
+                handle.bearingState.floatValue = cp.bearing
+                handle.scaleState.floatValue = metersPerDp(cp.zoom.toDouble(), cp.target.latitude, 256)
+            }
+            onCamera()
+            m.setOnCameraMoveListener { onCamera() }
+            m.setOnCameraIdleListener { onCamera() }
             m.setOnCameraMoveStartedListener { reason ->
                 if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) {
                     handle.following = false
@@ -211,22 +220,36 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
                         .startCap(com.google.android.gms.maps.model.RoundCap()).endCap(com.google.android.gms.maps.model.RoundCap())
                         .jointType(com.google.android.gms.maps.model.JointType.ROUND),
                 )
-            handle.routeShapes += line(pts, ROUTE_OUTLINE, 9f, 1f)
-            handle.routeShapes += line(pts, ROUTE_BLUE, 6f, 2f)
+            // other route choices (preview only), grey and under the chosen one
+            if (!active) r.alternatives.forEachIndexed { i, alt ->
+                if (i == r.selected || alt.points.size < 2) return@forEachIndexed
+                val ap = alt.points.map(::ll)
+                handle.routeShapes += line(ap, ROUTE_ALT_CASING, 9f, 0.5f)
+                handle.routeShapes += line(ap, ROUTE_ALT, 5.5f, 0.6f)
+            }
+            handle.routeShapes += line(pts, ROUTE_LINE_CASING, 10f, 1f)
+            handle.routeShapes += line(pts, ROUTE_LINE, 6.5f, 2f)
             data.traffic.filter { it.speed != com.ahu.tlauncher.route.Traffic.NORMAL }.forEach { t ->
                 val from = maxOf(t.from, start); val to = minOf(t.to, data.points.size - 1)
                 if (to > from) handle.routeShapes += line(data.points.subList(from, to + 1).map(::ll),
                     if (t.speed == com.ahu.tlauncher.route.Traffic.JAM) TRAFFIC_JAM else TRAFFIC_SLOW, 6f, 3f)
             }
         }
-        gm.addMarker(com.google.android.gms.maps.model.MarkerOptions().position(ll(data.points.last())).title(r.destination.name))?.let { handle.routeShapes += it }
-        // Leave room for the cards over the map.
-        gm.setPadding(0, (60 * density).toInt(), 0, ((if (active) 80 else 170) * density).toInt())
+        gm.addMarker(
+            com.google.android.gms.maps.model.MarkerOptions().position(ll(data.points.last())).title(r.destination.name).anchor(0.5f, 0.5f).zIndex(4f)
+                .icon(com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(destinationBitmap(density))),
+        )?.let { handle.routeShapes += it }
+        // Leave room for the cards over the map: the route card (top, away from the map buttons) while previewing,
+        // the turn card (top) and trip card (bottom) while driving.
+        val card = ((NAV_CARD_W.value + 36) * density).toInt(); val edge = (70 * density).toInt()
+        val cardsRight = state.settings.carSide == com.ahu.tlauncher.data.CarSide.RIGHT
+        if (active) gm.setPadding(0, (60 * density).toInt(), 0, (80 * density).toInt())
+        else gm.setPadding(if (cardsRight) edge else card, (60 * density).toInt(), if (cardsRight) card else edge, (30 * density).toInt())
         if (!active && handle.fittedRoute !== data) {
             // Preview: show the whole route, stop following the car.
             handle.fittedRoute = data
             handle.following = false
-            val b = com.google.android.gms.maps.model.LatLngBounds.builder().apply { data.points.forEach { include(ll(it)) } }.build()
+            val b = com.google.android.gms.maps.model.LatLngBounds.builder().apply { r.alternatives.ifEmpty { listOf(data) }.forEach { a -> a.points.forEach { include(ll(it)) } } }.build()
             runCatching { gm.animateCamera(CameraUpdateFactory.newLatLngBounds(b, (40 * density).toInt()), 700, null) }
         }
         if (active && handle.fittedRoute != null) { handle.fittedRoute = null; handle.recenter() }

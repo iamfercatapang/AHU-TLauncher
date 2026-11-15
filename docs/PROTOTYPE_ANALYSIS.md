@@ -119,3 +119,22 @@ The resting screens are unchanged, so the existing Paparazzi screenshots still a
 - **The prototype's SVG icons and artwork.** They have no licence. TLauncher keeps its own icons (`TIcons.kt`).
 - **Climate, seat and defrost controls.** The Avanza's climate isn't connected to the head unit,
   so there is nothing for these to control.
+
+## Navigation screens (search, routes, guidance)
+
+The prototype's navigation flow, rebuilt for TLauncher's real search and routing on both maps
+(Google Places/Routes on the Google map; Photon and OSRM on OpenFreeMap). As before, only layout,
+colours and timings are taken. The cards, flag marker, arrow puck and icons are TLauncher's own.
+
+| Prototype | TLauncher |
+|---|---|
+| Floating *Where to?* card at the map's top-left: Home / Work tiles, "Explore nearby" list with round icon badges, "No places found" state, current-location footer | `SearchPanel`: same layout. The list shows **favourites and recent trips** (real data) instead of nearby POIs; results show distance; the footer names the search provider. |
+| *Routes* card: back / close, current location → destination, *Recommended* and *Alternative* tiles, arrival and battery at arrival, light *Start navigation* button | `RoutePreviewCard`: up to **three real routes** (`computeAlternativeRoutes` on Google, `alternatives=2` on OSRM). Tapping a tile picks that route; the others are drawn grey. *Range at arrival* replaces battery (from OBD fuel data, when there is any). |
+| Turn card at the top: arrow, distance, instruction, street | `TurnCardFrame`, used by TLauncher's own guidance (`FreeTurnCard`) and by the Google Maps / Waze card (`NavCard`). Voice guidance on the Google map stays with Google Maps / Waze. |
+| Trip card at the bottom: minutes (green), km, arrival, *End navigation*, *Change destination* | `TripCard`: same, with traffic turning the minutes amber. |
+| Map chrome: compass with red north marker, zoom pill, scale bar, red arrow car | Compass, scale bar (`metersPerDp` on both maps), and the red arrow on OpenFreeMap too (`puck_arrow.xml`). |
+| Panel entrance: drops in from −9 px at 98.5 % scale, 230 ms `cubic-bezier(.2,.75,.25,1)` | `navEnter()` / `navExit()`. |
+
+Day theme: the prototype is dark only. TLauncher uses the same layout with light frosted cards
+(`NavColors`) when the day theme is on.
+

@@ -44,6 +44,16 @@ class RouteTest {
         assertNull(RouteMath.parseRoute("""{"routes":[]}"""))
     }
 
+    @Test fun parsesAlternativeRoutes() {
+        val json = """{"routes":[
+            {"distanceMeters":7400,"duration":"1080s","description":"EDSA","polyline":{"encodedPolyline":"_p~iF~ps|U_ulLnnqC_mqNvxq`@"}},
+            {"distanceMeters":9100,"duration":"1260s","description":"C-5","polyline":{"encodedPolyline":"_p~iF~ps|U_ulLnnqC_mqNvxq`@"}},
+            {"distanceMeters":1,"duration":"1s","polyline":{"encodedPolyline":""}}]}"""
+        val all = RouteMath.parseRoutes(json)
+        assertEquals(listOf("EDSA", "C-5"), all.map { it.via }) // a route without a line is skipped
+        assertEquals(1260, all[1].durationS)
+    }
+
     @Test fun parsesSuggestionsAndPlace() {
         val s = RouteMath.parseSuggestions("""{"suggestions":[{"placePrediction":{"placeId":"abc","text":{"text":"SM Megamall, EDSA"},
             "structuredFormat":{"mainText":{"text":"SM Megamall"},"secondaryText":{"text":"EDSA, Mandaluyong"}},"distanceMeters":7400}},

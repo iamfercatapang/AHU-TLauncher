@@ -226,6 +226,8 @@ interface HomeActions {
     fun clearSearch() {}
     fun pickSuggestion(s: com.ahu.tlauncher.route.Suggestion) {}
     fun previewPlace(p: com.ahu.tlauncher.route.Place) {}
+    /** Route tile tapped in the preview (0 = recommended). */
+    fun selectRoute(index: Int) {}
     fun startRoute() {}
     fun requestReturnPermission() {}
     fun endRoute() {}

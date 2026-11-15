@@ -178,9 +178,14 @@ class ScreenshotTest {
         ))), NoopActions, initialOverlay = Overlay.SEARCH)
     }
     @Test fun routeRecents() = shot("route_search_recents", dark = false) { HomeScreen(routeState(), NoopActions, initialOverlay = Overlay.SEARCH) }
-    @Test fun routePreview() = shot("route_preview") {
-        HomeScreen(routeState().copy(route = com.ahu.tlauncher.route.RouteState(
-            com.ahu.tlauncher.route.Place("SM Megamall", "Ortigas Center, Mandaluyong", placeId = "a"), com.ahu.tlauncher.route.RoutePhase.PREVIEW, demoRoute, loading = false)), NoopActions)
+    private val altRoute = com.ahu.tlauncher.route.RouteData(demoRoute.points, 1260, 9100, "C-5", emptyList())
+    private fun previewState() = routeState().copy(route = com.ahu.tlauncher.route.RouteState(
+        com.ahu.tlauncher.route.Place("SM Megamall", "Ortigas Center, Mandaluyong", placeId = "a"), com.ahu.tlauncher.route.RoutePhase.PREVIEW, demoRoute,
+        alternatives = listOf(demoRoute, altRoute), loading = false))
+    @Test fun routePreview() = shot("route_preview") { HomeScreen(previewState(), NoopActions) }
+    @Test fun routePreviewLight() = shot("route_preview_light", dark = false) { HomeScreen(previewState(), NoopActions) }
+    @Test fun routeNoResults() = shot("route_search_empty") {
+        HomeScreen(routeState().copy(search = com.ahu.tlauncher.route.SearchState("asdasdasd")), NoopActions, initialOverlay = Overlay.SEARCH)
     }
     @Test fun routeActive() = shot("route_active", dark = false) {
         HomeScreen(state(nav = true).copy(googleMapsAvailable = true, route = com.ahu.tlauncher.route.RouteState(
