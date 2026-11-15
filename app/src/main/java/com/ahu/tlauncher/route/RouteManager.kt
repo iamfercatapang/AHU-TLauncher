@@ -71,9 +71,13 @@ class RouteManager(
     /** Drive minutes to saved addresses (Home / Work), keyed by address. */
     private val _etaMin = MutableStateFlow<Map<String, Int>>(emptyMap())
     val etaMin: StateFlow<Map<String, Int>> = _etaMin.asStateFlow()
+    /** Spot long-pressed on the map, waiting for Directions. Its name fills in once the address is found. */
+    private val _pin = MutableStateFlow<Place?>(null)
+    val pin: StateFlow<Place?> = _pin.asStateFlow()
 
     private var searchJob: Job? = null
     private var routeJob: Job? = null
+    private var pinJob: Job? = null
     private var session = UUID.randomUUID().toString()
     private var offRouteSince = 0L
     private var lastReroute = 0L
@@ -143,10 +147,41 @@ class RouteManager(
         }
     }
 
+    // ---------------------------------------------------------------- dropped pin
+
+    /** Long-press on the map: show a pin there right away, then look up its address. Ignored while a route is shown. */
+    fun dropPin(lat: Double, lon: Double) {
+        if (_route.value != null) return
+        pinJob?.cancel()
+        _pin.value = Place("Dropped pin", RouteMath.coordText(lat, lon), lat, lon)
+        pinJob = scope.launch {
+            val named = runCatching { reverseGeocode(lat, lon) }.getOrNull() ?: return@launch
+            if (_pin.value?.let { it.lat == lat && it.lon == lon } == true) _pin.value = named
+        }
+    }
+
+    fun clearPin() { pinJob?.cancel(); _pin.value = null }
+
+    /** Directions on the pin card: the usual route preview, to the exact spot pressed. */
+    fun pinDirections() { val p = _pin.value ?: return; preview(p) }
+
+    /** Google's address on the Google map (Geocoding API); OpenStreetMap's (Photon) on the free map or if Google fails. */
+    private suspend fun reverseGeocode(lat: Double, lon: Double): Place? {
+        if (!freeMode() && web.hasKey) {
+            for (v in listOf("v4", "v4beta")) {
+                runCatching {
+                    RouteMath.parseReverse(web.get(String.format(java.util.Locale.US, "https://geocode.googleapis.com/%s/geocode/location/%.6f,%.6f", v, lat, lon), "*", "Geocoding API"), lat, lon)
+                }.getOrNull()?.let { return it }
+            }
+        }
+        return FreeNav.parseReverse(FreeNav.get(FreeNav.reverseUrl(lat, lon)), lat, lon)
+    }
+
     // ---------------------------------------------------------------- route
 
     fun preview(place: Place, detailsSession: String? = null) {
         routeJob?.cancel()
+        clearPin()
         _route.value = RouteState(place, RoutePhase.PREVIEW)
         routeJob = scope.launch {
             val origin = here() ?: run { _route.value = _route.value?.copy(loading = false, error = "Waiting for GPS position…"); return@launch }

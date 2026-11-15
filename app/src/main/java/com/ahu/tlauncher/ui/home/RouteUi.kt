@@ -199,6 +199,36 @@ fun RoutePreviewCard(state: HomeUiState, r: RouteState, actions: HomeActions, mo
     }
 }
 
+/** Long-pressed spot: its address (or coordinates while that loads), how far it is, Directions / favourite / close. */
+@Composable
+fun PinCard(state: HomeUiState, pin: Place, actions: HomeActions, modifier: Modifier = Modifier) {
+    val mph = state.settings.speedUnit == com.ahu.tlauncher.data.SpeedUnit.MPH
+    val fav = state.favourites.any { it.sameAs(pin) }
+    val here = state.locationLat?.let { lat -> state.locationLon?.let { lon -> com.ahu.tlauncher.route.LatLon(lat, lon) } }
+    val away = here?.let { h -> pin.latLon?.let { com.ahu.tlauncher.route.RouteMath.distanceM(h, it).toInt() } }
+    Column(modifier.widthIn(max = 420.dp).clip(TShapes.surface).background(T.colors.panel).padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.LocationOn, null, tint = TRAFFIC_JAM, modifier = Modifier.size(22.dp)); Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(pin.name, style = TType.title, color = T.colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val sub = listOfNotNull(away?.let { fmtDistance(it, mph) + " away" }, pin.address.takeIf { it.isNotBlank() && it != pin.name }).joinToString(" · ")
+                if (sub.isNotEmpty()) Text(sub, style = TType.label, color = T.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            IconButtonT(if (fav) Icons.Rounded.Star else Icons.Rounded.StarBorder, if (fav) "Remove favourite" else "Add to favourites", size = 40.dp, iconSize = 22.dp,
+                tint = if (fav) TRAFFIC_SLOW else T.colors.muted) { actions.toggleFavourite(pin) }
+            IconButtonT(Icons.Rounded.Close, "Remove pin", size = 40.dp, iconSize = 22.dp, tint = T.colors.muted) { actions.clearPin() }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            Modifier.fillMaxWidth().clip(TShapes.button).background(ROUTE_BLUE).pressable(onClick = actions::pinDirections).padding(vertical = 10.dp),
+            horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Rounded.Navigation, null, tint = Color.White, modifier = Modifier.size(18.dp).rotate(45f)); Spacer(Modifier.width(6.dp))
+            Text("Directions", style = TType.button, color = Color.White, maxLines = 1)
+        }
+    }
+}
+
 /** During the trip: arrival time, time and distance left, End. */
 @Composable
 fun TripCard(state: HomeUiState, r: RouteState, actions: HomeActions, modifier: Modifier = Modifier) {
@@ -234,7 +264,11 @@ fun TrafficLegend(modifier: Modifier = Modifier) {
 /** Route overlays on the map pane: preview card, or trip card + legend. */
 @Composable
 fun RouteOverlays(state: HomeUiState, actions: HomeActions, modifier: Modifier) {
-    val r = state.route ?: return
+    val r = state.route
+    if (r == null) {
+        state.pin?.let { p -> Box(modifier) { PinCard(state, p, actions, Modifier.align(Alignment.BottomStart).padding(12.dp)) } }
+        return
+    }
     Box(modifier) {
         if (r.phase == RoutePhase.PREVIEW) RoutePreviewCard(state, r, actions, Modifier.align(Alignment.BottomStart).padding(12.dp))
         else {

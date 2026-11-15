@@ -179,6 +179,7 @@ class MainActivity : ComponentActivity(), HomeActions {
         val search by app.routes.search.collectAsStateWithLifecycle()
         val recents by app.routes.recents.collectAsStateWithLifecycle()
         val favourites by app.routes.favourites.collectAsStateWithLifecycle()
+        val pin by app.routes.pin.collectAsStateWithLifecycle()
         val etaMin by app.routes.etaMin.collectAsStateWithLifecycle()
         val lastMedia by app.lastMedia.last.collectAsStateWithLifecycle()
         val eqCaps by app.soundEq.caps.collectAsStateWithLifecycle()
@@ -277,7 +278,7 @@ class MainActivity : ComponentActivity(), HomeActions {
             weather = weather?.takeIf { System.currentTimeMillis() - it.fetchedAtMs < com.ahu.tlauncher.system.WeatherParser.MAX_AGE_MS },
             diag = diag,
             lastMedia = if (media == null) lastMedia else null, resumingMedia = resumingMedia,
-            route = route, search = search, freeNav = freeMap, cell = cell, inbox = inbox, recents = recents, favourites = favourites, etaMin = etaMin,
+            route = route, search = search, freeNav = freeMap, cell = cell, inbox = inbox, recents = recents, favourites = favourites, pin = pin, etaMin = etaMin,
             lights = lights,
             call = call, callPermission = callPerm, returnPermission = returnPerm,
             eqCaps = eqCaps,
@@ -467,6 +468,9 @@ class MainActivity : ComponentActivity(), HomeActions {
         }
     }
     override fun toggleFavourite(p: com.ahu.tlauncher.route.Place) = app.routes.toggleFavourite(p)
+    override fun dropPin(lat: Double, lon: Double) = app.routes.dropPin(lat, lon)
+    override fun clearPin() = app.routes.clearPin()
+    override fun pinDirections() = app.routes.pinDirections()
     override fun refreshEtas() {
         lifecycleScope.launch { val s = app.prefs.settings.first(); app.routes.refreshEtas(listOf(s.homeAddress, s.workAddress)) }
     }
