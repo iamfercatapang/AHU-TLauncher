@@ -28,10 +28,11 @@ object FreeNav {
     fun parseReverse(json: String, lat: Double, lon: Double): Place? =
         parseSearch(json, null).firstOrNull()?.let { Place(it.title, it.subtitle, lat, lon) }
 
-    fun routeUrl(from: LatLon, to: LatLon): String = String.format(
+    /** With [alternatives], OSRM adds up to two other routes after the recommended one. */
+    fun routeUrl(from: LatLon, to: LatLon, alternatives: Boolean = false): String = String.format(
         Locale.US, "https://routing.openstreetmap.de/routed-car/route/v1/driving/%.6f,%.6f;%.6f,%.6f?overview=full&geometries=polyline&steps=true",
         from.lon, from.lat, to.lon, to.lat,
-    )
+    ) + if (alternatives) "&alternatives=2" else ""
 
     suspend fun get(url: String): String = withContext(Dispatchers.IO) {
         val c = URL(url).openConnection() as HttpURLConnection
@@ -66,10 +67,17 @@ object FreeNav {
         }
     }
 
-    fun parseRoute(json: String): RouteData? {
+    fun parseRoute(json: String): RouteData? = parseRoutes(json).firstOrNull()
+
+    /** Every route in an OSRM reply: the recommended one first, then alternatives. */
+    fun parseRoutes(json: String): List<RouteData> {
         val o = JSONObject(json)
-        if (o.optString("code") != "Ok") return null
-        val r = o.optJSONArray("routes")?.optJSONObject(0) ?: return null
+        if (o.optString("code") != "Ok") return emptyList()
+        val arr = o.optJSONArray("routes") ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { parseOsrmRoute(arr.getJSONObject(it)) }
+    }
+
+    private fun parseOsrmRoute(r: JSONObject): RouteData? {
         val points = RouteMath.decode(r.optString("geometry"))
         if (points.size < 2) return null
         val steps = ArrayList<Step>()

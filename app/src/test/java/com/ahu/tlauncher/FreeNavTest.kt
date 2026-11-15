@@ -42,6 +42,17 @@ class FreeNavTest {
         assertNull(FreeNav.parseRoute("""{"code":"NoRoute"}"""))
     }
 
+    @Test fun parsesOsrmAlternatives() {
+        val route = """{"distance":%d,"duration":%d,"geometry":"_p~iF~ps|U_ulLnnqC_mqNvxq`@","legs":[{"steps":[]}]}"""
+        val json = """{"code":"Ok","routes":[${route.format(7400, 1080)},${route.format(9100, 1260)}]}"""
+        val all = FreeNav.parseRoutes(json)
+        assertEquals(listOf(1080, 1260), all.map { it.durationS }) // recommended first
+        assertEquals(1080, FreeNav.parseRoute(json)!!.durationS)
+        assertTrue(FreeNav.parseRoutes("""{"code":"NoRoute"}""").isEmpty())
+        assertTrue(FreeNav.routeUrl(LatLon(14.5, 121.0), LatLon(14.6, 121.1), alternatives = true).endsWith("&alternatives=2"))
+        assertTrue(!FreeNav.routeUrl(LatLon(14.5, 121.0), LatLon(14.6, 121.1)).contains("alternatives"))
+    }
+
     @Test fun instructions() {
         assertEquals("Turn right onto EDSA", FreeNav.instruction(Step("turn", "right", "EDSA", 0)))
         assertEquals("Turn slightly left", FreeNav.instruction(Step("turn", "slight left", "", 0)))

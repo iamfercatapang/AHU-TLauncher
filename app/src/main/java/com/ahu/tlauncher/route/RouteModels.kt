@@ -155,8 +155,15 @@ object RouteMath {
         return null
     }
 
-    fun parseRoute(json: String): RouteData? {
-        val r = JSONObject(json).optJSONArray("routes")?.optJSONObject(0) ?: return null
+    fun parseRoute(json: String): RouteData? = parseRoutes(json).firstOrNull()
+
+    /** Every route in a Routes API reply: the recommended one first, then alternatives. */
+    fun parseRoutes(json: String): List<RouteData> {
+        val arr = JSONObject(json).optJSONArray("routes") ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { parseGoogleRoute(arr.getJSONObject(it)) }
+    }
+
+    private fun parseGoogleRoute(r: JSONObject): RouteData? {
         val points = decode(r.optJSONObject("polyline")?.optString("encodedPolyline") ?: return null)
         if (points.size < 2) return null
         val traffic = r.optJSONObject("travelAdvisory")?.optJSONArray("speedReadingIntervals")?.let { a ->

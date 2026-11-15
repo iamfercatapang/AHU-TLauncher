@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -400,12 +401,18 @@ fun HomeScreen(
                 )
             }
             // destination search, over the map
+            // (a floating card on the map's free side, away from its buttons, like the prototype)
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.SEARCH,
-                enter = panelIn, exit = panelOut,
+                enter = navEnter(), exit = navExit(),
                 modifier = Modifier.align(if (carRight) Alignment.TopStart else Alignment.TopEnd).padding(top = STATUS_H + 4.dp),
             ) {
-                SearchPanel(state, actions, onClose = { overlay = Overlay.NONE }, modifier = Modifier.width(maxWidth * (1 - SPLIT_FRACTION)).padding(horizontal = 14.dp))
+                Box(Modifier.width(maxWidth * (1 - SPLIT_FRACTION)).padding(horizontal = 12.dp)) {
+                    SearchPanel(
+                        state, actions, onClose = { overlay = Overlay.NONE },
+                        modifier = Modifier.align(if (carRight) Alignment.TopEnd else Alignment.TopStart).heightIn(max = maxHeight - STATUS_H - 16.dp),
+                    )
+                }
             }
             // Android Auto ready (phone's head unit server found on its hotspot)
             androidx.compose.animation.AnimatedVisibility(

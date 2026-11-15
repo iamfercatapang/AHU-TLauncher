@@ -471,6 +471,7 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun dropPin(lat: Double, lon: Double) = app.routes.dropPin(lat, lon)
     override fun clearPin() = app.routes.clearPin()
     override fun pinDirections() = app.routes.pinDirections()
+    override fun selectRoute(index: Int) = app.routes.selectRoute(index)
     override fun refreshEtas() {
         lifecycleScope.launch { val s = app.prefs.settings.first(); app.routes.refreshEtas(listOf(s.homeAddress, s.workAddress)) }
     }
