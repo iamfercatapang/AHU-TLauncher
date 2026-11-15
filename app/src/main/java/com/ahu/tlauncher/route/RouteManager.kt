@@ -111,7 +111,7 @@ class RouteManager(
             _search.value = _search.value.copy(loading = true)
             if (freeMode()) {
                 _search.value = runCatching {
-                    _search.value.copy(suggestions = FreeNav.parseSearch(FreeNav.get(FreeNav.searchUrl(query, here())), here()), loading = false)
+                    _search.value.copy(suggestions = RouteMath.nearestFirst(FreeNav.parseSearch(FreeNav.get(FreeNav.searchUrl(query, here())), here())), loading = false)
                 }.getOrElse { _search.value.copy(loading = false, error = it.message) }
                 return@launch
             }
@@ -124,7 +124,7 @@ class RouteManager(
             _search.value = runCatching {
                 val json = web.post("https://places.googleapis.com/v1/places:autocomplete", body.toString(),
                     "suggestions.placePrediction.placeId,suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat,suggestions.placePrediction.distanceMeters", "Places API (New)")
-                _search.value.copy(suggestions = RouteMath.parseSuggestions(json).take(6), loading = false)
+                _search.value.copy(suggestions = RouteMath.nearestFirst(RouteMath.parseSuggestions(json).take(6)), loading = false)
             }.getOrElse { _search.value.copy(loading = false, error = it.message) }
         }
     }

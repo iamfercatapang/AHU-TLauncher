@@ -44,6 +44,12 @@ class RouteTest {
         assertNull(RouteMath.parseRoute("""{"routes":[]}"""))
     }
 
+    @Test fun searchResultsNearestFirst() {
+        fun s(id: String, d: Int?) = com.ahu.tlauncher.route.Suggestion(id, id, "", d)
+        val sorted = RouteMath.nearestFirst(listOf(s("far", 331_800), s("none", null), s("near", 24_600), s("mid", 130_100), s("none2", null)))
+        assertEquals(listOf("near", "mid", "far", "none", "none2"), sorted.map { it.placeId })
+    }
+
     @Test fun shortDistancesForSearchRows() {
         assertEquals("332 km", com.ahu.tlauncher.ui.home.fmtDistanceShort(331_800, mph = false))
         assertEquals("24.6 km", com.ahu.tlauncher.ui.home.fmtDistanceShort(24_600, mph = false).replace(',', '.'))

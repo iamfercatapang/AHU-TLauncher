@@ -107,6 +107,9 @@ object RouteMath {
         return d
     }
 
+    /** Search results nearest first (both maps). Ones without a distance keep their order, after the rest. */
+    fun nearestFirst(list: List<Suggestion>): List<Suggestion> = list.sortedBy { it.distanceM ?: Int.MAX_VALUE }
+
     // ---------------------------------------------------------------- Google JSON
 
     fun parseSuggestions(json: String): List<Suggestion> {
