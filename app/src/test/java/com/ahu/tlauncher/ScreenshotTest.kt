@@ -187,6 +187,11 @@ class ScreenshotTest {
         HomeScreen(routeState().copy(picking = com.ahu.tlauncher.data.SavedSpot.HOME,
             pin = com.ahu.tlauncher.route.Place("123 Mabini St", "Makati, Metro Manila", 14.55, 121.02)), NoopActions)
     }
+    // Any dropped pin offers Home / Work while they aren't saved yet.
+    @Test fun pinOffersHomeWork() = shot("pin_offers_home_work", dark = false) {
+        HomeScreen(state().copy(googleMapsAvailable = true,
+            pin = com.ahu.tlauncher.route.Place("123 Mabini St", "Makati, Metro Manila", 14.55, 121.02)), NoopActions)
+    }
     @Test fun settingsHomePinned() = shot("settings_home_pinned", dark = false) {
         HomeScreen(routeState().copy(settings = routeState().settings.copy(homePos = com.ahu.tlauncher.route.LatLon(14.55, 121.02))),
             NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.NAVIGATION)

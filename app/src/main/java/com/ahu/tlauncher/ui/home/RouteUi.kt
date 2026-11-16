@@ -70,6 +70,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ahu.tlauncher.data.savedPlace
 import com.ahu.tlauncher.route.FreeNav
 import com.ahu.tlauncher.route.LatLon
 import com.ahu.tlauncher.route.Place
@@ -493,6 +494,24 @@ fun PinCard(state: HomeUiState, pin: Place, actions: HomeActions, modifier: Modi
             }
             Spacer(Modifier.width(8.dp))
             Text(if (picking != null) "Set as ${picking.label}" else "Directions", style = TType.button, color = c.onCta, maxLines = 1)
+        }
+        // Any pin: offer it as Home / Work, but only for the ones not saved yet.
+        val unset = if (picking != null) emptyList()
+            else com.ahu.tlauncher.data.SavedSpot.entries.filter { state.settings.savedPlace(it) == null }
+        if (unset.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                unset.forEach { spot ->
+                    Row(
+                        Modifier.weight(1f).height(40.dp).clip(TileShape).background(c.tile).pressable(onClick = { actions.savePinAs(spot) }),
+                        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(if (spot == com.ahu.tlauncher.data.SavedSpot.HOME) Icons.Rounded.Home else Icons.Rounded.Work, null, tint = c.text, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Set as ${spot.label}", style = TType.button, color = c.text, maxLines = 1)
+                    }
+                }
+            }
         }
     }
 }

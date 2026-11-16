@@ -178,6 +178,7 @@ fun HomeScreen(
     LaunchedEffect(state.route != null) { if (state.route != null) mapVisible = true }
     // With the Google map, "Navigate" opens the dashboard's own search (route drawn here, voice by Maps/Waze).
     val routesOn = state.routesEnabled
+    val pickingNow = androidx.compose.runtime.rememberUpdatedState(state.picking)
     val actions = remember(rawActions, routesOn) {
         object : HomeActions by rawActions {
             override fun openNavApp() { if (routesOn) { mapVisible = true; overlay = Overlay.SEARCH } else rawActions.openNavApp() }
@@ -190,7 +191,12 @@ fun HomeScreen(
                 return true
             }
             override fun cancelPicking() { rawActions.cancelPicking(); backToPlaces() }
-            override fun savePinAs(spot: com.ahu.tlauncher.data.SavedSpot) { rawActions.savePinAs(spot); backToPlaces() }
+            // Saved from Settings' pin button: back to Settings. From any other pin: stay on the map (a toast confirms it).
+            override fun savePinAs(spot: com.ahu.tlauncher.data.SavedSpot) {
+                val fromSettings = pickingNow.value != null
+                rawActions.savePinAs(spot)
+                if (fromSettings) backToPlaces()
+            }
             private fun backToPlaces() { settingsStart = com.ahu.tlauncher.ui.settings.Section.NAVIGATION; mapVisible = true; overlay = Overlay.SETTINGS }
         }
     }
