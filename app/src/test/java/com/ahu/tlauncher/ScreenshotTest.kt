@@ -196,6 +196,12 @@ class ScreenshotTest {
         HomeScreen(routeState().copy(settings = routeState().settings.copy(homePos = com.ahu.tlauncher.route.LatLon(14.55, 121.02))),
             NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.NAVIGATION)
     }
+    // Only one route, with slow traffic: full-contrast text, border-only highlight.
+    @Test fun routePreviewSingle() = shot("route_preview_single") {
+        HomeScreen(routeState().copy(route = com.ahu.tlauncher.route.RouteState(
+            com.ahu.tlauncher.route.Place("Home", "123 Mabini St, Makati"), com.ahu.tlauncher.route.RoutePhase.PREVIEW, demoRoute,
+            alternatives = listOf(demoRoute), loading = false)), NoopActions)
+    }
     @Test fun routePreview() = shot("route_preview") { HomeScreen(previewState(), NoopActions) }
     @Test fun routePreviewLight() = shot("route_preview_light", dark = false) { HomeScreen(previewState(), NoopActions) }
     @Test fun routeNoResults() = shot("route_search_empty") {

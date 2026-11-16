@@ -130,7 +130,6 @@ data class NavColors(
     val panel: Color,
     val tile: Color,
     val tilePressed: Color,
-    val tileSelected: Color,
     val tileSelectedBorder: Color,
     val border: Color,
     val text: Color,
@@ -146,14 +145,14 @@ data class NavColors(
 
 private val DarkNav = NavColors(
     panel = Color(0xF21B1E23), tile = Color(0xFF262A31), tilePressed = Color(0xFF2E333B),
-    tileSelected = Color(0xFF243349), tileSelectedBorder = Color(0xFF5B86C0), border = Color.White.copy(alpha = 0.07f),
+    tileSelectedBorder = Color(0xFF5B86C0), border = Color.White.copy(alpha = 0.07f),
     text = Color.White, sub = Color.White.copy(alpha = 0.58f), faint = Color.White.copy(alpha = 0.36f), badge = Color(0xFF2C3139),
     cta = Color(0xFFE7EDF4), onCta = Color(0xFF15181D), good = Color(0xFF8FD3A0), danger = Color(0xFFF08A86), star = Color(0xFFF2C14E),
 )
 
 private val LightNav = NavColors(
     panel = Color(0xF7FFFFFF), tile = Color(0xFFF1F3F6), tilePressed = Color(0xFFE6E9EE),
-    tileSelected = Color(0xFFE3ECF9), tileSelectedBorder = Color(0xFF6E96CF), border = Color.Black.copy(alpha = 0.07f),
+    tileSelectedBorder = Color(0xFF6E96CF), border = Color.Black.copy(alpha = 0.07f),
     text = Color(0xFF171A20), sub = Color(0xFF5C5E62), faint = Color(0xFF8E8E8E), badge = Color(0xFFEDEFF2),
     cta = Color(0xFF171A20), onCta = Color.White, good = Color(0xFF1F8A4C), danger = Color(0xFFD03B3F), star = Color(0xFFE0A21B),
 )
@@ -434,14 +433,15 @@ fun RoutePreviewCard(state: HomeUiState, r: RouteState, actions: HomeActions, mo
 private fun RowScope.RouteTile(state: HomeUiState, route: RouteData, index: Int, selected: Boolean, count: Int, onClick: () -> Unit) {
     val c = navColors
     val (num, unit) = durationParts(route.durationS)
-    val jam = route.hasTraffic()
+    // Selected: only a border on the plain tile, so the text keeps full contrast. Traffic is called out by the
+    // orange note under the tiles, so the time stays white. A single route can't be tapped, but isn't faded.
     Column(
-        Modifier.weight(1f).clip(TileShape).background(if (selected) c.tileSelected else c.tile)
-            .then(if (selected) Modifier.border(1.dp, c.tileSelectedBorder, TileShape) else Modifier)
-            .pressable(enabled = count > 1, onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp),
+        Modifier.weight(1f).clip(TileShape).background(c.tile)
+            .then(if (selected) Modifier.border(2.dp, c.tileSelectedBorder, TileShape) else Modifier)
+            .then(if (count > 1) Modifier.pressable(onClick = onClick) else Modifier).padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.Bottom) {
-            Text(num, style = TType.display.copy(fontSize = if (count > 2) 24.sp else 28.sp), color = if (jam) TRAFFIC_SLOW else c.text, maxLines = 1)
+            Text(num, style = TType.display.copy(fontSize = if (count > 2) 24.sp else 28.sp), color = c.text, maxLines = 1)
             Spacer(Modifier.width(3.dp))
             Text(unit, style = TType.caption, color = c.sub, modifier = Modifier.padding(bottom = 4.dp))
         }
