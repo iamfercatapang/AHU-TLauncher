@@ -118,9 +118,9 @@ class RouteManager(
             delay(300) // wait for typing to pause
             _search.value = _search.value.copy(loading = true)
             if (freeMode()) {
-                _search.value = runCatching {
+                _search.value = runCancellable {
                     _search.value.copy(suggestions = RouteMath.nearestFirst(FreeNav.parseSearch(FreeNav.get(FreeNav.searchUrl(query, here())), here())), loading = false)
-                }.getOrElse { _search.value.copy(loading = false, error = it.message) }
+                }.getOrElse { _search.value.copy(loading = false, error = userMessage(it, "Couldn't search")) }
                 return@launch
             }
             val body = JSONObject().put("input", query).put("sessionToken", session)
@@ -129,11 +129,11 @@ class RouteManager(
                 body.put("origin", c)
                 body.put("locationBias", JSONObject().put("circle", JSONObject().put("center", c).put("radius", 50_000.0)))
             }
-            _search.value = runCatching {
+            _search.value = runCancellable {
                 val json = web.post("https://places.googleapis.com/v1/places:autocomplete", body.toString(),
                     "suggestions.placePrediction.placeId,suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat,suggestions.placePrediction.distanceMeters", "Places API (New)")
                 _search.value.copy(suggestions = RouteMath.nearestFirst(RouteMath.parseSuggestions(json).take(6)), loading = false)
-            }.getOrElse { _search.value.copy(loading = false, error = it.message) }
+            }.getOrElse { _search.value.copy(loading = false, error = userMessage(it, "Couldn't search")) }
         }
     }
 
@@ -154,7 +154,7 @@ class RouteManager(
             if (System.currentTimeMillis() - (etaFetchedAt[key] ?: 0) < 10 * 60_000) return@forEach
             etaFetchedAt[key] = System.currentTimeMillis()
             scope.launch {
-                runCatching { computeRoute(origin, p, null) }.getOrNull()?.let { r ->
+                runCancellable { computeRoute(origin, p, null) }.getOrNull()?.let { r ->
                     _etaMin.value = _etaMin.value + (p.address to (r.durationS + 30) / 60)
                 }
             }
@@ -169,7 +169,7 @@ class RouteManager(
         pinJob?.cancel()
         _pin.value = Place(RouteMath.DROPPED_PIN, RouteMath.coordText(lat, lon), lat, lon)
         pinJob = scope.launch {
-            val named = runCatching { reverseGeocode(lat, lon) }.getOrNull() ?: return@launch
+            val named = runCancellable { reverseGeocode(lat, lon) }.getOrNull() ?: return@launch
             if (_pin.value?.let { it.lat == lat && it.lon == lon } == true) _pin.value = named
         }
     }
@@ -205,7 +205,7 @@ class RouteManager(
     private suspend fun reverseGeocode(lat: Double, lon: Double): Place? {
         if (!freeMode() && web.hasKey) {
             for (v in listOf("v4", "v4beta")) {
-                runCatching {
+                runCancellable {
                     RouteMath.parseReverse(web.get(String.format(java.util.Locale.US, "https://geocode.googleapis.com/%s/geocode/location/%.6f,%.6f", v, lat, lon), "*", "Geocoding API"), lat, lon)
                 }.getOrNull()?.let { return it }
             }
@@ -221,7 +221,7 @@ class RouteManager(
         _route.value = RouteState(place, RoutePhase.PREVIEW)
         routeJob = scope.launch {
             val origin = here() ?: run { _route.value = _route.value?.copy(loading = false, error = "Waiting for GPS position…"); return@launch }
-            runCatching {
+            runCancellable {
                 var dest = place
                 if (freeMode()) dest = freePlace(dest)
                 else if (dest.latLon == null && dest.placeId != null && !dest.placeId!!.startsWith("osm:")) {
@@ -235,7 +235,7 @@ class RouteManager(
                 _route.value = RouteState(dest, RoutePhase.PREVIEW, r, alternatives = all, loading = false, car = origin,
                     remainingM = r.distanceM, remainingS = r.durationS, guided = freeMode())
             }.onFailure { e ->
-                _route.value = _route.value?.copy(loading = false, error = e.message)
+                _route.value = _route.value?.copy(loading = false, error = userMessage(e, "Couldn't find a route"))
             }
         }
     }
@@ -332,7 +332,7 @@ class RouteManager(
         val s = _route.value ?: return
         routeJob?.cancel()
         routeJob = scope.launch {
-            runCatching { computeRoute(LatLon(loc.latitude, loc.longitude), s.destination, loc.takeIf { it.hasBearing() }?.bearing) }
+            runCancellable { computeRoute(LatLon(loc.latitude, loc.longitude), s.destination, loc.takeIf { it.hasBearing() }?.bearing) }
                 .onSuccess { r ->
                     spoken.clear()
                     if (s.guided) speak("Route recalculated.")
