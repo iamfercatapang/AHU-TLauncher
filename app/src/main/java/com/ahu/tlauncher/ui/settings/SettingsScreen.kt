@@ -27,7 +27,9 @@ import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.outlined.LocationOn as LocationOnOutline
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Dock
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Map
@@ -272,8 +274,12 @@ private fun NavigationSection(state: HomeUiState, a: HomeActions) {
     }
     Divider()
     SmallTitle("Saved places")
-    AddressField("Home", s.homeAddress, a::setHome)
-    AddressField("Work", s.workAddress, a::setWork)
+    AddressField("Home", s.homeAddress, s.homePos != null, a::setHome) { a.pickOnMap(com.ahu.tlauncher.data.SavedSpot.HOME) }
+    AddressField("Work", s.workAddress, s.workPos != null, a::setWork) { a.pickOnMap(com.ahu.tlauncher.data.SavedSpot.WORK) }
+    Text(
+        "Type an address, or tap the pin and long-press the exact spot on the map. A pinned spot is used for directions; typing a new address replaces it.",
+        style = TType.label, color = T.colors.muted, modifier = Modifier.padding(top = 2.dp, bottom = 6.dp),
+    )
     Divider()
     SettingRow("Offer to continue the trip", "If the car was switched off before arriving, the map asks whether to continue when it starts again") {
         com.ahu.tlauncher.ui.components.TSwitch(s.offerTrip, a::setOfferTrip)
@@ -288,7 +294,7 @@ private fun NavigationSection(state: HomeUiState, a: HomeActions) {
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun AddressField(label: String, value: String, onSave: (String) -> Unit) {
+private fun AddressField(label: String, value: String, pinned: Boolean, onSave: (String) -> Unit, onPickOnMap: () -> Unit) {
     var text by remember(value) { mutableStateOf(value) }
     LaunchedEffect(text) { if (text != value) { kotlinx.coroutines.delay(800); onSave(text) } }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
@@ -313,6 +319,13 @@ private fun AddressField(label: String, value: String, onSave: (String) -> Unit)
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+        Spacer(Modifier.width(8.dp))
+        // Pin on map; filled with the accent colour while a pinned spot is saved.
+        IconButtonT(
+            if (pinned) Icons.Rounded.LocationOn else Icons.Outlined.LocationOnOutline,
+            if (pinned) "$label is pinned on the map: pin again" else "Pin $label on the map",
+            size = 42.dp, iconSize = 20.dp, tint = if (pinned) T.colors.accent else T.colors.secondary,
+        ) { keyboard?.hide(); focus.clearFocus(); onPickOnMap() }
     }
 }
 

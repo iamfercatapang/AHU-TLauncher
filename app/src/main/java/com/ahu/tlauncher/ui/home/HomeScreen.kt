@@ -183,8 +183,18 @@ fun HomeScreen(
             override fun openNavApp() { if (routesOn) { mapVisible = true; overlay = Overlay.SEARCH } else rawActions.openNavApp() }
             override fun openMapSettings() { settingsStart = com.ahu.tlauncher.ui.settings.Section.NAVIGATION; overlay = Overlay.SETTINGS }
             override fun openCardPlayer() { overlay = if (overlay == Overlay.CARD_MUSIC) Overlay.NONE else Overlay.CARD_MUSIC }
+            // Settings → "Pin on map": close Settings so the map is free; it opens again once the spot is saved or picking is cancelled.
+            override fun pickOnMap(spot: com.ahu.tlauncher.data.SavedSpot): Boolean {
+                if (!rawActions.pickOnMap(spot)) return false
+                mapVisible = true; overlay = Overlay.NONE
+                return true
+            }
+            override fun cancelPicking() { rawActions.cancelPicking(); backToPlaces() }
+            override fun savePinAs(spot: com.ahu.tlauncher.data.SavedSpot) { rawActions.savePinAs(spot); backToPlaces() }
+            private fun backToPlaces() { settingsStart = com.ahu.tlauncher.ui.settings.Section.NAVIGATION; mapVisible = true; overlay = Overlay.SETTINGS }
         }
     }
+    BackHandler(enabled = overlay == Overlay.NONE && state.picking != null) { actions.cancelPicking() }
     // Settings, the dock's Music panel and search live on the map side: only in split view.
     LaunchedEffect(mapVisible) {
         if (!mapVisible && overlay in setOf(Overlay.SETTINGS, Overlay.MUSIC, Overlay.SEARCH)) overlay = Overlay.NONE

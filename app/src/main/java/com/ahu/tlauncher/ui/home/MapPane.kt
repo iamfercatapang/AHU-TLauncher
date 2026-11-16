@@ -144,6 +144,8 @@ fun MapPane(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modif
             FreeTurnCard(state, freeTurn, Modifier.align(side).padding(horizontal = 12.dp).padding(top = STATUS_H + 4.dp))
         } else if (nav != null && state.route?.phase != com.ahu.tlauncher.route.RoutePhase.PREVIEW) {
             Box(Modifier.align(side).padding(horizontal = 12.dp).padding(top = STATUS_H + 4.dp)) { NavCard(nav, onClick = actions::openNavCard) }
+        } else if (state.route == null && state.picking != null) {
+            PickSpotBanner(state.picking, actions::cancelPicking, Modifier.align(side).padding(horizontal = 12.dp).padding(top = STATUS_H + 4.dp))
         } else if (state.route == null) {
             NavigatePill(actions::openNavApp, Modifier.align(side).padding(horizontal = 12.dp).padding(top = STATUS_H + 4.dp))
         }

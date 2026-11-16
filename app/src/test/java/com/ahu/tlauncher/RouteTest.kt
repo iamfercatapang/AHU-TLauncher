@@ -1,5 +1,6 @@
 package com.ahu.tlauncher
 
+import com.ahu.tlauncher.data.savedPlace
 import com.ahu.tlauncher.route.LatLon
 import com.ahu.tlauncher.route.Place
 import com.ahu.tlauncher.route.RouteMath
@@ -10,6 +11,31 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RouteTest {
+    @Test fun storesHomeAndWorkPositions() {
+        val p = LatLon(14.5501234, 121.0249876)
+        val back = RouteMath.decodeLatLon(RouteMath.encodeLatLon(p))!!
+        assertEquals(p.lat, back.lat, 1e-6); assertEquals(p.lon, back.lon, 1e-6)
+        assertNull(RouteMath.decodeLatLon(null)); assertNull(RouteMath.decodeLatLon(""))
+        assertNull(RouteMath.decodeLatLon("14.5")); assertNull(RouteMath.decodeLatLon("a,b")); assertNull(RouteMath.decodeLatLon("95,121"))
+    }
+
+    @Test fun pinSavedAsHomeShowsItsAddressOrCoordinates() {
+        assertEquals("6750 Ayala Ave, Makati, Metro Manila", RouteMath.savedAddress(Place("6750 Ayala Ave", "Makati, Metro Manila", 14.55, 121.02)))
+        // Address not found (yet): the coordinates.
+        assertEquals("14.55000, 121.02000", RouteMath.savedAddress(Place(RouteMath.DROPPED_PIN, "14.55000, 121.02000", 14.55, 121.02)))
+        assertEquals("EDSA", RouteMath.savedAddress(Place("EDSA", "", 14.0, 121.0)))
+    }
+
+    @Test fun homeGoesToThePinnedSpotWhenThereIsOne() {
+        val typed = com.ahu.tlauncher.data.Settings(homeAddress = "Makati")
+        assertNull(typed.savedPlace(com.ahu.tlauncher.data.SavedSpot.HOME)!!.latLon)
+        assertEquals("Makati", typed.savedPlace(com.ahu.tlauncher.data.SavedSpot.HOME)!!.address)
+        assertNull(typed.savedPlace(com.ahu.tlauncher.data.SavedSpot.WORK))
+        val pinned = com.ahu.tlauncher.data.Settings(workAddress = "Office", workPos = LatLon(14.6, 121.1))
+        val w = pinned.savedPlace(com.ahu.tlauncher.data.SavedSpot.WORK)!!
+        assertEquals("Work", w.name); assertEquals("Office", w.address); assertEquals(LatLon(14.6, 121.1), w.latLon)
+    }
+
     @Test fun parsesGoogleReverseGeocodeForPin() {
         // Geocoding v4 shape; the plus code result is skipped, the pin keeps the pressed spot.
         val v4 = """{"results":[{"formattedAddress":"8HX7+XX Makati","types":["plus_code"]},

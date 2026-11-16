@@ -97,6 +97,8 @@ data class HomeUiState(
     val favourites: List<com.ahu.tlauncher.route.Place> = emptyList(),
     /** Spot long-pressed on the map (pin card shown), null when none. */
     val pin: com.ahu.tlauncher.route.Place? = null,
+    /** Home / Work being pinned on the map (from Settings), null otherwise. */
+    val picking: com.ahu.tlauncher.data.SavedSpot? = null,
     /** Drive minutes to Home / Work, keyed by address. */
     val etaMin: Map<String, Int> = emptyMap(),
     /** Free map: OpenStreetMap search/routing and TLauncher's own spoken guidance. */
@@ -252,6 +254,11 @@ interface HomeActions {
     /** Pin card's Directions: preview the route to the pin. */
     fun pinDirections() {}
     fun refreshEtas() {}
+    /** "Pin on map" next to Home / Work in Settings: the next long-press sets it. False when a trip is running. */
+    fun pickOnMap(spot: com.ahu.tlauncher.data.SavedSpot): Boolean = false
+    fun cancelPicking() {}
+    /** Pin card while picking: save the pin as Home / Work. */
+    fun savePinAs(spot: com.ahu.tlauncher.data.SavedSpot) {}
     fun setEngineCc(cc: Int) {}
     // headlights (ILL)
     fun lightsLearnOff() {}
