@@ -84,6 +84,10 @@ class RouteManager(
     private val _pin = MutableStateFlow<Place?>(null)
     val pin: StateFlow<Place?> = _pin.asStateFlow()
 
+    /** Home / Work being chosen on the map: the next pin offers "Set as Home" instead of Directions. */
+    private val _picking = MutableStateFlow<com.ahu.tlauncher.data.SavedSpot?>(null)
+    val picking: StateFlow<com.ahu.tlauncher.data.SavedSpot?> = _picking.asStateFlow()
+
     private var searchJob: Job? = null
     private var routeJob: Job? = null
     private var pinJob: Job? = null
@@ -142,15 +146,16 @@ class RouteManager(
         preview(Place(s.title, s.subtitle, s.lat, s.lon, placeId = s.placeId), detailsSession = tok)
     }
 
-    /** Drive times for the Home / Work shortcuts, refreshed at most every 10 minutes. */
-    fun refreshEtas(addresses: List<String>) {
+    /** Drive times for the Home / Work shortcuts (keyed by address), refreshed at most every 10 minutes. */
+    fun refreshEtas(places: List<Place>) {
         val origin = here() ?: return
-        addresses.filter { it.isNotBlank() }.forEach { a ->
-            if (System.currentTimeMillis() - (etaFetchedAt[a] ?: 0) < 10 * 60_000) return@forEach
-            etaFetchedAt[a] = System.currentTimeMillis()
+        places.filter { it.address.isNotBlank() }.forEach { p ->
+            val key = p.address + "|" + p.latLon
+            if (System.currentTimeMillis() - (etaFetchedAt[key] ?: 0) < 10 * 60_000) return@forEach
+            etaFetchedAt[key] = System.currentTimeMillis()
             scope.launch {
-                runCatching { computeRoute(origin, Place(a, a), null) }.getOrNull()?.let { r ->
-                    _etaMin.value = _etaMin.value + (a to (r.durationS + 30) / 60)
+                runCatching { computeRoute(origin, p, null) }.getOrNull()?.let { r ->
+                    _etaMin.value = _etaMin.value + (p.address to (r.durationS + 30) / 60)
                 }
             }
         }
@@ -162,7 +167,7 @@ class RouteManager(
     fun dropPin(lat: Double, lon: Double) {
         if (_route.value != null) return
         pinJob?.cancel()
-        _pin.value = Place("Dropped pin", RouteMath.coordText(lat, lon), lat, lon)
+        _pin.value = Place(RouteMath.DROPPED_PIN, RouteMath.coordText(lat, lon), lat, lon)
         pinJob = scope.launch {
             val named = runCatching { reverseGeocode(lat, lon) }.getOrNull() ?: return@launch
             if (_pin.value?.let { it.lat == lat && it.lon == lon } == true) _pin.value = named
@@ -170,6 +175,28 @@ class RouteManager(
     }
 
     fun clearPin() { pinJob?.cancel(); _pin.value = null }
+
+    /**
+     * "Pin on map" for Home / Work in Settings: the next long-press on the map is offered as that place.
+     * Not while a trip is running (returns false); a route preview is closed.
+     */
+    fun startPicking(spot: com.ahu.tlauncher.data.SavedSpot): Boolean {
+        if (_route.value?.phase == RoutePhase.ACTIVE) return false
+        if (_route.value != null) end()
+        clearPin()
+        _picking.value = spot
+        return true
+    }
+
+    fun cancelPicking() { _picking.value = null; clearPin() }
+
+    /** The pin to save as [spot], ending picking mode. Null when there's no pin. */
+    fun takePinFor(spot: com.ahu.tlauncher.data.SavedSpot): Place? {
+        val p = _pin.value?.takeIf { it.latLon != null } ?: return null
+        _picking.value = null
+        clearPin()
+        return p
+    }
 
     /** Directions on the pin card: the usual route preview, to the exact spot pressed. */
     fun pinDirections() { val p = _pin.value ?: return; preview(p) }

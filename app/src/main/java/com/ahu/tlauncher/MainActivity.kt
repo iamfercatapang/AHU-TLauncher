@@ -44,6 +44,7 @@ import com.ahu.tlauncher.data.NavApp
 import com.ahu.tlauncher.data.ObdSourceType
 import com.ahu.tlauncher.data.SpeedUnit
 import com.ahu.tlauncher.data.TempUnit
+import com.ahu.tlauncher.data.savedPlace
 import com.ahu.tlauncher.launcher.AppEntry
 import com.ahu.tlauncher.notify.NavParser
 import com.ahu.tlauncher.notify.NotificationHub
@@ -180,6 +181,7 @@ class MainActivity : ComponentActivity(), HomeActions {
         val recents by app.routes.recents.collectAsStateWithLifecycle()
         val favourites by app.routes.favourites.collectAsStateWithLifecycle()
         val pin by app.routes.pin.collectAsStateWithLifecycle()
+        val picking by app.routes.picking.collectAsStateWithLifecycle()
         val etaMin by app.routes.etaMin.collectAsStateWithLifecycle()
         val lastMedia by app.lastMedia.last.collectAsStateWithLifecycle()
         val eqCaps by app.soundEq.caps.collectAsStateWithLifecycle()
@@ -287,7 +289,7 @@ class MainActivity : ComponentActivity(), HomeActions {
             weather = weather?.takeIf { System.currentTimeMillis() - it.fetchedAtMs < com.ahu.tlauncher.system.WeatherParser.MAX_AGE_MS },
             diag = diag,
             lastMedia = if (media == null) lastMedia else null, resumingMedia = resumingMedia,
-            route = route, search = search, freeNav = freeMap, cell = cell, inbox = inbox, recents = recents, favourites = favourites, pin = pin, etaMin = etaMin,
+            route = route, search = search, freeNav = freeMap, cell = cell, inbox = inbox, recents = recents, favourites = favourites, pin = pin, picking = picking, etaMin = etaMin,
             lights = lights,
             call = call, callPermission = callPerm, returnPermission = returnPerm,
             eqCaps = eqCaps,
@@ -436,27 +438,29 @@ class MainActivity : ComponentActivity(), HomeActions {
         }
     }
 
-    override fun navigateHome() = navigateTo("Home") { it.homeAddress }
-    override fun navigateWork() = navigateTo("Work") { it.workAddress }
+    override fun navigateHome() = navigateTo(com.ahu.tlauncher.data.SavedSpot.HOME)
+    override fun navigateWork() = navigateTo(com.ahu.tlauncher.data.SavedSpot.WORK)
 
     @Suppress("UNUSED_PARAMETER")
     private fun routesOn(s: com.ahu.tlauncher.data.Settings) = app.routes.available
 
-    private fun navigateTo(label: String, pick: (com.ahu.tlauncher.data.Settings) -> String) {
+    private fun navigateTo(spot: com.ahu.tlauncher.data.SavedSpot) {
         lifecycleScope.launch {
             val s = app.prefs.settings.first()
-            val addr = pick(s).trim()
-            if (addr.isEmpty()) {
+            val place = s.savedPlace(spot)
+            if (place == null) {
                 android.widget.Toast.makeText(this@MainActivity, "Set the address in Settings → Navigation", android.widget.Toast.LENGTH_LONG).show()
                 return@launch
             }
             // With the Google map: show the route first; Start hands it to Google Maps / Waze.
-            if (routesOn(s)) { app.routes.preview(com.ahu.tlauncher.route.Place(label, addr)); return@launch }
-            val q = Uri.encode(addr)
+            if (routesOn(s)) { app.routes.preview(place); return@launch }
+            // A spot pinned on the map goes by its coordinates, a typed address by its text.
+            val at = place.latLon?.let { String.format(java.util.Locale.US, "%.6f,%.6f", it.lat, it.lon) }
+            val q = Uri.encode(at ?: place.address)
             val intent = when (s.navApp) {
                 NavApp.MAPS -> Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$q")).setPackage(NavParser.MAPS)
-                NavApp.WAZE -> Intent(Intent.ACTION_VIEW, Uri.parse("https://waze.com/ul?q=$q&navigate=yes")).setPackage(NavParser.WAZE)
-                NavApp.ASK -> Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=$q"))
+                NavApp.WAZE -> Intent(Intent.ACTION_VIEW, Uri.parse(if (at != null) "https://waze.com/ul?ll=$q&navigate=yes" else "https://waze.com/ul?q=$q&navigate=yes")).setPackage(NavParser.WAZE)
+                NavApp.ASK -> Intent(Intent.ACTION_VIEW, Uri.parse(if (at != null) "geo:$at?q=$q(${Uri.encode(spot.label)})" else "geo:0,0?q=$q"))
             }
             if (!startSafely(intent)) startSafely(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=$q")))
         }
@@ -483,7 +487,24 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun pinDirections() = app.routes.pinDirections()
     override fun selectRoute(index: Int) = app.routes.selectRoute(index)
     override fun refreshEtas() {
-        lifecycleScope.launch { val s = app.prefs.settings.first(); app.routes.refreshEtas(listOf(s.homeAddress, s.workAddress)) }
+        lifecycleScope.launch {
+            val s = app.prefs.settings.first()
+            app.routes.refreshEtas(com.ahu.tlauncher.data.SavedSpot.entries.mapNotNull { s.savedPlace(it) })
+        }
+    }
+    override fun pickOnMap(spot: com.ahu.tlauncher.data.SavedSpot): Boolean {
+        if (app.routes.startPicking(spot)) return true
+        android.widget.Toast.makeText(this, "End the trip first, then pin ${spot.label}", android.widget.Toast.LENGTH_LONG).show()
+        return false
+    }
+    override fun cancelPicking() = app.routes.cancelPicking()
+    override fun savePinAs(spot: com.ahu.tlauncher.data.SavedSpot) {
+        val p = app.routes.takePinFor(spot) ?: return
+        lifecycleScope.launch {
+            app.prefs.setSavedSpot(spot, com.ahu.tlauncher.route.RouteMath.savedAddress(p), p.lat!!, p.lon!!)
+            android.widget.Toast.makeText(this@MainActivity, "${spot.label} saved", android.widget.Toast.LENGTH_SHORT).show()
+            refreshEtas()
+        }
     }
 
     /** Start: voice guidance in Google Maps / Waze, then bring the dashboard (with the route) back to the front. */

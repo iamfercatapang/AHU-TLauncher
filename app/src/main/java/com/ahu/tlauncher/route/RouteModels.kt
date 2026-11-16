@@ -139,6 +139,26 @@ object RouteMath {
     /** "14.59950, 120.98420": a dropped pin before (or without) its address. */
     fun coordText(lat: Double, lon: Double): String = String.format(java.util.Locale.US, "%.5f, %.5f", lat, lon)
 
+    /** Stored Home / Work position: "lat,lon". */
+    fun encodeLatLon(p: LatLon): String = String.format(java.util.Locale.US, "%.6f,%.6f", p.lat, p.lon)
+
+    fun decodeLatLon(s: String?): LatLon? {
+        val parts = s?.split(',')?.takeIf { it.size == 2 } ?: return null
+        val lat = parts[0].trim().toDoubleOrNull() ?: return null
+        val lon = parts[1].trim().toDoubleOrNull() ?: return null
+        return if (lat in -90.0..90.0 && lon in -180.0..180.0) LatLon(lat, lon) else null
+    }
+
+    /** What a pin saved as Home / Work shows as its address: "Name, rest of address", or the coordinates if it has none. */
+    fun savedAddress(pin: Place): String {
+        val lat = pin.lat; val lon = pin.lon
+        if (lat != null && lon != null && (pin.name.isBlank() || pin.name == DROPPED_PIN)) return coordText(lat, lon)
+        return listOf(pin.name, pin.address).filter { it.isNotBlank() }.distinct().joinToString(", ")
+    }
+
+    /** Name of a pin whose address hasn't been found (yet). */
+    const val DROPPED_PIN = "Dropped pin"
+
     /**
      * Google reverse geocode for a dropped pin: the first street address ("123 Main St" over "Makati, Metro Manila").
      * Reads the Geocoding v4 reply (formattedAddress) and the classic one (formatted_address). Plus codes are skipped.

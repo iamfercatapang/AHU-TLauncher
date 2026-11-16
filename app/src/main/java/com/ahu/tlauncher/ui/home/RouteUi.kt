@@ -70,6 +70,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ahu.tlauncher.data.savedPlace
 import com.ahu.tlauncher.route.FreeNav
 import com.ahu.tlauncher.route.LatLon
 import com.ahu.tlauncher.route.Place
@@ -479,13 +480,53 @@ fun PinCard(state: HomeUiState, pin: Place, actions: HomeActions, modifier: Modi
             NavIconButton(Icons.Rounded.Close, "Remove pin", onClick = actions::clearPin)
         }
         Spacer(Modifier.height(12.dp))
+        // Pinning Home / Work from Settings: save the spot instead of asking for directions.
+        val picking = state.picking
         Row(
-            Modifier.fillMaxWidth().height(46.dp).clip(TileShape).background(c.cta).pressable(onClick = actions::pinDirections),
+            Modifier.fillMaxWidth().height(46.dp).clip(TileShape).background(c.cta)
+                .pressable(onClick = { if (picking != null) actions.savePinAs(picking) else actions.pinDirections() }),
             horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Rounded.Navigation, null, tint = c.onCta, modifier = Modifier.size(18.dp).rotate(45f)); Spacer(Modifier.width(8.dp))
-            Text("Directions", style = TType.button, color = c.onCta, maxLines = 1)
+            when (picking) {
+                null -> Icon(Icons.Rounded.Navigation, null, tint = c.onCta, modifier = Modifier.size(18.dp).rotate(45f))
+                com.ahu.tlauncher.data.SavedSpot.HOME -> Icon(Icons.Rounded.Home, null, tint = c.onCta, modifier = Modifier.size(18.dp))
+                com.ahu.tlauncher.data.SavedSpot.WORK -> Icon(Icons.Rounded.Work, null, tint = c.onCta, modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(if (picking != null) "Set as ${picking.label}" else "Directions", style = TType.button, color = c.onCta, maxLines = 1)
         }
+        // Any pin: offer it as Home / Work, but only for the ones not saved yet.
+        val unset = if (picking != null) emptyList()
+            else com.ahu.tlauncher.data.SavedSpot.entries.filter { state.settings.savedPlace(it) == null }
+        if (unset.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                unset.forEach { spot ->
+                    Row(
+                        Modifier.weight(1f).height(40.dp).clip(TileShape).background(c.tile).pressable(onClick = { actions.savePinAs(spot) }),
+                        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(if (spot == com.ahu.tlauncher.data.SavedSpot.HOME) Icons.Rounded.Home else Icons.Rounded.Work, null, tint = c.text, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Set as ${spot.label}", style = TType.button, color = c.text, maxLines = 1)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Top of the map while Home / Work is being pinned: what to do, and Cancel (back to Settings). */
+@Composable
+fun PickSpotBanner(spot: com.ahu.tlauncher.data.SavedSpot, onCancel: () -> Unit, modifier: Modifier = Modifier) {
+    val c = navColors
+    Row(modifier.width(NAV_CARD_W).navPanel().padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Badge(if (spot == com.ahu.tlauncher.data.SavedSpot.HOME) Icons.Rounded.Home else Icons.Rounded.Work, c.cta); Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Pin ${spot.label}", style = TType.title, color = c.text, maxLines = 1)
+            Text("Long-press the exact spot on the map", style = TType.caption, color = c.faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        NavIconButton(Icons.Rounded.Close, "Cancel", onClick = onCancel)
     }
 }
 
@@ -611,7 +652,7 @@ fun RouteOverlays(state: HomeUiState, actions: HomeActions, modifier: Modifier, 
         AnimatedVisibility(pin != null, enter = navEnter(), exit = navExit(), modifier = Modifier.align(bottom).padding(12.dp).padding(bottom = 4.dp)) {
             lastPin[0]?.let { PinCard(state, it, actions) }
         }
-        val offer = state.tripOffer?.takeIf { r == null && pin == null }
+        val offer = state.tripOffer?.takeIf { r == null && pin == null && state.picking == null }
         val lastOffer = remember { arrayOfNulls<com.ahu.tlauncher.system.SavedTrip>(1) }
         if (offer != null) lastOffer[0] = offer
         AnimatedVisibility(offer != null, enter = navEnter(), exit = navExit(), modifier = Modifier.align(bottom).padding(12.dp).padding(bottom = 4.dp)) {

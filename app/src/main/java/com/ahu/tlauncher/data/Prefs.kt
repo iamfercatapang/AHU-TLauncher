@@ -22,6 +22,8 @@ enum class CarSide { LEFT, RIGHT }
 enum class MapEngine { GOOGLE, OPENFREEMAP }
 /** Low-performance mode: Auto turns it on for low-end head units. */
 enum class PerfMode { AUTO, ON, OFF }
+/** Saved places with their own shortcut: Home and Work. */
+enum class SavedSpot(val label: String) { HOME("Home"), WORK("Work") }
 enum class CarView(val label: String) { SIDE("Side"), FRONT("Front"), REAR("Rear") }
 
 data class Settings(
@@ -31,6 +33,9 @@ data class Settings(
     val pinnedApps: List<String> = emptyList(),
     val homeAddress: String = "",
     val workAddress: String = "",
+    /** Exact spot pinned on the map for Home / Work; null = find the typed address. */
+    val homePos: com.ahu.tlauncher.route.LatLon? = null,
+    val workPos: com.ahu.tlauncher.route.LatLon? = null,
     val obdSource: ObdSourceType = ObdSourceType.BLUETOOTH,
     val obdDeviceAddress: String = "",
     val obdDeviceName: String = "",
@@ -75,6 +80,8 @@ class Prefs(private val context: Context) {
         val pinned = stringPreferencesKey("pinned")
         val home = stringPreferencesKey("home_addr")
         val work = stringPreferencesKey("work_addr")
+        val homePos = stringPreferencesKey("home_pos")
+        val workPos = stringPreferencesKey("work_pos")
         val obdSource = stringPreferencesKey("obd_source")
         val obdAddr = stringPreferencesKey("obd_addr")
         val obdName = stringPreferencesKey("obd_name")
@@ -114,6 +121,8 @@ class Prefs(private val context: Context) {
         pinnedApps = this[K.pinned]?.split('\n')?.filter { it.isNotBlank() } ?: emptyList(),
         homeAddress = this[K.home] ?: "",
         workAddress = this[K.work] ?: "",
+        homePos = com.ahu.tlauncher.route.RouteMath.decodeLatLon(this[K.homePos]),
+        workPos = com.ahu.tlauncher.route.RouteMath.decodeLatLon(this[K.workPos]),
         obdSource = enumOr(this[K.obdSource], ObdSourceType.BLUETOOTH),
         obdDeviceAddress = this[K.obdAddr] ?: "",
         obdDeviceName = this[K.obdName] ?: "",
@@ -145,8 +154,17 @@ class Prefs(private val context: Context) {
     suspend fun setPinned(list: List<String>) = context.store.edit {
         it[K.pinned] = list.joinToString("\n"); it[K.pinnedSeeded] = true
     }
-    suspend fun setHome(a: String) = context.store.edit { it[K.home] = a }
-    suspend fun setWork(a: String) = context.store.edit { it[K.work] = a }
+    /** A typed address replaces any spot pinned on the map. */
+    suspend fun setHome(a: String) = context.store.edit { it[K.home] = a; it.remove(K.homePos) }
+    suspend fun setWork(a: String) = context.store.edit { it[K.work] = a; it.remove(K.workPos) }
+    /** Home / Work set from a spot pinned on the map: its address for display, its position for routing. */
+    suspend fun setSavedSpot(spot: SavedSpot, address: String, lat: Double, lon: Double) = context.store.edit {
+        val pos = com.ahu.tlauncher.route.RouteMath.encodeLatLon(com.ahu.tlauncher.route.LatLon(lat, lon))
+        when (spot) {
+            SavedSpot.HOME -> { it[K.home] = address; it[K.homePos] = pos }
+            SavedSpot.WORK -> { it[K.work] = address; it[K.workPos] = pos }
+        }
+    }
     suspend fun setObdSource(s: ObdSourceType) = context.store.edit { it[K.obdSource] = s.name }
     suspend fun setObdDevice(addr: String, name: String) = context.store.edit {
         it[K.obdAddr] = addr; it[K.obdName] = name
