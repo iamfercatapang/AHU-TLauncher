@@ -53,11 +53,12 @@ points for `CarFraming.kt`. `process.mjs`, in order:
    the area is split into smaller triangles that follow the surface's curve, then pressed in.
 4. **Lighter geometry.** Every part except the paint is simplified (`ratio`, default 0.4). The paint keeps
    all its triangles: simplifying it bends the large panels.
-5. **Wheels.** The stock rims and their centre caps are removed, and a CE28 rim (material `rim`, silver) is
+5. **Wheels.** The stock rims and their centre caps are removed, and a CE28 rim (material `rim`, light matte silver) is
    fitted at each corner: same centre and diameter as the stock rim, outer face flush. The stock tyres are
    replaced too, by the low-poly tyre of "Car wheels and tire" (material `tyre`): its radius is remapped to run
    from the rim to the stock tyre's outside, its width matched, and its textures scaled down to 512 pixels
-   (`TYRE_TEX`); its roughness map (0.1, mirror-like) is dropped for matte rubber (roughness 0.85). Brake discs and calipers stay.
+   (`TYRE_TEX`); its roughness map (0.1, mirror-like) is dropped for matte rubber (roughness 0.85).
+   Then the body is lowered `LOWER` (3 cm) over its wheels: everything but the rims, tyres and brakes moves down. Brake discs and calipers stay.
 6. **Lamps.** Parts get their own materials so the app can light them with the headlights:
    `headlight`, `foglight`, `taillight` (only the high brake light and the round lamps in the rear clusters)
    and `taillight_off` (the rest of the red plastic, never lit). These are found by position, in metres.

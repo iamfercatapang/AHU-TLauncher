@@ -429,7 +429,7 @@ const wheelNode = wheelDoc.getRoot().listNodes().find((n) => n.getMesh());
 transformMesh(wheelNode.getMesh(), wheelNode.getWorldMatrix()); // bake its placement: axle along x, face to +x
 const wheelMesh = copyToDocument(doc, wheelDoc, [wheelNode.getMesh()]).get(wheelNode.getMesh());
 const rim = wheelMesh.listPrimitives()[0].getMaterial().setName('rim')
-  .setBaseColorFactor([0.78, 0.79, 0.8, 1]).setMetallicFactor(1).setRoughnessFactor(0.22);
+  .setBaseColorFactor([0.9, 0.9, 0.91, 1]).setMetallicFactor(1).setRoughnessFactor(0.45); // light matte silver
 const wb = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] };
 for (const prim of wheelMesh.listPrimitives()) {
   const p = prim.getAttribute('POSITION').getArray();
@@ -686,6 +686,22 @@ console.log('rear round lamps:', bulbs, 'triangles');
   prim.setAttribute('NORMAL', doc.createAccessor().setType('VEC3').setBuffer(root.listBuffers()[0]).setArray(N));
   scene.addChild(doc.createNode('reflectors').setMesh(doc.createMesh('reflectors').addPrimitive(prim)));
   console.log('bumper reflectors: added', pockets.length, 'round ones');
+}
+
+// 3d. Lowered: the body sits LOWER metres lower over its wheels. Everything moves down except the wheels (rims,
+// tyres, brake discs and calipers), which stay on the floor. Done after the lamps are found (they go by height).
+const LOWER = 0.03;
+{
+  const wheelMats = new Set(['rim', 'tyre', 'brake_disc', 'caliper']);
+  let moved = 0;
+  for (const n of scene.listChildren()) {
+    const mesh = n.getMesh(); if (!mesh) continue;
+    if (mesh.listPrimitives().every((p) => wheelMats.has(p.getMaterial()?.getName()))) continue;
+    const t = n.getTranslation();
+    n.setTranslation([t[0], t[1] - LOWER, t[2]]);
+    moved++;
+  }
+  console.log('lowered: body', LOWER, 'm,', moved, 'parts');
 }
 
 // 4. Reflection: the opaque parts again, mirrored under the floor (glass and lights would show through it).
