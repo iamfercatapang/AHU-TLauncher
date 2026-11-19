@@ -623,6 +623,11 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun setNavApp(a: NavApp) { lifecycleScope.launch { app.prefs.setNavApp(a) } }
     override fun setCarSide(side: com.ahu.tlauncher.data.CarSide) { lifecycleScope.launch { app.prefs.setCarSide(side) } }
     override fun setPerfMode(m: com.ahu.tlauncher.data.PerfMode) { lifecycleScope.launch { app.prefs.setPerfMode(m) } }
+    override fun setCar3d(on: Boolean) {
+        if (on) com.ahu.tlauncher.ui.home.Car3d.resetCrashGuard(this)
+        lifecycleScope.launch { app.prefs.setCar3d(on) }
+    }
+    override fun setCarPaint(p: com.ahu.tlauncher.data.CarPaint) { lifecycleScope.launch { app.prefs.setCarPaint(p) } }
     override fun setHome(addr: String) { lifecycleScope.launch { app.prefs.setHome(addr) } }
     override fun setWork(addr: String) { lifecycleScope.launch { app.prefs.setWork(addr) } }
 

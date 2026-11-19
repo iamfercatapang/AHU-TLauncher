@@ -16,9 +16,24 @@ class DriveCameraTest {
     }
 
     @Test fun zoomBySpeed() {
-        assertEquals(17.0, DriveCamera.zoomFor(20), 0.001)
-        assertEquals(16.5, DriveCamera.zoomFor(45), 0.001)
-        assertEquals(16.0, DriveCamera.zoomFor(60), 0.001)
-        assertEquals(15.0, DriveCamera.zoomFor(120), 0.001)
+        assertEquals(17.5, DriveCamera.zoomFor(20), 0.001)
+        assertEquals(17.5, DriveCamera.zoomFor(40), 0.001)
+        assertEquals(17.0, DriveCamera.zoomFor(65), 0.001)
+        assertEquals(16.5, DriveCamera.zoomFor(90), 0.001)
+        assertEquals(16.5, DriveCamera.zoomFor(120), 0.001)
+        assertEquals(16.5, DriveCamera.PARK_ZOOM, 0.001)
+        assertEquals(0.0, DriveCamera.driveTilt(false), 0.001)
+    }
+
+    @org.junit.Test fun carSitsLowAndAwayFromCards() {
+        // No route: low, centred left-right.
+        assertEquals(listOf(0, 912, 0, 0), DriveCamera.padding(1000, 1200, DriveCamera.carAnchor(false, false)).toList())
+        // Navigating, cards on the left: car to the right (72 % across), padding on the left.
+        assertEquals(listOf(440, 912, 0, 0), DriveCamera.padding(1000, 1200, DriveCamera.carAnchor(true, false)).toList())
+        // Cards on the right: mirrored.
+        assertEquals(listOf(0, 912, 440, 0), DriveCamera.padding(1000, 1200, DriveCamera.carAnchor(true, true)).toList())
+        // Navigating keeps the drive view while stopped.
+        assertEquals(true, DriveCamera.driveView(DriveCamera.Mode.PARK, true))
+        assertEquals(false, DriveCamera.driveView(DriveCamera.Mode.PARK, false))
     }
 }

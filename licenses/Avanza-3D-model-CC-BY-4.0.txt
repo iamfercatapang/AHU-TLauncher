@@ -1,0 +1,18 @@
+app/src/main/assets/models/avanza.glb
+
+Based on "2015 Toyota Avanza G 1.3" by Raysh
+https://sketchfab.com/3d-models/2015-toyota-avanza-g-13-711adccbd846427b9dbca71e27fee50b
+Author: https://sketchfab.com/Ray2007ben
+
+Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0)
+https://creativecommons.org/licenses/by/4.0/
+
+Changes made for TLauncher:
+- Simplified to about half the triangles (meshoptimizer), with duplicate data merged.
+- Scaled to 4.7 m long, placed with the wheels on the floor and the front facing +Z.
+- The body paint material is named "paint" and has a clear coat, so the app can recolour it.
+- Added a lighter, mirrored copy of the body (the floor reflection) and two studio floors
+  (night and day) with generated textures. The floors are TLauncher's own work.
+
+The model is provided as-is, without warranties. Use of the model doesn't imply endorsement
+by the author, and this app isn't affiliated with Toyota.

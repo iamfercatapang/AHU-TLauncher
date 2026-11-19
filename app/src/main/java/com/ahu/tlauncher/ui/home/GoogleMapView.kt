@@ -94,23 +94,39 @@ private class GoogleHandle(val view: MapView) : MapControls {
     var speedKmh: Int? = null
     /** Low-performance mode: no tilt while driving. */
     var lowPerf = false
+    /** A route is being followed (TLauncher's guidance, or Google Maps / Waze navigating), and which side its cards are on. */
+    var navigating = false
+    var cardsRight = false
+    private var appliedPad: IntArray? = null
     val routeShapes = ArrayList<Any>() // Polylines + destination Marker
     var fittedRoute: Any? = null
     var pinMarker: com.google.android.gms.maps.model.Marker? = null
+
+    /** Forget the applied padding so the next follow sets it again ([dirty]: something else changed it). */
+    fun resetPadding(dirty: Boolean = false) {
+        if (!dirty) map?.setPadding(0, 0, 0, 0)
+        appliedPad = if (dirty) null else IntArray(4)
+    }
 
     override fun zoomIn() { map?.animateCamera(CameraUpdateFactory.zoomIn(), 300, null) }
     override fun zoomOut() { map?.animateCamera(CameraUpdateFactory.zoomOut(), 300, null) }
     override fun recenter() { following = true; follow(animateMs = 600) }
 
-    /** Drive: heading-up, tilted, zoom by speed. Park: flat, north-up overview. */
+    /**
+     * Drive (or navigating): flat, heading-up, close zoom by speed, the car low on the map (and away from the
+     * route cards while navigating). Park: flat, north-up overview with the car in the middle.
+     */
     fun follow(animateMs: Int = 900) {
         val m = map ?: return
         if (!following) return
         val target = LatLng(lat ?: return, lon ?: return)
-        val pos = if (mode == DriveCamera.Mode.DRIVE) {
-            CameraPosition(target, DriveCamera.zoomFor(speedKmh ?: 30).toFloat(), DriveCamera.driveTilt(lowPerf).toFloat(), gpsBearing ?: m.cameraPosition.bearing)
+        val drive = DriveCamera.driveView(mode, navigating)
+        val pad = if (drive && view.width > 0) DriveCamera.padding(view.width, view.height, DriveCamera.carAnchor(navigating, cardsRight)) else IntArray(4)
+        if (!pad.contentEquals(appliedPad)) { m.setPadding(pad[0], pad[1], pad[2], pad[3]); appliedPad = pad }
+        val pos = if (drive) {
+            CameraPosition(target, (DriveCamera.zoomFor(speedKmh ?: 30) + DriveCamera.TILE_256_OFFSET).toFloat(), DriveCamera.driveTilt(lowPerf).toFloat(), gpsBearing ?: m.cameraPosition.bearing)
         } else {
-            CameraPosition(target, DriveCamera.PARK_ZOOM.toFloat(), DriveCamera.PARK_TILT.toFloat(), 0f)
+            CameraPosition(target, (DriveCamera.PARK_ZOOM + DriveCamera.TILE_256_OFFSET).toFloat(), DriveCamera.PARK_TILT.toFloat(), 0f)
         }
         m.animateCamera(CameraUpdateFactory.newCameraPosition(pos), animateMs, null)
     }
@@ -125,7 +141,7 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
     val handle = remember {
         MapsInitializer.initialize(ctx.applicationContext, MapsInitializer.Renderer.LATEST) {}
         val opts = GoogleMapOptions()
-            .camera(CameraPosition(LatLng(state.locationLat ?: 14.5995, state.locationLon ?: 120.9842), 15f, 0f, 0f))
+            .camera(CameraPosition(LatLng(state.locationLat ?: 14.5995, state.locationLon ?: 120.9842), (DriveCamera.PARK_ZOOM + DriveCamera.TILE_256_OFFSET).toFloat(), 0f, 0f))
             .compassEnabled(false).mapToolbarEnabled(false).zoomControlsEnabled(false)
         GoogleHandle(MapView(ctx, opts).apply { onCreate(null) })
     }
@@ -191,11 +207,18 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
             handle.follow()
         }
     }
-    // While driving, re-follow the car 10 s after the last touch.
+    // Navigating (own route guidance, or Google Maps / Waze): keep the drive view, car away from the route cards.
+    LaunchedEffect(handle) {
+        snapshotFlow { current.value.let { it.isNavigating to (it.settings.carSide == com.ahu.tlauncher.data.CarSide.RIGHT) } }.collect { (nav, right) ->
+            handle.navigating = nav; handle.cardsRight = right
+            handle.follow()
+        }
+    }
+    // While driving or navigating, re-follow the car 10 s after the last touch.
     LaunchedEffect(handle) {
         while (true) {
             delay(1000)
-            if (!handle.following && handle.mode == DriveCamera.Mode.DRIVE &&
+            if (!handle.following && DriveCamera.driveView(handle.mode, handle.navigating) &&
                 SystemClock.elapsedRealtime() - handle.lastTouch >= DriveCamera.REFOLLOW_MS
             ) handle.recenter()
         }
@@ -208,7 +231,7 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
         handle.routeShapes.clear()
         val r = state.route
         val data = r?.route
-        if (r == null || data == null) { handle.fittedRoute = null; gm.setPadding(0, 0, 0, 0); return@LaunchedEffect }
+        if (r == null || data == null) { handle.fittedRoute = null; handle.resetPadding(); handle.follow(); return@LaunchedEffect }
         val active = r.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE
         val start = if (active) (r.progressSeg + 1).coerceAtMost(data.points.size - 1) else 0
         fun ll(p: com.ahu.tlauncher.route.LatLon) = LatLng(p.lat, p.lon)
@@ -243,8 +266,8 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
         // the turn card (top) and trip card (bottom) while driving.
         val card = ((NAV_CARD_W.value + 36) * density).toInt(); val edge = (70 * density).toInt()
         val cardsRight = state.settings.carSide == com.ahu.tlauncher.data.CarSide.RIGHT
-        if (active) gm.setPadding(0, (60 * density).toInt(), 0, (80 * density).toInt())
-        else gm.setPadding(if (cardsRight) edge else card, (60 * density).toInt(), if (cardsRight) card else edge, (30 * density).toInt())
+        // (While driving the route, the drive view places the car instead: low, away from the cards.)
+        if (!active) { gm.setPadding(if (cardsRight) edge else card, (60 * density).toInt(), if (cardsRight) card else edge, (30 * density).toInt()); handle.resetPadding(dirty = true) }
         if (!active && handle.fittedRoute !== data) {
             // Preview: show the whole route, stop following the car.
             handle.fittedRoute = data
