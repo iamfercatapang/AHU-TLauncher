@@ -80,5 +80,5 @@ You need JDK 17+ and Android SDK 35.
 ## Credits
 - Map data © OpenStreetMap contributors; vector tiles and styles by [OpenFreeMap](https://openfreemap.org) / OpenMapTiles. Rendered with MapLibre Native.
 - Inter typeface © The Inter Project Authors, SIL Open Font License 1.1 (`licenses/Inter-OFL.txt`).
-- 3D car: ["2015 Toyota Avanza G 1.3"](https://sketchfab.com/3d-models/2015-toyota-avanza-g-13-711adccbd846427b9dbca71e27fee50b) by [Raysh](https://sketchfab.com/Ray2007ben), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Changed for this app: simplified, scaled, the body paint made recolourable, plus a reflection copy and studio floors (`licenses/Avanza-3D-model-CC-BY-4.0.txt`). Rendered with [Filament](https://github.com/google/filament) (Apache 2.0).
+- 3D car: ["2015 Toyota Avanza G 1.3"](https://sketchfab.com/3d-models/2015-toyota-avanza-g-13-711adccbd846427b9dbca71e27fee50b) by [Raysh](https://sketchfab.com/Ray2007ben), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Changed for this app: simplified, scaled, the body paint made recolourable, plus a reflection copy and studio floors (`licenses/Avanza-3D-model-CC-BY-4.0.txt`; build script in `tools/car-model/`). Rendered with [Filament](https://github.com/google/filament) (Apache 2.0).
 - Not affiliated with Tesla or Toyota.
