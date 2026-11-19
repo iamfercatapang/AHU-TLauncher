@@ -76,6 +76,7 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
@@ -145,8 +146,19 @@ fun CarStage(
     val wide by remember { derivedStateOf { prog.value() >= 0.5f } }
     val showPager by remember { derivedStateOf { prog.value() < 1f } }
     val showRow by remember { derivedStateOf { prog.value() > 0f } }
+    // 3D car when chosen and the head unit can draw it, behind the whole panel like the prototype's canvas.
+    // The photos show until its first frames are on screen (and stay if it can't start); it starts a moment
+    // after the dashboard so start-up isn't slower.
+    val ctx = LocalContext.current
+    val preview = LocalInspectionMode.current
+    val car3d = remember { Car3dState() }
+    val use3d = !preview && state.settings.car3d && !car3d.failed && remember(state.settings.car3d) { Car3d.available(ctx) }
+    var start3d by remember { mutableStateOf(false) }
+    LaunchedEffect(use3d) { if (use3d) { delay(700); start3d = true } else { start3d = false; car3d.ready = false } }
+    val shown3d = animateFloatAsState(if (use3d && car3d.ready) 1f else 0f, tween(450), label = "car3d")
+    var stageW by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     Box(
-        modifier.then(panelSwipe).then(if (drawBackground) Modifier.background(stageBrush()) else Modifier).clipToBounds().drawBehind {
+        modifier.then(panelSwipe).onSizeChanged { stageW = it.width }.then(if (drawBackground) Modifier.background(stageBrush()) else Modifier).clipToBounds().drawBehind {
             // Night: a soft pool of light behind the car, like the prototype's lit stage (centred on the visible width).
             val vw = size.width * contentScale()
             val r = kotlin.math.min(vw, size.height) * 0.55f
@@ -156,10 +168,14 @@ fun CarStage(
             )
         },
     ) {
+        if (use3d && start3d) Car3dSlot(car3d, state, progress, contentScale, { stageW }, Modifier.matchParentSize().graphicsLayer {
+            // Never fully transparent: a view that isn't drawn never takes the renderer's frames, which stalls it.
+            alpha = shown3d.value.coerceAtLeast(0.004f)
+        })
         Column(Modifier.fillMaxSize().padding(top = STATUS_H)) {
             // Each part shrinks around its own anchor, so it stays at its full-screen height while the panel glides.
             SpeedBlock(state, Modifier.fillMaxWidth().shrinkInPanel(contentScale, pivotY = 0.5f))
-            CarHero(state, Modifier.fillMaxWidth().weight(1f), progress, contentScale)
+            CarHero(state, Modifier.fillMaxWidth().weight(1f), progress, contentScale, use3d, { shown3d.value })
         }
         Telltales(state, Modifier.align(Alignment.TopStart).padding(start = 18.dp, top = STATUS_H + 8.dp).shrinkInPanel(contentScale, pivotY = 0f))
         // Lights-on tell-tale sits at the panel's top-right corner, in the status row (as in the prototype).
@@ -200,6 +216,16 @@ fun CarStage(
             }
         }
     }
+}
+
+/** Reads the panel's progress and visible width itself, so only the 3D layer recomposes while it glides. */
+@Composable
+private fun Car3dSlot(car: Car3dState, state: HomeUiState, progress: () -> Float, contentScale: () -> Float, stageW: () -> Int, modifier: Modifier) {
+    val p = progress()
+    // In low-performance mode the camera jumps half-way instead of following the swipe.
+    val low = LocalLowPerf.current
+    val p3d = if (low) (if (p >= 0.5f) 1f else 0f) else p
+    Car3dLayer(car, state.settings.carPaint, T.colors.isDark, low, p3d, stageW() * contentScale(), modifier)
 }
 
 /**
@@ -306,13 +332,7 @@ private val TELL_AMBER = Color(0xFFF5A623)
 /** The car is drawn a bit smaller than the space allows, leaving air around it. */
 private const val CAR_SCALE = 0.85f
 
-/** Middle of a callout's label and value, from the top of the callout row: the point that keeps its height. */
-private val CALLOUT_TEXT_MID = 17.dp
-
-/** Width the three callouts need to sit side by side without overlapping. */
-private val CALLOUT_MIN_W = 330.dp
-
-private enum class CalloutKind(val fraction: Float, val label: String) { RPM(0.2f, "Engine"), COOLANT(0.5f, "Coolant"), BATTERY(0.82f, "Battery") }
+private enum class CalloutKind(val label: String) { RPM("Engine"), COOLANT("Coolant"), BATTERY("Battery") }
 
 /** Which callouts have data. Changes rarely, unlike the values themselves. */
 private fun calloutKinds(state: HomeUiState): List<CalloutKind> {
@@ -325,9 +345,9 @@ private fun calloutKinds(state: HomeUiState): List<CalloutKind> {
     )
 }
 
-/** Car photo (tap to change view) with mirrored floor reflection and data callouts with leader lines. */
+/** The car photos on a ground shadow (until the 3D car is on screen), with the engine readings beside it on the left. */
 @Composable
-private fun CarHero(state: HomeUiState, modifier: Modifier, progress: () -> Float, contentScale: () -> Float = { 1f }) {
+private fun CarHero(state: HomeUiState, modifier: Modifier, progress: () -> Float, contentScale: () -> Float = { 1f }, use3d: Boolean = false, shown3d: () -> Float = { 0f }) {
     val ctx = LocalContext.current
     val preview = LocalInspectionMode.current
     val custom = state.settings.carImages
@@ -341,7 +361,6 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, progress: () -> Floa
     }
     // Low-performance mode: a cross-fade instead of the 3D turn.
     val low = LocalLowPerf.current
-
     val f = state.settings.tempUnit == TempUnit.F
     // The car and its layout only redraw when a callout appears or disappears, not on every reading.
     val callouts by remember(state.live) { derivedStateOf { calloutKinds(state) } }
@@ -351,10 +370,12 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, progress: () -> Floa
     val side = rememberCarPainter(sideSrc)
     BoxWithConstraints(modifier) {
         fun ratioOf(p: Painter?) = p?.intrinsicSize?.let { if (it.isSpecified() && it.height > 0) it.width / it.height else null } ?: 2f
-        // Callout zone on top (only with OBD data), then the car on a soft ground shadow.
-        val calloutH = if (callouts.isEmpty()) 8.dp else 56.dp
-        val maxImgH = (maxHeight - calloutH) * (if (callouts.isEmpty()) 0.64f else 0.56f)
-        fun widthFor(r: Float) = min(maxWidth - 32.dp, maxImgH * r) * CAR_SCALE
+        // The car on a soft ground shadow; the engine readings stand in a column on the left, so nothing sits above it.
+        val calloutH = 8.dp
+        val maxImgH = (maxHeight - calloutH) * 0.64f
+        // With engine readings, room for their column on the left (and the same on the right, so the car stays centred).
+        val sideRoom = if (callouts.isEmpty()) 16.dp else CALLOUTS_W
+        fun widthFor(r: Float) = min(maxWidth - sideRoom * 2, maxImgH * r) * CAR_SCALE
         // 0 = front, 1 = 3/4, following the panel (swipe or sweep). Like the prototype's turntable: the car
         // swings round on a vertical axis, and its footprint moves between the two photos' proportions.
         val p = progress()
@@ -362,20 +383,13 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, progress: () -> Floa
         val imgW = widthFor(tRatio)
         val imgH = imgW / tRatio
         val shadowH = imgH * 0.14f
-        // Narrow views (front) still get readable callouts: they spread over a wider row, without leader lines.
-        val rowW = if (callouts.isEmpty()) imgW else androidx.compose.ui.unit.max(imgW, min(maxWidth - 16.dp, CALLOUT_MIN_W))
-        val carX = (rowW - imgW) / 2
-        val lines = rowW == imgW
+        val rowW = imgW
+        val carX = 0.dp
         val density = androidx.compose.ui.platform.LocalDensity.current.density
         Box(Modifier.fillMaxWidth().height(calloutH + imgH)) {
-            // Callouts shrink around their text's centre line (drawn first: the car covers the ends of the leader lines).
-            if (callouts.isNotEmpty()) Box(Modifier.fillMaxWidth().height(calloutH).shrinkInPanel(contentScale, pivotY = CALLOUT_TEXT_MID / calloutH)) {
-                Box(Modifier.align(Alignment.TopCenter).width(rowW).height(calloutH)) {
-                    callouts.forEach { c -> CalloutView(c, state, f, rowW, calloutH, imgH, lines) }
-                }
-            }
             // The car and its ground shadow shrink toward the ground line, so the car stays standing on the same floor.
-            Box(Modifier.matchParentSize().shrinkInPanel(contentScale, pivotY = 1f)) { Box(Modifier.align(Alignment.TopCenter).width(rowW).fillMaxHeight()) {
+            // (Both fade out once the 3D car, drawn behind the whole panel, is on screen.)
+            Box(Modifier.matchParentSize().shrinkInPanel(contentScale, pivotY = 1f).graphicsLayer { alpha = 1f - shown3d() }) { Box(Modifier.align(Alignment.TopCenter).width(rowW).fillMaxHeight()) {
                 Box(
                     Modifier.offset(x = carX + imgW * 0.06f, y = calloutH + imgH - shadowH).size(imgW * 0.88f, shadowH)
                         .drawBehind {
@@ -407,9 +421,26 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, progress: () -> Floa
                 }
             } }
         }
+        // Engine readings: a column at the panel's left edge, level with the middle of the car. It shrinks around
+        // its own middle with the panel, like the other parts.
+        if (callouts.isNotEmpty()) Column(
+            Modifier.padding(top = calloutH + imgH / 2 - CALLOUTS_HALF_H).shrinkInPanel(contentScale, pivotY = 0.5f).padding(start = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            callouts.forEach { c ->
+                Column {
+                    Text(c.label, style = TType.caption, color = T.colors.muted, maxLines = 1)
+                    CalloutValue(c, state, f)
+                }
+            }
+        }
     }
 }
 
+/** Half the height of the three-reading column (label + value, 14 dp apart), to centre it on the car. */
+private val CALLOUTS_HALF_H = 64.dp
+/** Width kept free for the reading column ("2,340 rpm" plus its margin). */
+private val CALLOUTS_W = 92.dp
 
 @Composable
 private fun rememberCarPainter(src: CarSource): Painter? {
@@ -427,18 +458,6 @@ private fun rememberCarPainter(src: CarSource): Painter? {
 }
 
 private fun Size.isSpecified() = width.isFinite() && height.isFinite()
-
-@Composable
-private fun CalloutView(c: CalloutKind, state: HomeUiState, fahrenheit: Boolean, imgW: Dp, calloutH: Dp, imgH: Dp, line: Boolean) {
-    val x = imgW * c.fraction
-    val lineTop = 38.dp
-    val lineEnd = calloutH + imgH * 0.22f
-    if (line) Box(Modifier.offset(x = x - 0.5.dp, y = lineTop).width(1.dp).height(lineEnd - lineTop).background(T.colors.text.copy(alpha = 0.55f)))
-    Column(Modifier.offset(x = x + 6.dp, y = 0.dp)) {
-        Text(c.label, style = TType.caption, color = T.colors.muted, maxLines = 1)
-        CalloutValue(c, state, fahrenheit)
-    }
-}
 
 /** The live number under a callout: the only part that redraws on each reading. Counts to new values. */
 @Composable

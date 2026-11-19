@@ -1,6 +1,7 @@
 package com.ahu.tlauncher.ui.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -175,15 +176,60 @@ private fun DisplaySection(state: HomeUiState, a: HomeActions) {
         )
     }
     Divider()
-    SmallTitle("Car images")
-    Text(
-        "Split view shows the front of the car; full screen turns it to the 3/4 view. Plain white photo backgrounds are removed automatically.",
-        style = TType.label, color = T.colors.muted,
-    )
-    Spacer(Modifier.height(8.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        CarSlot(CarView.FRONT, s.carImages[CarView.FRONT], a, Modifier.weight(1f), title = "Front · split view")
-        CarSlot(CarView.SIDE, s.carImages[CarView.SIDE], a, Modifier.weight(1f), title = "3/4 · full screen")
+    SmallTitle("Car")
+    val ctx = LocalContext.current
+    val preview = androidx.compose.ui.platform.LocalInspectionMode.current
+    val can3d = preview || remember(s.car3d) { com.ahu.tlauncher.ui.home.Car3d.available(ctx) }
+    val crashed = !preview && remember(s.car3d) { com.ahu.tlauncher.ui.home.Car3d.crashed(ctx) }
+    SettingRow(
+        "Car on the dashboard",
+        when {
+            can3d -> "Seen from above in split view, turning to the 3/4 view in full screen. In full screen, drag the car to look around it"
+            crashed -> "The 3D model stopped the app last time, so the photos are shown. Choose 3D to try again"
+            else -> "This head unit's graphics can't draw the 3D model (needs OpenGL ES 3), so the photos are shown"
+        },
+    ) {
+        Segmented(listOf(true to "3D", false to "Photos"), s.car3d, a::setCar3d)
+    }
+    if (s.car3d && can3d) {
+        SettingRow("Paint colour", s.carPaint.label) {}
+        PaintPicker(s.carPaint, a::setCarPaint)
+        Text(
+            "3D model: \"2015 Toyota Avanza G 1.3\" by Raysh on Sketchfab, licensed CC BY 4.0, simplified and recoloured for this app.",
+            style = TType.label, color = T.colors.muted, modifier = Modifier.padding(top = 10.dp),
+        )
+    } else {
+        Text(
+            "Split view shows the front of the car; full screen turns it to the 3/4 view. Plain white photo backgrounds are removed automatically.",
+            style = TType.label, color = T.colors.muted,
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            CarSlot(CarView.FRONT, s.carImages[CarView.FRONT], a, Modifier.weight(1f), title = "Front · split view")
+            CarSlot(CarView.SIDE, s.carImages[CarView.SIDE], a, Modifier.weight(1f), title = "3/4 · full screen")
+        }
+    }
+}
+
+/** Paint presets as swatches; the chosen one has a ring. */
+@Composable
+private fun PaintPicker(selected: com.ahu.tlauncher.data.CarPaint, onSelect: (com.ahu.tlauncher.data.CarPaint) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        com.ahu.tlauncher.data.CarPaint.entries.forEach { p ->
+            val sel = p == selected
+            Box(
+                Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                    .then(if (sel) Modifier.border(2.dp, T.colors.text, androidx.compose.foundation.shape.CircleShape) else Modifier)
+                    .pressable(pressedScale = 0.92f) { onSelect(p) }.padding(5.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier.fillMaxSize().clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(androidx.compose.ui.graphics.Color(0xFF000000 or p.rgb))
+                        .border(1.dp, T.colors.divider, androidx.compose.foundation.shape.CircleShape),
+                )
+            }
+        }
     }
 }
 
@@ -385,6 +431,7 @@ private fun AboutSection(state: HomeUiState, a: HomeActions) {
     Divider()
     Text(
         "Map data © OpenStreetMap contributors, tiles by OpenFreeMap / OpenMapTiles. Free-map search by Photon (komoot), routes by OSRM on FOSSGIS servers. Inter typeface © The Inter Project Authors (SIL OFL 1.1). " +
+            "3D car: \"2015 Toyota Avanza G 1.3\" by Raysh (Sketchfab), CC BY 4.0, simplified and recoloured; rendered with Filament. " +
             "Design language inspired by minimalist in-car displays; not affiliated with any car maker.",
         style = TType.label, color = T.colors.muted, modifier = Modifier.padding(vertical = 10.dp),
     )

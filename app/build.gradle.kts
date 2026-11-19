@@ -78,6 +78,11 @@ dependencies {
     implementation("org.maplibre.gl:android-sdk:13.7.1")
     implementation("org.osmdroid:osmdroid-android:6.1.20") // fallback for GPUs without OpenGL ES 3
     implementation("io.coil-kt:coil-compose:2.7.0")
+    // 3D car in the car panel: Filament renderer + glTF loader (needs OpenGL ES 3; photos otherwise).
+    // 1.75.1 is the newest that builds with compileSdk 35 (1.76+ need compileSdk 37 and a newer AGP).
+    implementation("com.google.android.filament:filament-android:1.75.1")
+    implementation("com.google.android.filament:gltfio-android:1.75.1")
+    implementation("com.google.android.filament:filament-utils-android:1.75.1")
     // Shuffle / repeat on other apps' media sessions (MediaControllerCompat).
     implementation("androidx.media:media:1.7.0")
     // Google map in the dashboard (needs Google Play services on the head unit + an API key).

@@ -26,6 +26,19 @@ enum class PerfMode { AUTO, ON, OFF }
 enum class SavedSpot(val label: String) { HOME("Home"), WORK("Work") }
 enum class CarView(val label: String) { SIDE("Side"), FRONT("Front"), REAR("Rear") }
 
+/**
+ * Paint of the 3D car's body. [rgb] is the colour as seen (sRGB); [metallic] and [roughness] shape the
+ * finish under the clear coat (low roughness = glossier).
+ */
+enum class CarPaint(val label: String, val rgb: Long, val metallic: Float, val roughness: Float) {
+    WHITE("Metallic white", 0xE8E9E6, 0.35f, 0.32f),
+    SILVER("Silver", 0xB4B7BA, 0.9f, 0.34f),
+    GREY("Grey", 0x575B60, 0.85f, 0.36f),
+    BLACK("Black", 0x111214, 0.6f, 0.3f),
+    RED("Red", 0x8E141B, 0.55f, 0.34f),
+    BLUE("Blue", 0x14306E, 0.6f, 0.34f),
+}
+
 data class Settings(
     val themeMode: ThemeMode = ThemeMode.AUTO,
     val speedUnit: SpeedUnit = SpeedUnit.KMH,
@@ -41,6 +54,9 @@ data class Settings(
     val obdDeviceName: String = "",
     /** User-chosen photo per view (content:// URI); empty = built-in image. */
     val carImages: Map<CarView, String> = emptyMap(),
+    /** 3D model of the car in the car panel; false = photos (also the fallback without OpenGL ES 3). */
+    val car3d: Boolean = true,
+    val carPaint: CarPaint = CarPaint.WHITE,
     /** Views shown on the dashboard (tap the car to cycle); at least one. */
     val carViews: Set<CarView> = CarView.entries.toSet(),
     val navApp: NavApp = NavApp.MAPS,
@@ -87,6 +103,8 @@ class Prefs(private val context: Context) {
         val obdName = stringPreferencesKey("obd_name")
         fun carImage(v: CarView) = stringPreferencesKey("car_image_" + v.name.lowercase())
         val carViews = stringPreferencesKey("car_views")
+        val car3d = booleanPreferencesKey("car_3d")
+        val carPaint = stringPreferencesKey("car_paint")
         val navApp = stringPreferencesKey("nav_app")
         val carSide = stringPreferencesKey("car_side")
         val lights = stringPreferencesKey("lights_source")
@@ -129,6 +147,8 @@ class Prefs(private val context: Context) {
         carImages = CarView.entries.mapNotNull { v -> this[K.carImage(v)]?.takeIf { it.isNotBlank() }?.let { v to it } }.toMap(),
         carViews = this[K.carViews]?.split(',')?.mapNotNull { n -> CarView.entries.firstOrNull { it.name == n } }?.toSet()
             ?.ifEmpty { null } ?: CarView.entries.toSet(),
+        car3d = this[K.car3d] ?: true,
+        carPaint = enumOr(this[K.carPaint], CarPaint.WHITE),
         navApp = enumOr(this[K.navApp], NavApp.MAPS),
         carSide = enumOr(this[K.carSide], CarSide.LEFT),
         lightsSource = this[K.lights] ?: "off",
@@ -171,6 +191,8 @@ class Prefs(private val context: Context) {
     }
     suspend fun setCarImage(view: CarView, uri: String) = context.store.edit { it[K.carImage(view)] = uri }
     suspend fun setCarViews(views: Set<CarView>) = context.store.edit { it[K.carViews] = views.joinToString(",") { v -> v.name } }
+    suspend fun setCar3d(on: Boolean) = context.store.edit { it[K.car3d] = on }
+    suspend fun setCarPaint(p: CarPaint) = context.store.edit { it[K.carPaint] = p.name }
     suspend fun setLightsSource(s: String) = context.store.edit { it[K.lights] = s }
     suspend fun setAaDetect(on: Boolean) = context.store.edit { it[K.aaDetect] = on }
     /** Recent and favourite destinations for the route search. */

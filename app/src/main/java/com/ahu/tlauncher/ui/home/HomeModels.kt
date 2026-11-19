@@ -218,6 +218,8 @@ interface HomeActions {
     fun bondedDevices(): List<Pair<String, String>> = emptyList()
     fun pickCarImage(view: com.ahu.tlauncher.data.CarView) {}
     fun resetCarImage(view: com.ahu.tlauncher.data.CarView) {}
+    fun setCar3d(on: Boolean) {}
+    fun setCarPaint(p: com.ahu.tlauncher.data.CarPaint) {}
     fun setCarViewShown(view: com.ahu.tlauncher.data.CarView, shown: Boolean) {}
     // OBD diagnostics
     fun setObdExtended(on: Boolean) {}

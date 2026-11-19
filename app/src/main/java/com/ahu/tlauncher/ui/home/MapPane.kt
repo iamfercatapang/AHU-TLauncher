@@ -263,7 +263,7 @@ internal fun pinBitmap(d: Float): Bitmap {
     }
 }
 
-private fun supportsGles3(ctx: Context): Boolean = runCatching {
+internal fun supportsGles3(ctx: Context): Boolean = runCatching {
     val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     am.deviceConfigurationInfo.reqGlEsVersion >= 0x30000
 }.getOrDefault(false)
