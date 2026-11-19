@@ -627,6 +627,7 @@ class MainActivity : ComponentActivity(), HomeActions {
         if (on) com.ahu.tlauncher.ui.home.Car3d.resetCrashGuard(this)
         lifecycleScope.launch { app.prefs.setCar3d(on) }
     }
+    override fun setMinimalIcons(on: Boolean) { lifecycleScope.launch { app.prefs.setMinimalIcons(on) } }
     override fun setCarPaint(p: com.ahu.tlauncher.data.CarPaint) { lifecycleScope.launch { app.prefs.setCarPaint(p) } }
     override fun setHome(addr: String) { lifecycleScope.launch { app.prefs.setHome(addr) } }
     override fun setWork(addr: String) { lifecycleScope.launch { app.prefs.setWork(addr) } }

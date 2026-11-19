@@ -61,6 +61,8 @@ fun AppDrawer(
     onAppInfo: (AppEntry) -> Unit = {},
     onUninstall: (AppEntry) -> Unit = {},
     initialMenu: AppEntry? = null,
+    /** Minimal line icons instead of the apps' own (Settings → Home screen → App icons). */
+    minimalIcons: Boolean = false,
 ) {
     var query by remember { mutableStateOf("") }
     // Long-press menu for one app: Pin / App info / Uninstall.
@@ -109,7 +111,7 @@ fun AppDrawer(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Box {
-                        Image(app.icon, null, modifier = Modifier.size(52.dp).clip(TShapes.inner))
+                        AppIcon(app, minimalIcons, POP_FG, 52.dp, TShapes.inner)
                         if (app.key in pinned) {
                             Box(Modifier.align(Alignment.TopEnd).size(10.dp).clip(CircleShape).background(POP_FG))
                         }
@@ -129,7 +131,7 @@ fun AppDrawer(
             Modifier.align(Alignment.BottomCenter).padding(16.dp).clip(TShapes.surface).background(POP_FIELD).padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Image(app.icon, null, modifier = Modifier.size(36.dp).clip(TShapes.inner))
+            AppIcon(app, minimalIcons, POP_FG, 36.dp, TShapes.inner)
             Text(app.label, style = TType.button, color = POP_FG, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 200.dp))
             Spacer(Modifier.width(8.dp))
             MenuButton(if (pinnedNow) "Unpin from dock" else "Pin to dock") { onTogglePin(app); menuFor = null }

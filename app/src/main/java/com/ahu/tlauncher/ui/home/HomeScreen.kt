@@ -425,6 +425,7 @@ fun HomeScreen(
                 AppDrawer(
                     apps = state.apps,
                     pinned = state.settings.pinnedApps,
+                    minimalIcons = state.settings.minimalIcons,
                     onLaunch = { overlay = Overlay.NONE; actions.launch(it) },
                     onTogglePin = { app ->
                         val wasPinned = app.key in state.settings.pinnedApps

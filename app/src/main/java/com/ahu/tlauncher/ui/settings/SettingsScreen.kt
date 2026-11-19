@@ -274,6 +274,10 @@ private fun CarSlot(view: CarView, customUri: String?, a: HomeActions, modifier:
 
 @Composable
 private fun HomeScreenSection(state: HomeUiState, a: HomeActions) {
+    SettingRow("App icons", "Minimal: line icons for common car apps, the rest in one colour (dock and app drawer)") {
+        Segmented(listOf(true to "Minimal", false to "Original"), state.settings.minimalIcons, a::setMinimalIcons)
+    }
+    Divider()
     SettingRow("Car panel", "Side of the car next to the map") {
         Segmented(listOf(com.ahu.tlauncher.data.CarSide.LEFT to "Left", com.ahu.tlauncher.data.CarSide.RIGHT to "Right"), state.settings.carSide, a::setCarSide)
     }
@@ -432,6 +436,7 @@ private fun AboutSection(state: HomeUiState, a: HomeActions) {
     Text(
         "Map data © OpenStreetMap contributors, tiles by OpenFreeMap / OpenMapTiles. Free-map search by Photon (komoot), routes by OSRM on FOSSGIS servers. Inter typeface © The Inter Project Authors (SIL OFL 1.1). " +
             "3D car: \"2015 Toyota Avanza G 1.3\" by Raysh (Sketchfab), CC BY 4.0, simplified and recoloured; rendered with Filament. " +
+            "App icons (Minimal): Arcticons by the Arcticons team (github.com/Arcticons-Team/Arcticons), CC BY-SA 4.0, converted to Android vectors with a bolder line. " +
             "Design language inspired by minimalist in-car displays; not affiliated with any car maker.",
         style = TType.label, color = T.colors.muted, modifier = Modifier.padding(vertical = 10.dp),
     )

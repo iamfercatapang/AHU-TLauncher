@@ -223,6 +223,7 @@ interface HomeActions {
     fun pickCarImage(view: com.ahu.tlauncher.data.CarView) {}
     fun resetCarImage(view: com.ahu.tlauncher.data.CarView) {}
     fun setCar3d(on: Boolean) {}
+    fun setMinimalIcons(on: Boolean) {}
     fun setCarPaint(p: com.ahu.tlauncher.data.CarPaint) {}
     fun setCarViewShown(view: com.ahu.tlauncher.data.CarView, shown: Boolean) {}
     // OBD diagnostics

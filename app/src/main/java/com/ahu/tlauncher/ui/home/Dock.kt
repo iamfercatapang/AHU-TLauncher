@@ -66,7 +66,7 @@ fun Dock(
         DockButton(com.ahu.tlauncher.ui.components.MpvFrontIcon, "Vehicle & settings", overlay == Overlay.SETTINGS, onOpenSettings)
         pinned.forEach { app ->
             Box(Modifier.size(46.dp).pressable { onLaunch(app) }, contentAlignment = Alignment.Center) {
-                Image(app.icon, app.label, modifier = Modifier.size(34.dp).clip(TShapes.button))
+                AppIcon(app, state.settings.minimalIcons, DOCK_FG, 34.dp, TShapes.button, app.label)
             }
         }
         DockButton(TIcons.Music, "Music", overlay == Overlay.MUSIC, onToggleMusic)

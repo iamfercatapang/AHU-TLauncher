@@ -1,0 +1,15 @@
+app/src/main/res/drawable/arc_*.xml (the minimal app icons)
+
+Based on Arcticons by the Arcticons team and contributors
+https://github.com/Arcticons-Team/Arcticons (icons/white, commit 5f7c14a40ea7758ed46e03f69daaa51af907c978)
+
+The icons are licensed under Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+https://creativecommons.org/licenses/by-sa/4.0/
+
+Changes made for TLauncher:
+- A selection of icons for common in-car apps (see PACKAGES in tools/arcticons/build.mjs).
+- Converted from SVG to Android vector drawables, with the line width raised from 1 to 1.4.
+
+These adapted icons (app/src/main/res/drawable/arc_*.xml) are shared under the same license, CC BY-SA 4.0.
+The rest of TLauncher is not covered by this license. The icons are provided as-is, without warranties;
+their use doesn't imply endorsement by the Arcticons team. App names and logos belong to their owners.
