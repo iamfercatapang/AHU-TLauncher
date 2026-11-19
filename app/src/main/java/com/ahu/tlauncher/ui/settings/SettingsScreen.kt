@@ -195,7 +195,7 @@ private fun DisplaySection(state: HomeUiState, a: HomeActions) {
         SettingRow("Paint colour", s.carPaint.label) {}
         PaintPicker(s.carPaint, a::setCarPaint)
         Text(
-            "3D model: \"2015 Toyota Avanza G 1.3\" by Raysh on Sketchfab, licensed CC BY 4.0, simplified and recoloured for this app.",
+            "3D model: \"2015 Toyota Avanza G 1.3\" by Raysh on Sketchfab, wheels \"Volk Racing CE28 Rims\" by MrDogeSuper and tyres from \"Car wheels and tire\" by Márcio Meireles on Sketchfab, all licensed CC BY 4.0, simplified and recoloured for this app.",
             style = TType.label, color = T.colors.muted, modifier = Modifier.padding(top = 10.dp),
         )
     } else {
@@ -431,7 +431,7 @@ private fun AboutSection(state: HomeUiState, a: HomeActions) {
     Divider()
     Text(
         "Map data © OpenStreetMap contributors, tiles by OpenFreeMap / OpenMapTiles. Free-map search by Photon (komoot), routes by OSRM on FOSSGIS servers. Inter typeface © The Inter Project Authors (SIL OFL 1.1). " +
-            "3D car: \"2015 Toyota Avanza G 1.3\" by Raysh (Sketchfab), CC BY 4.0, simplified and recoloured; rendered with Filament. " +
+            "3D car: \"2015 Toyota Avanza G 1.3\" by Raysh (Sketchfab), CC BY 4.0, simplified and recoloured; wheels \"Volk Racing CE28 Rims\" by MrDogeSuper (Sketchfab), CC BY 4.0, recoloured; tyres from \"Car wheels and tire\" by Márcio Meireles (Sketchfab), CC BY 4.0, resized; rendered with Filament. " +
             "Design language inspired by minimalist in-car displays; not affiliated with any car maker.",
         style = TType.label, color = T.colors.muted, modifier = Modifier.padding(vertical = 10.dp),
     )

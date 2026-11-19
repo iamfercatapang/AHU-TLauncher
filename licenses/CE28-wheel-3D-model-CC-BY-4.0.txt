@@ -1,0 +1,16 @@
+app/src/main/assets/models/avanza.glb (the wheel rims)
+
+Based on "Volk Racing CE28 Rims" by MrDogeSuper
+https://sketchfab.com/3d-models/volk-racing-ce28-rims-a24d5298b8cc44a3aae37fe2864ae2b5
+Author: https://sketchfab.com/MrDogeSuper
+
+Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0)
+https://creativecommons.org/licenses/by/4.0/
+
+Changes made for TLauncher:
+- Recoloured silver (the original is black), material renamed "rim".
+- Scaled to the size of the car's stock rims and fitted at all four wheels in place of them.
+- Included in the car's lighter, mirrored floor reflection.
+
+The model is provided as-is, without warranties. Use of the model doesn't imply endorsement
+by the author, and this app isn't affiliated with RAYS or Volk Racing.
