@@ -27,6 +27,20 @@ paint.setName('paint');
 const cc = doc.createExtension(KHRMaterialsClearcoat);
 paint.setExtension('KHR_materials_clearcoat', cc.createClearcoat().setClearcoatFactor(1).setClearcoatRoughnessFactor(0.03));
 
+// 1b. Brakes: the discs dark silver metal, the calipers medium dark red paint (the download has them light grey
+// and near-black). Found by part, before materials that look alike are merged (the disc grey is shared by a
+// tail-lamp part once merged). Colours are linear.
+const BRAKES = {
+  brake_disc: { parts: /Root_9\.(001|023)_/, color: [0.3, 0.3, 0.31, 1], metallic: 1, roughness: 0.45 },
+  caliper: { parts: /Root_9\.(003|024)_/, color: [0.26, 0.015, 0.015, 1], metallic: 0, roughness: 0.4 },
+};
+for (const [name, b] of Object.entries(BRAKES)) {
+  const nodes = root.listNodes().filter((n) => n.getMesh() && b.parts.test(n.getName()));
+  if (nodes.length !== 2) throw new Error('expected 2 ' + name + ' parts, found ' + nodes.length);
+  const mat = doc.createMaterial(name).setBaseColorFactor(b.color).setMetallicFactor(b.metallic).setRoughnessFactor(b.roughness);
+  for (const n of nodes) for (const p of n.getMesh().listPrimitives()) p.setMaterial(mat);
+}
+
 // 2. Same size as the prototype's car (4.7 m long), wheels on the floor (y = 0), centred, front facing +Z.
 const b0 = getBounds(scene);
 const k = 4.7 / (b0.max[2] - b0.min[2]);

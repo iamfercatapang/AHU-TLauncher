@@ -40,7 +40,8 @@ output is byte-for-byte the committed file, so `git status` shows no change unle
 points for `CarFraming.kt`. `process.mjs`, in order:
 
 1. **Paint.** The body paint material (`Material.069` in the download) is renamed `paint` and gets a clear
-   coat; the app recolours it at runtime (Settings → Display → Car → Paint colour).
+   coat; the app recolours it at runtime (Settings → Display → Car → Paint colour). The brakes get their own
+   materials (`BRAKES`): `brake_disc` dark silver metal, `caliper` medium dark red.
 2. **Size and place.** Scaled to 4.7 m long (the Tesla UI prototype's car size, so its camera values fit),
    wheels on the floor (y = 0), centred, front facing +Z.
 3. **Smooth body.** The paint's own normals ripple, which the glossy clear coat shows as dents, so its
