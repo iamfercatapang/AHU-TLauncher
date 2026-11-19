@@ -153,6 +153,10 @@ fun HomeUiState.musicSubtitle(appLabel: String?): String? {
     }
 }
 
+/** A route is being followed: TLauncher's own guidance, or Google Maps / Waze navigating (their turn card shows). */
+val HomeUiState.isNavigating: Boolean
+    get() = route?.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE || (nav != null && route?.phase != com.ahu.tlauncher.route.RoutePhase.PREVIEW)
+
 /** Speed shown on screen and used by the map: OBD when it has live data, otherwise GPS. */
 val HomeUiState.displaySpeedKmh: Int?
     get() = (if (com.ahu.tlauncher.obd.ObdDisplay.show(obd.status)) obd.data.speedKmh else null) ?: gpsSpeedKmh

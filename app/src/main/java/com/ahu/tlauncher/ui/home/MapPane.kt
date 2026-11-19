@@ -401,7 +401,11 @@ private class VectorHandle(val view: MapView) : MapControls {
     var lastTouch = 0L
     var speedKmh: Int? = null
     var lowPerf = false
-    private var appliedMode: DriveCamera.Mode? = null
+    /** A route is being followed (TLauncher's guidance, or Google Maps / Waze navigating), and which side its cards are on. */
+    var navigating = false
+    var cardsRight = false
+    private var appliedDrive: Boolean? = null
+    private var appliedPad: IntArray? = null
 
     /** Caps the map's and the car puck's frame rate in low-performance mode (no cap otherwise). */
     fun applyFps() {
@@ -417,18 +421,23 @@ private class VectorHandle(val view: MapView) : MapControls {
     /** ⊙ button: follow the car again right away, in the current mode. */
     override fun recenter() {
         following = true
-        appliedMode = null
+        appliedDrive = null
+        appliedPad = null
         apply()
     }
 
-    /** Drive: heading-up, tilted, zoom by speed. Park: flat, north-up overview. */
+    /**
+     * Drive (or navigating): flat, heading-up, close zoom by speed, the car low on the map (and away from the
+     * route cards while navigating). Park: flat, north-up overview with the car in the middle.
+     */
     fun apply() {
         val m = map ?: return
         if (!locationActive || !following) return
         val lc = m.locationComponent
-        if (mode == DriveCamera.Mode.DRIVE) {
+        val drive = DriveCamera.driveView(mode, navigating)
+        if (drive) {
             val z = DriveCamera.zoomFor(speedKmh ?: 30)
-            if (appliedMode != mode) {
+            if (appliedDrive != true) {
                 lc.cameraMode = CameraMode.TRACKING_GPS
                 lc.renderMode = RenderMode.GPS
                 lc.tiltWhileTracking(DriveCamera.driveTilt(lowPerf), 750)
@@ -436,7 +445,7 @@ private class VectorHandle(val view: MapView) : MapControls {
             } else if (kotlin.math.abs(z - appliedZoom) >= 0.25) {
                 lc.zoomWhileTracking(z, 1200); appliedZoom = z
             }
-        } else if (appliedMode != mode) {
+        } else if (appliedDrive != false) {
             lc.cameraMode = CameraMode.TRACKING
             lc.renderMode = RenderMode.GPS // the arrow keeps pointing along the course
             lc.tiltWhileTracking(DriveCamera.PARK_TILT, 750)
@@ -444,7 +453,16 @@ private class VectorHandle(val view: MapView) : MapControls {
             m.animateCamera(CameraUpdateFactory.bearingTo(0.0), 750)
             appliedZoom = DriveCamera.PARK_ZOOM
         }
-        appliedMode = mode
+        appliedDrive = drive
+        val pad = if (drive && view.width > 0) DriveCamera.padding(view.width, view.height, DriveCamera.carAnchor(navigating, cardsRight)) else IntArray(4)
+        if (!pad.contentEquals(appliedPad)) {
+            // Camera padding: the followed car sits in the middle of what's left. Set on the camera itself
+            // (paddingWhileTracking alone didn't move the view); that ends tracking, so it is turned back on.
+            m.moveCamera(CameraUpdateFactory.paddingTo(pad[0].toDouble(), pad[1].toDouble(), pad[2].toDouble(), pad[3].toDouble()))
+            lc.cameraMode = if (drive) CameraMode.TRACKING_GPS else CameraMode.TRACKING
+            following = true
+            appliedPad = pad
+        }
     }
 }
 
@@ -458,7 +476,7 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier, onL
         com.ahu.tlauncher.map.OfflineMaps.setUp(ctx)
         val opts = MapLibreMapOptions.createFromAttributes(ctx)
             .textureMode(false).attributionEnabled(false).logoEnabled(false).compassEnabled(false)
-            .camera(CameraPosition.Builder().target(LatLng(state.locationLat ?: DEFAULT_LAT, state.locationLon ?: DEFAULT_LON)).zoom(15.0).build())
+            .camera(CameraPosition.Builder().target(LatLng(state.locationLat ?: DEFAULT_LAT, state.locationLon ?: DEFAULT_LON)).zoom(DriveCamera.PARK_ZOOM).build())
         VectorHandle(MapView(ctx, opts).apply { onCreate(null) })
     }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
@@ -580,11 +598,18 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier, onL
             handle.apply()
         }
     }
-    // While driving, re-follow the car 10 s after the last touch.
+    // Navigating (own route guidance, or Google Maps / Waze): keep the drive view, car away from the route cards.
+    LaunchedEffect(handle) {
+        snapshotFlow { current.value.let { it.isNavigating to (it.settings.carSide == com.ahu.tlauncher.data.CarSide.RIGHT) } }.collect { (nav, right) ->
+            handle.navigating = nav; handle.cardsRight = right
+            handle.apply()
+        }
+    }
+    // While driving or navigating, re-follow the car 10 s after the last touch.
     LaunchedEffect(handle) {
         while (true) {
             delay(1000)
-            if (!handle.following && handle.mode == DriveCamera.Mode.DRIVE &&
+            if (!handle.following && DriveCamera.driveView(handle.mode, handle.navigating) &&
                 SystemClock.elapsedRealtime() - handle.lastTouch >= DriveCamera.REFOLLOW_MS
             ) handle.recenter()
         }
@@ -616,15 +641,21 @@ private class RasterHandle(val map: org.osmdroid.views.MapView, val me: MyLocati
     var mode = DriveCamera.Mode.PARK
     var unfollowedAt = 0L
     var pinMarker: org.osmdroid.views.overlay.Marker? = null
+    var navigating = false
+    var cardsRight = false
+    var speedKmh: Int? = null
 
-    /** Drive: heading-up + zoom by speed. Park: north-up at street zoom. */
-    fun apply(speedKmh: Int?) {
-        if (mode == DriveCamera.Mode.DRIVE) {
+    /** Drive (or navigating): heading-up, zoom by speed, car low (away from the route cards). Park: north-up at street zoom. */
+    fun apply() {
+        if (DriveCamera.driveView(mode, navigating)) {
             me?.lastFix?.takeIf { it.hasBearing() }?.let { map.mapOrientation = -it.bearing }
-            map.controller.zoomTo(DriveCamera.zoomFor(speedKmh ?: 30), 800L)
+            map.controller.zoomTo(DriveCamera.zoomFor(speedKmh ?: 30) + DriveCamera.TILE_256_OFFSET, 800L)
+            val (ax, ay) = DriveCamera.carAnchor(navigating, cardsRight)
+            map.setMapCenterOffset(((ax - 0.5f) * map.width).toInt(), ((ay - 0.5f) * map.height).toInt())
         } else {
             map.mapOrientation = 0f
-            map.controller.zoomTo(DriveCamera.PARK_ZOOM, 800L)
+            map.controller.zoomTo(DriveCamera.PARK_ZOOM + DriveCamera.TILE_256_OFFSET, 800L)
+            map.setMapCenterOffset(0, 0)
         }
     }
 }
@@ -646,7 +677,7 @@ private fun rasterMap(dark: Boolean, state: HomeUiState, modifier: Modifier, onL
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             isTilesScaledToDpi = true
             minZoomLevel = 3.0
-            controller.setZoom(16.0)
+            controller.setZoom(DriveCamera.PARK_ZOOM + DriveCamera.TILE_256_OFFSET)
             controller.setCenter(GeoPoint(state.locationLat ?: DEFAULT_LAT, state.locationLon ?: DEFAULT_LON))
         }
         val me = if (state.locationPermission) MyLocationNewOverlay(GpsMyLocationProvider(ctx), map).apply {
@@ -687,7 +718,14 @@ private fun rasterMap(dark: Boolean, state: HomeUiState, modifier: Modifier, onL
             val next = DriveCamera.nextMode(handle.mode, speed)
             if (next != handle.mode && next == DriveCamera.Mode.DRIVE) handle.recenter()
             handle.mode = next
-            handle.apply(speed)
+            handle.speedKmh = speed
+            handle.apply()
+        }
+    }
+    LaunchedEffect(handle) {
+        snapshotFlow { current.value.let { it.isNavigating to (it.settings.carSide == com.ahu.tlauncher.data.CarSide.RIGHT) } }.collect { (nav, right) ->
+            handle.navigating = nav; handle.cardsRight = right
+            handle.apply()
         }
     }
     // While driving, re-follow 10 s after a touch stopped following.
@@ -698,7 +736,7 @@ private fun rasterMap(dark: Boolean, state: HomeUiState, modifier: Modifier, onL
             if (me.isFollowLocationEnabled) { handle.unfollowedAt = 0L; continue }
             val now = SystemClock.elapsedRealtime()
             if (handle.unfollowedAt == 0L) handle.unfollowedAt = now
-            else if (handle.mode == DriveCamera.Mode.DRIVE && now - handle.unfollowedAt >= DriveCamera.REFOLLOW_MS) handle.recenter()
+            else if (DriveCamera.driveView(handle.mode, handle.navigating) && now - handle.unfollowedAt >= DriveCamera.REFOLLOW_MS) handle.recenter()
         }
     }
     androidx.compose.runtime.key(handle) {
