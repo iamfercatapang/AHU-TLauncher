@@ -225,7 +225,7 @@ private fun Car3dSlot(car: Car3dState, state: HomeUiState, progress: () -> Float
     // In low-performance mode the camera jumps half-way instead of following the swipe.
     val low = LocalLowPerf.current
     val p3d = if (low) (if (p >= 0.5f) 1f else 0f) else p
-    Car3dLayer(car, state.settings.carPaint, T.colors.isDark, low, p3d, stageW() * contentScale(), modifier)
+    Car3dLayer(car, state.settings.carPaint, T.colors.isDark, low, state.lights.on, p3d, stageW() * contentScale(), modifier)
 }
 
 /**

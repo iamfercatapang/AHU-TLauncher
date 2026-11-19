@@ -56,6 +56,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -526,6 +528,37 @@ private fun MapReveal(modifier: Modifier, content: @Composable () -> Unit) {
     }
 }
 
+/**
+ * A soft shadow behind every icon and letter drawn inside, so the status bar stays readable over the map and
+ * the 3D scene: dark at night, a light halo in the day theme. Blurred on Android 12+; before that, a ring of
+ * faint offset copies gives a similar soft edge. (Not in previews and screenshot tests.)
+ */
+@Composable
+private fun Modifier.statusShadow(): Modifier {
+    if (androidx.compose.ui.platform.LocalInspectionMode.current) return this
+    val color = if (T.colors.isDark) androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.85f) else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.9f)
+    val layer = androidx.compose.ui.graphics.rememberGraphicsLayer()
+    return drawWithContent {
+        layer.record { this@drawWithContent.drawContent() }
+        layer.colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(color)
+        val r = 2.dp.toPx()
+        val down = 1.dp.toPx()
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            layer.renderEffect = androidx.compose.ui.graphics.BlurEffect(r, r, androidx.compose.ui.graphics.TileMode.Decal)
+            translate(top = down) { drawLayer(layer) }
+        } else {
+            layer.alpha = 0.22f
+            for (i in 0 until 8) {
+                val a = i * Math.PI / 4
+                translate(left = (kotlin.math.cos(a) * r * 0.8).toFloat(), top = (kotlin.math.sin(a) * r * 0.8).toFloat() + down) {
+                    drawLayer(layer)
+                }
+            }
+        }
+        drawContent()
+    }
+}
+
 /** Full-width status row floating over the stage and map: link status · date · time. */
 @Composable
 private fun StatusBar(
@@ -542,7 +575,7 @@ private fun StatusBar(
     val time = state.now.format(DateTimeFormatter.ofPattern(if (is24h()) "HH:mm" else "h:mm a", Locale.US))
     // Only the connection status, so engine readings don't redraw the status bar.
     val obdStatus by remember(state.live) { androidx.compose.runtime.derivedStateOf { state.obd.status } }
-    BoxWithConstraints(modifier) {
+    BoxWithConstraints(modifier.statusShadow()) {
         // car panel, top-left: OBD badge
         if (com.ahu.tlauncher.obd.ObdDisplay.show(obdStatus)) {
             val obdX = if (mapSpan != null && mapSpan.first.value == 0f) mapSpan.second + 20.dp else 20.dp

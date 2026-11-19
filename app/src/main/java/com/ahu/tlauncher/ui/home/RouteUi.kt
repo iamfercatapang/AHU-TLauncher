@@ -565,8 +565,9 @@ fun TripCard(state: HomeUiState, r: RouteState, actions: HomeActions, modifier: 
     val c = navColors
     val left = r.remainingS ?: r.route?.durationS ?: 0
     val leftM = r.remainingM ?: r.route?.distanceM ?: 0
-    Column(modifier.width(NAV_CARD_W - 40.dp).navPanel()) {
-        Row(Modifier.padding(start = 16.dp, end = 14.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+    // As wide as the route card, so both buttons fit with even padding.
+    Column(modifier.width(NAV_CARD_W).navPanel()) {
+        Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(r.destination.name, style = TType.button, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             val status = when {
                 leftM < 300 -> "Arriving"
@@ -644,8 +645,12 @@ fun RouteOverlays(state: HomeUiState, actions: HomeActions, modifier: Modifier, 
         AnimatedVisibility(active != null, enter = navEnter(), exit = navExit(), modifier = Modifier.align(bottom).padding(12.dp).padding(bottom = 4.dp)) {
             lastActive[0]?.let { TripCard(state, it, actions) }
         }
+        // Traffic legend on the free side, level with the map-settings button beside it (the trip card is wide).
         if (active?.route?.hasTraffic() == true)
-            TrafficLegend(Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp))
+            TrafficLegend(
+                Modifier.align(if (controlsOnLeft) Alignment.BottomStart else Alignment.BottomEnd)
+                    .padding(start = if (controlsOnLeft) 64.dp else 0.dp, end = if (controlsOnLeft) 0.dp else 64.dp, bottom = 35.dp),
+            )
         val pin = state.pin?.takeIf { r == null }
         val lastPin = remember { arrayOfNulls<Place>(1) }
         if (pin != null) lastPin[0] = pin
