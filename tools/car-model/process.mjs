@@ -518,7 +518,10 @@ if (!tyreNode) throw new Error('light tyre not found');
 transformMesh(tyreNode.getMesh(), tyreNode.getWorldMatrix()); // axle along x, centred
 for (const tex of tyreDoc.getRoot().listTextures()) tex.setImage(png(TYRE_TEX, shrink(readPng(Buffer.from(tex.getImage())), TYRE_TEX)));
 const tyreMesh = copyToDocument(doc, tyreDoc, [tyreNode.getMesh()]).get(tyreNode.getMesh());
-tyreMesh.listPrimitives()[0].getMaterial().setName('tyre');
+// Matte rubber: the download's roughness map says 0.1 (wet, mirror-like), so it's dropped for an even 0.85.
+// Its colour and normal map (the tread and sidewall detail) stay.
+tyreMesh.listPrimitives()[0].getMaterial().setName('tyre')
+  .setMetallicRoughnessTexture(null).setMetallicFactor(0).setRoughnessFactor(0.85);
 // Remap: radius rIn..rOut -> rim radius (less 2 mm, so the bead sits under the rim's lip)..stock outside;
 // width -> stock width. Done once, in the tyre's own frame (x = axle), against the first stock tyre.
 {

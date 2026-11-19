@@ -10,7 +10,8 @@ https://creativecommons.org/licenses/by/4.0/
 Changes made for TLauncher:
 - Only the low-poly tyre is used; the model's rims and its high-poly tyre are left out.
 - Resized to the car's stock tyre size (radius and width remapped) and fitted at all four wheels.
-- Textures scaled down from 4096 to 512 pixels.
+- Textures scaled down from 4096 to 512 pixels; the roughness map is replaced by an even, matte
+  roughness (0.85), so the rubber does not look wet or metallic.
 - Included in the car's lighter, mirrored floor reflection.
 
 The model is provided as-is, without warranties. Use of the model doesn't imply endorsement

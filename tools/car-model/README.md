@@ -56,7 +56,7 @@ points for `CarFraming.kt`. `process.mjs`, in order:
    fitted at each corner: same centre and diameter as the stock rim, outer face flush. The stock tyres are
    replaced too, by the low-poly tyre of "Car wheels and tire" (material `tyre`): its radius is remapped to run
    from the rim to the stock tyre's outside, its width matched, and its textures scaled down to 512 pixels
-   (`TYRE_TEX`). Brake discs and calipers stay.
+   (`TYRE_TEX`); its roughness map (0.1, mirror-like) is dropped for matte rubber (roughness 0.85). Brake discs and calipers stay.
 6. **Lamps.** Parts get their own materials so the app can light them with the headlights:
    `headlight`, `foglight`, `taillight` (only the high brake light and the round lamps in the rear clusters)
    and `taillight_off` (the rest of the red plastic, never lit). These are found by position, in metres.
