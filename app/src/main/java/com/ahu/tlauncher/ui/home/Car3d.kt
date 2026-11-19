@@ -154,6 +154,8 @@ internal fun Car3dLayer(
     paint: CarPaint,
     dark: Boolean,
     lowPerf: Boolean,
+    /** The head unit says the headlights are on: lamps glow, and the beams light the night floor. */
+    lightsOn: Boolean,
     progress: Float,
     visibleWidthPx: Float,
     modifier: Modifier = Modifier,
@@ -196,7 +198,7 @@ internal fun Car3dLayer(
             onRelease = { _: TextureView -> holder[0]?.destroy(); holder[0] = null },
             update = {
                 holder[0]?.update(
-                    Car3dRenderer.Frame(paint, dark, lowPerf, progress, car.yaw.toDouble(), car.elevation.toDouble(), visibleWidthPx),
+                    Car3dRenderer.Frame(paint, dark, lowPerf, lightsOn, progress, car.yaw.toDouble(), car.elevation.toDouble(), visibleWidthPx),
                 )
             },
         )
@@ -246,6 +248,7 @@ internal class Car3dRenderer(
         val paint: CarPaint,
         val dark: Boolean,
         val lowPerf: Boolean,
+        val lightsOn: Boolean,
         val progress: Float,
         val yaw: Double,
         val elevation: Double,
@@ -272,6 +275,7 @@ internal class Car3dRenderer(
     private val mirror: IntArray
     private val floorDark: IntArray
     private val floorLight: IntArray
+    private val beams: IntArray
 
     private var width = 0
     private var height = 0
@@ -280,6 +284,8 @@ internal class Car3dRenderer(
     private var mirrorShown = true
     private var darkShown: Boolean? = null
     private var lowPerfShown: Boolean? = null
+    private var beamsShown = true // every part starts in the scene
+    private var lampsLit: Boolean? = null
     private var framesLeft = 0
     private var scheduled = false
     private var shown = false
@@ -323,6 +329,9 @@ internal class Car3dRenderer(
         mirror = renderablesUnder("mirror")
         floorDark = renderablesUnder("floor_dark")
         floorLight = renderablesUnder("floor_light")
+        beams = renderablesUnder("floor_beams")
+        // The beams are drawn after (over) the night floor they lie on.
+        engine.renderableManager.let { rm -> for (e in beams) rm.setPriority(rm.getInstance(e), 6) }
 
         uiHelper.isOpaque = false
         uiHelper.renderCallback = object : UiHelper.RendererCallback {
@@ -391,6 +400,13 @@ internal class Car3dRenderer(
             else { scene.addEntities(floorLight); scene.removeEntities(floorDark) }
             darkShown = f.dark
         }
+        // Headlights on: the beams on the night floor (the day floor has none), and the lamps glow.
+        val wantBeams = f.dark && f.lightsOn
+        if (wantBeams != beamsShown) {
+            if (wantBeams) scene.addEntities(beams) else scene.removeEntities(beams)
+            beamsShown = wantBeams
+        }
+        if (f.lightsOn != lampsLit) { applyLamps(f.lightsOn); lampsLit = f.lightsOn }
         // The reflection only shows in full screen (the prototype fades it in with the panel).
         val wantMirror = f.progress > 0.15f
         if (wantMirror != mirrorShown) {
@@ -418,6 +434,20 @@ internal class Car3dRenderer(
         if (m.hasParameter("roughnessFactor")) mi.setParameter("roughnessFactor", p.roughness)
         if (m.hasParameter("clearCoatFactor")) mi.setParameter("clearCoatFactor", 1f)
         if (m.hasParameter("clearCoatRoughnessFactor")) mi.setParameter("clearCoatRoughnessFactor", 0.03f)
+    }
+
+    /**
+     * Lamps lit or not: headlights warm white, fog lights yellow (#FFC400), tail lights red. Emissive light
+     * (the glow on the brightest parts comes from the bloom).
+     */
+    private fun applyLamps(on: Boolean) {
+        val all = asset.instance.materialInstances
+        for ((name, rgb, strength) in LAMPS) {
+            val mi = all.firstOrNull { it.name == name } ?: continue
+            val k = if (on) strength else 0f
+            if (mi.material.hasParameter("emissiveFactor")) mi.setParameter("emissiveFactor", rgb[0] * k, rgb[1] * k, rgb[2] * k)
+            if (mi.material.hasParameter("emissiveStrength")) mi.setParameter("emissiveStrength", 1f)
+        }
     }
 
     /** A few frames after each change: some drivers show a new TextureView frame one frame late. */
@@ -478,6 +508,17 @@ internal class Car3dRenderer(
     }
 
     private companion object {
+        fun srgb(rgb: Int) = floatArrayOf(
+            CarFraming.srgbToLinear(rgb shr 16 and 0xFF), CarFraming.srgbToLinear(rgb shr 8 and 0xFF), CarFraming.srgbToLinear(rgb and 0xFF),
+        )
+
+        /** Lamp materials in the model, their light colour (linear) and brightness when lit. */
+        val LAMPS = listOf(
+            Triple("headlight", floatArrayOf(1f, 0.95f, 0.85f), 60f),
+            Triple("foglight", srgb(0xFFC400), 40f), // selective yellow
+            Triple("taillight", floatArrayOf(1f, 0.04f, 0.02f), 30f),
+        )
+
         /**
          * three.js light units to Filament's at this camera exposure (f/16, 1/125 s, ISO 100), times the
          * prototype's tone-mapping exposure of 0.9: a three.js intensity of 1 becomes this many lux.
