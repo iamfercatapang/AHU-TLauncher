@@ -83,11 +83,6 @@ data class HomeUiState(
     val brightnessAllowed: Boolean = true,
     /** Package that last posted a call notification (Settings readout). */
     val callSource: String? = null,
-    val aa: com.ahu.tlauncher.system.AaState = com.ahu.tlauncher.system.AaState.Idle,
-    /** Name of the installed Android Auto receiver app, null if none. */
-    val aaReceiver: String? = null,
-    /** "Android Auto ready" prompt dismissed for this network. */
-    val aaDismissed: Boolean = false,
     // dashboard route (Google search + Routes)
     val route: com.ahu.tlauncher.route.RouteState? = null,
     val search: com.ahu.tlauncher.route.SearchState = com.ahu.tlauncher.route.SearchState(),
@@ -275,10 +270,6 @@ interface HomeActions {
     fun switchCallAudio() {}
     fun requestCallPermission() {}
     // Android Auto
-    fun openAndroidAuto() {}
-    fun dismissAndroidAuto() {}
-    fun setAaDetect(on: Boolean) {}
-    fun getHeadunitReloaded() {}
 }
 
 object NoopActions : HomeActions

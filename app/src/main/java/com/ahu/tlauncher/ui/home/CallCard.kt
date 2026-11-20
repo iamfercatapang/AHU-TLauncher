@@ -16,7 +16,6 @@ import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.CallEnd
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MicOff
-import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -93,26 +92,3 @@ private fun RoundButton(icon: ImageVector, desc: String, bg: Color, iconTint: Co
     }
 }
 
-/** "Android Auto ready" prompt, shown when the phone's head unit server is found. */
-@Composable
-fun AndroidAutoPrompt(receiver: String?, actions: HomeActions, modifier: Modifier = Modifier) {
-    Row(
-        modifier.clip(TShapes.surface).background(Palette.CarbonDark).padding(start = 18.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Rounded.PhoneAndroid, null, tint = Color.White, modifier = Modifier.size(24.dp))
-        Spacer(Modifier.width(12.dp))
-        Column {
-            Text("Android Auto is ready", style = TType.button, color = Color.White)
-            Text(receiver?.let { "Opens in $it" } ?: "Phone's head unit server is on", style = TType.label, color = Color.White.copy(alpha = 0.6f))
-        }
-        Spacer(Modifier.width(18.dp))
-        Box(Modifier.clip(TShapes.button).pressable(onClick = actions::dismissAndroidAuto).padding(horizontal = 14.dp, vertical = 10.dp)) {
-            Text("Not now", style = TType.button, color = Color.White.copy(alpha = 0.7f))
-        }
-        Spacer(Modifier.width(6.dp))
-        Box(Modifier.clip(TShapes.button).background(Color(0xFF3E6AE1)).pressable(onClick = actions::openAndroidAuto).padding(horizontal = 18.dp, vertical = 10.dp)) {
-            Text("Open", style = TType.button, color = Color.White)
-        }
-    }
-}

@@ -21,7 +21,6 @@ class LauncherApp : Application() {
     lateinit var weather: com.ahu.tlauncher.system.WeatherRepository; private set
     lateinit var lights: com.ahu.tlauncher.system.LightsMonitor; private set
     lateinit var calls: com.ahu.tlauncher.system.CallControl; private set
-    lateinit var androidAuto: com.ahu.tlauncher.system.AndroidAutoDetector; private set
     lateinit var fuel: com.ahu.tlauncher.obd.FuelTracker; private set
     @Volatile private var fuelSettings = com.ahu.tlauncher.data.Settings()
     lateinit var routes: com.ahu.tlauncher.route.RouteManager; private set
@@ -57,7 +56,6 @@ class LauncherApp : Application() {
             onTripStarted = { p -> appScope.launch { prefs.saveTrip(p, System.currentTimeMillis()) } },
             onTripFinished = { appScope.launch { prefs.clearTrip() } },
         )
-        androidAuto = com.ahu.tlauncher.system.AndroidAutoDetector(this, appScope)
         fuel = com.ahu.tlauncher.obd.FuelTracker(
             appScope, obd.state, tankL = { fuelSettings.tankL }, displacementL = { fuelSettings.engineCc / 1000.0 }, store = prefs.fuelStore,
         )
@@ -65,7 +63,6 @@ class LauncherApp : Application() {
             prefs.settings.collect { s ->
                 fuelSettings = s
                 lights.setSource(com.ahu.tlauncher.system.LightsSource.decode(s.lightsSource))
-                androidAuto.enabled = s.aaDetect
             }
         }
         updater = com.ahu.tlauncher.update.Updater(this, appScope).also { it.startPeriodicChecks() }

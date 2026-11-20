@@ -95,7 +95,6 @@ class MainActivity : ComponentActivity(), HomeActions {
     private var brightnessNow by mutableStateOf(50)
     private var brightnessIsNight = false
     private var brightSaveJob: kotlinx.coroutines.Job? = null
-    private var aaDismissedOn by mutableStateOf<String?>(null)
     private val roleRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { resumeTick++ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -131,7 +130,6 @@ class MainActivity : ComponentActivity(), HomeActions {
         app.location.setFast(true)
         app.updater.checkIfStale()
         app.lights.refresh()
-        app.androidAuto.setActive(true)
         resumeTick++
         // Back from the "Display over other apps" page: carry on with the trip.
         if (pendingRouteStart) { pendingRouteStart = false; launchRoute() }
@@ -141,7 +139,6 @@ class MainActivity : ComponentActivity(), HomeActions {
         super.onPause()
         app.dashboardVisible = false
         app.location.setFast(false)
-        app.androidAuto.setActive(false)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -177,7 +174,6 @@ class MainActivity : ComponentActivity(), HomeActions {
         val diag by app.obd.diag.collectAsStateWithLifecycle()
         val lights by app.lights.state.collectAsStateWithLifecycle()
         val notifCall by NotificationHub.call.collectAsStateWithLifecycle()
-        val aa by app.androidAuto.state.collectAsStateWithLifecycle()
         val route by app.routes.route.collectAsStateWithLifecycle()
         val search by app.routes.search.collectAsStateWithLifecycle()
         val recents by app.routes.recents.collectAsStateWithLifecycle()
@@ -267,7 +263,6 @@ class MainActivity : ComponentActivity(), HomeActions {
             muted = callMuted,
             canSwitchAudio = n?.info?.actions?.containsKey(com.ahu.tlauncher.notify.CallAction.AUDIO_SWITCH) == true,
         )
-        val aaReceiver = remember(tick) { app.androidAuto.receiverPackage()?.let { app.androidAuto.receiverLabel(it) } }
         val callPerm = remember(tick) { app.calls.hasPermissions() }
         val returnPerm = remember(tick) { canReturnToFront() }
         // Brightness: one level for day, one for night (sunset to sunrise, same as the auto dark theme).
@@ -294,8 +289,6 @@ class MainActivity : ComponentActivity(), HomeActions {
             lights = lights,
             call = call, callPermission = callPerm, returnPermission = returnPerm,
             brightness = brightnessNow, brightnessNight = night, brightnessAllowed = brightAllowed, callSource = remember(notifCall) { NotificationHub.lastCallPackage },
-            aa = aa, aaReceiver = aaReceiver,
-            aaDismissed = (aa as? com.ahu.tlauncher.system.AaState.Ready)?.gateway?.let { it == aaDismissedOn } == true,
             lowPerf = lowPerf, deviceSpec = spec,
             tripOffer = tripOffer, offlineAreas = offlineAreas,
         )
@@ -676,19 +669,6 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun switchCallAudio() { app.calls.switchAudio() }
     override fun requestCallPermission() {
         phonePermission.launch(arrayOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.ANSWER_PHONE_CALLS))
-    }
-
-    // ---- Android Auto (Headunit Reloaded)
-    override fun openAndroidAuto() {
-        val pkg = app.androidAuto.receiverPackage() ?: return getHeadunitReloaded()
-        if (app.apps.launchPackage(pkg)) app.androidAuto.reset()
-    }
-    override fun dismissAndroidAuto() { aaDismissedOn = (app.androidAuto.state.value as? com.ahu.tlauncher.system.AaState.Ready)?.gateway }
-    override fun setAaDetect(on: Boolean) { lifecycleScope.launch { app.prefs.setAaDetect(on) } }
-    override fun getHeadunitReloaded() {
-        if (!startSafely(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=gb.xxy.hr")))) {
-            startSafely(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=gb.xxy.hr")))
-        }
     }
 
     override fun setObdExtended(on: Boolean) = app.obd.setExtended(on)

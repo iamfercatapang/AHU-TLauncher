@@ -83,7 +83,7 @@ enum class Section(val label: String, val icon: ImageVector) {
     HOME("Home screen", com.ahu.tlauncher.ui.components.TIcons.DockBar),
     NAVIGATION("Navigation", com.ahu.tlauncher.ui.components.TIcons.Navigate),
     CAR("Car", com.ahu.tlauncher.ui.components.TIcons.Wrench),
-    CONNECTIONS("Connections", com.ahu.tlauncher.ui.components.TIcons.PhoneLink),
+    PERMISSIONS("Permissions", com.ahu.tlauncher.ui.components.TIcons.Shield),
     ABOUT("About", com.ahu.tlauncher.ui.components.TIcons.Info),
 }
 
@@ -123,7 +123,7 @@ fun SettingsScreen(state: HomeUiState, actions: HomeActions, onClose: () -> Unit
                     Section.HOME -> HomeScreenSection(state, actions)
                     Section.NAVIGATION -> NavigationSection(state, actions)
                     Section.CAR -> CarSection(state, actions)
-                    Section.CONNECTIONS -> ConnectionsSection(state, actions)
+                    Section.PERMISSIONS -> PermissionsSettings(state, actions)
                     Section.ABOUT -> AboutSection(state, actions)
                 }
             }
@@ -371,15 +371,6 @@ private fun AddressField(label: String, value: String, pinned: Boolean, onSave: 
             size = 42.dp, iconSize = 20.dp, tint = if (pinned) T.colors.accent else T.colors.secondary,
         ) { keyboard?.hide(); focus.clearFocus(); onPickOnMap() }
     }
-}
-
-@Composable
-private fun ConnectionsSection(state: HomeUiState, a: HomeActions) {
-    SmallTitle("Android Auto")
-    AndroidAutoSettings(state, a)
-    Divider()
-    SmallTitle("Permissions")
-    PermissionsSettings(state, a)
 }
 
 @Composable

@@ -64,7 +64,6 @@ data class Settings(
     /** How the head unit reports its ILL (lights-on) wire, see LightsSource.encode(). */
     val lightsSource: String = "off",
     /** Look for the phone's Android Auto head unit server on Wi-Fi. */
-    val aaDetect: Boolean = true,
     /** Fuel tank capacity in litres (2018 Avanza: 43 L), for the range estimate. */
     val tankL: Int = 43,
     /** Google is used when available (key + Play services); OpenFreeMap otherwise. */
@@ -106,7 +105,6 @@ class Prefs(private val context: Context) {
         val navApp = stringPreferencesKey("nav_app")
         val carSide = stringPreferencesKey("car_side")
         val lights = stringPreferencesKey("lights_source")
-        val aaDetect = booleanPreferencesKey("aa_detect")
         val mapEngine = stringPreferencesKey("map_engine")
         val mapTraffic = booleanPreferencesKey("map_traffic")
         val recents = stringPreferencesKey("recent_places")
@@ -149,7 +147,6 @@ class Prefs(private val context: Context) {
         navApp = enumOr(this[K.navApp], NavApp.MAPS),
         carSide = enumOr(this[K.carSide], CarSide.LEFT),
         lightsSource = this[K.lights] ?: "off",
-        aaDetect = this[K.aaDetect] ?: true,
         tankL = this[K.tankL] ?: 43,
         mapEngine = enumOr(this[K.mapEngine], MapEngine.GOOGLE),
         mapTraffic = this[K.mapTraffic] ?: true,
@@ -190,7 +187,6 @@ class Prefs(private val context: Context) {
     suspend fun setCar3d(on: Boolean) = context.store.edit { it[K.car3d] = on }
     suspend fun setCarPaint(p: CarPaint) = context.store.edit { it[K.carPaint] = p.name }
     suspend fun setLightsSource(s: String) = context.store.edit { it[K.lights] = s }
-    suspend fun setAaDetect(on: Boolean) = context.store.edit { it[K.aaDetect] = on }
     /** Recent and favourite destinations for the route search. */
     val placesStore = object : com.ahu.tlauncher.route.PlacesStore {
         override suspend fun recents() = com.ahu.tlauncher.route.RouteMath.decodePlaces(context.store.data.first()[K.recents])

@@ -1,6 +1,5 @@
 package com.ahu.tlauncher
 
-import com.ahu.tlauncher.system.AaLogic
 import com.ahu.tlauncher.system.LightsLogic
 import com.ahu.tlauncher.system.LightsSnapshot
 import com.ahu.tlauncher.system.LightsSource
@@ -43,10 +42,5 @@ class LightsTest {
         listOf(LightsSource.Off, LightsSource.NightMode, LightsSource.Brightness(120), LightsSource.Setting("system:a:b", "on:1")).forEach {
             assertEquals(it, LightsSource.decode(it.encode()))
         }
-    }
-
-    @Test fun gatewayIp() {
-        assertEquals("192.168.43.1", AaLogic.ipFromInt(0x012BA8C0))
-        assertNull(AaLogic.ipFromInt(0))
     }
 }

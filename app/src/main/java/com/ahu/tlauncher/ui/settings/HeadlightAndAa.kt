@@ -16,7 +16,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import com.ahu.tlauncher.system.AaState
 import com.ahu.tlauncher.system.LightsSource
 import com.ahu.tlauncher.ui.components.ButtonKind
 import com.ahu.tlauncher.ui.components.PillButton
@@ -66,29 +65,4 @@ internal fun HeadlightSetup(state: HomeUiState, a: HomeActions) {
             (if (state.lights.recentChanges.isNotEmpty()) "\nRecent setting changes: " + state.lights.recentChanges.joinToString(", ") else ""),
         style = TType.label, color = T.colors.muted, modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
     )
-}
-
-/** Wireless Android Auto through Headunit Reloaded. */
-@Composable
-internal fun AndroidAutoSettings(state: HomeUiState, a: HomeActions) {
-    SettingRow(
-        "Receiver app",
-        state.aaReceiver?.let { "$it is installed" } ?: "Headunit Reloaded is not installed. It shows Android Auto on the head unit.",
-    ) {
-        if (state.aaReceiver == null) PillButton("Get it", kind = ButtonKind.PRIMARY, onClick = a::getHeadunitReloaded)
-        else PillButton("Open now", onClick = a::openAndroidAuto)
-    }
-    Divider()
-    SettingRow("Offer Android Auto", "Show a prompt when the phone's head unit server is found on Wi-Fi") {
-        TSwitch(state.settings.aaDetect, a::setAaDetect)
-    }
-    SettingRow(
-        "Status",
-        when (val s = state.aa) {
-            AaState.Idle -> if (!state.settings.aaDetect) "Off" else if (state.aaReceiver == null) "Waiting for the receiver app" else "Starting…"
-            AaState.NoWifi -> "Wi-Fi not connected. Connect the head unit to your phone's hotspot."
-            is AaState.Searching -> "Looking for the head unit server on ${s.gateway}…"
-            is AaState.Ready -> "Head unit server found on ${s.gateway}"
-        },
-    ) {}
 }

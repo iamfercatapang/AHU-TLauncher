@@ -66,7 +66,7 @@ internal fun CarSection(state: HomeUiState, a: HomeActions) {
     SettingRow(
         "Open the dashboard",
         if (state.returnPermission) "Show TLauncher when the head unit turns on, even if it reopens the last app"
-        else "Also needs \"Return to dashboard\" in Connections (Display over other apps)",
+        else "Also needs \"Return to dashboard\" in Permissions (Display over other apps)",
     ) { TSwitch(s.openOnStart, a::setOpenOnStart) }
     SettingRow("Resume music", "Plays YouTube Music or Spotify again if it was playing when the car was switched off") {
         TSwitch(s.resumeMusic, a::setResumeMusic)

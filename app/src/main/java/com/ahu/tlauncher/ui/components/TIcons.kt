@@ -176,11 +176,6 @@ object TIcons {
     val Wrench by lazy { icon("Wrench") {
         line { moveTo(14.5f, 4f); arcTo(4.5f, 4.5f, 0f, false, false, 13.2f, 10.8f); lineTo(4.5f, 19.5f); lineTo(5.5f, 20.5f) ; lineTo(14.2f, 11.8f); arcTo(4.5f, 4.5f, 0f, false, false, 20f, 9.5f); lineTo(17f, 9.8f); lineTo(14.6f, 7.4f); close() }
     } }
-    val PhoneLink by lazy { icon("PhoneLink") {
-        line { moveTo(8f, 3f); horizontalLineTo(16f); arcTo(1.5f, 1.5f, 0f, false, true, 17.5f, 4.5f); verticalLineTo(19.5f); arcTo(1.5f, 1.5f, 0f, false, true, 16f, 21f)
-            horizontalLineTo(8f); arcTo(1.5f, 1.5f, 0f, false, true, 6.5f, 19.5f); verticalLineTo(4.5f); arcTo(1.5f, 1.5f, 0f, false, true, 8f, 3f); close() }
-        line { moveTo(10.5f, 18f); horizontalLineTo(13.5f) }
-    } }
     val Shield by lazy { icon("Shield") {
         line { moveTo(12f, 3f); lineTo(19.5f, 6f); verticalLineTo(11.5f); curveTo(19.5f, 16f, 16.5f, 19.5f, 12f, 21f); curveTo(7.5f, 19.5f, 4.5f, 16f, 4.5f, 11.5f); verticalLineTo(6f); close() }
         line { moveTo(9f, 12f); lineTo(11.2f, 14.2f); lineTo(15.2f, 10f) }

@@ -32,10 +32,10 @@ These screenshots are rendered offline, so they show a placeholder street grid a
 ## Install on the head unit
 1. On the head unit's browser, open **https://github.com/iamfercatapang/AHU-TLauncher/releases/latest/download/TLauncher.apk**. You can also find it on the [Releases page](https://github.com/iamfercatapang/AHU-TLauncher/releases/latest). Each change to `main` updates this file automatically.
 2. Copy it to the head unit with a USB stick, or download it there, and open it. Allow installing from unknown sources if asked.
-3. Press **Home** and choose **TLauncher → Always**. You can also go to *Settings → Connections → Default home app*.
+3. Press **Home** and choose **TLauncher → Always**. You can also go to *Settings → Permissions → Default home app*.
 4. Grant the permissions:
    - **Location**: for the map and the automatic day/night theme.
-   - **Notification access** (*Settings → Connections*): needed for the music card and the Maps/Waze turn card. Nothing leaves the device.
+   - **Notification access** (*Settings → Permissions*): needed for the music card and the Maps/Waze turn card. Nothing leaves the device.
 5. Optional: replace the car photos in *Settings → Display → Car images*.
 
 ## Updates
