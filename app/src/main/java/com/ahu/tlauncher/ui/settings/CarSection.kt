@@ -72,6 +72,10 @@ internal fun CarSection(state: HomeUiState, a: HomeActions) {
         TSwitch(s.resumeMusic, a::setResumeMusic)
     }
     Divider()
+    MaintenanceSettings(state, a)
+    Divider()
+    TripLogSettings(state, a)
+    Divider()
 
     SmallTitle("OBD adapter")
     SettingRow("Data source", "Without a connected adapter, engine data is hidden and speed comes from GPS. Demo shows simulated data.") {

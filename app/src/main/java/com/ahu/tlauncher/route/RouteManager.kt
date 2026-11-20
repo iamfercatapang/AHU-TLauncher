@@ -68,6 +68,8 @@ class RouteManager(
     private val onTripStarted: (Place) -> Unit = {},
     /** The trip is finished or was ended by the user: forget it. */
     private val onTripFinished: () -> Unit = {},
+    /** Arrived at a fuel stop on the way to [next]: offer to carry on there. */
+    private val onStopReached: (next: Place) -> Unit = {},
 ) {
     private val _route = MutableStateFlow<RouteState?>(null)
     val route: StateFlow<RouteState?> = _route.asStateFlow()
@@ -142,8 +144,60 @@ class RouteManager(
     /** Picked a suggestion: look up its position, then preview the route. */
     fun pick(s: Suggestion) {
         val tok = session
+        // A fuel station picked during a trip is a stop on the way; anything else replaces the trip.
+        if (s.placeId !in fuelIds) afterStop = null
         clearSearch()
         preview(Place(s.title, s.subtitle, s.lat, s.lon, placeId = s.placeId), detailsSession = tok)
+    }
+
+    // ---------------------------------------------------------------- fuel stop
+
+    /** Where the trip was going when a fuel stop was picked: offered again on arrival at the station. */
+    private var afterStop: Place? = null
+    private var fuelIds: Set<String> = emptySet()
+
+    /**
+     * Fuel stations near the car, shown in the search panel. While navigating, stations near the road ahead come
+     * first, and picking one makes it a stop: on arrival, the trip to the old destination is offered again.
+     */
+    fun findFuel() {
+        searchJob?.cancel()
+        val active = _route.value?.takeIf { it.phase == RoutePhase.ACTIVE }
+        afterStop = active?.destination
+        _search.value = SearchState(query = FUEL_QUERY, loading = true)
+        val origin = here() ?: run { _search.value = _search.value.copy(loading = false, error = "Waiting for GPS position…"); return }
+        searchJob = scope.launch {
+            _search.value = runCancellable {
+                val found = if (freeMode() || !web.hasKey) FreeNav.parseSearch(FreeNav.get(FreeNav.fuelUrl(origin)), origin)
+                else RouteMath.parseNearby(web.post("https://places.googleapis.com/v1/places:searchNearby", RouteMath.nearbyFuelBody(origin).toString(),
+                    "places.id,places.displayName,places.formattedAddress,places.location", "Places API (New)"), origin)
+                val ahead = active?.route?.let { r -> r.points.drop(active.progressSeg) }
+                val list = RouteMath.fuelOrder(found, ahead).take(8)
+                fuelIds = list.map { it.placeId }.toSet()
+                _search.value.copy(suggestions = list, loading = false)
+            }.getOrElse { _search.value.copy(loading = false, error = userMessage(it, "Couldn't find fuel stations")) }
+        }
+    }
+
+    /** A place said by voice: search for it and preview the route to the best match. False when nothing is found. */
+    suspend fun searchAndPreview(query: String): Boolean {
+        val origin = here()
+        val first = runCancellable {
+            if (freeMode() || !web.hasKey) FreeNav.parseSearch(FreeNav.get(FreeNav.searchUrl(query, origin)), origin).firstOrNull()
+            else {
+                val body = JSONObject().put("input", query).put("sessionToken", session)
+                origin?.let { h ->
+                    val c = JSONObject().put("latitude", h.lat).put("longitude", h.lon)
+                    body.put("origin", c).put("locationBias", JSONObject().put("circle", JSONObject().put("center", c).put("radius", 50_000.0)))
+                }
+                RouteMath.parseSuggestions(web.post("https://places.googleapis.com/v1/places:autocomplete", body.toString(),
+                    "suggestions.placePrediction.placeId,suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat,suggestions.placePrediction.distanceMeters", "Places API (New)"))
+                    .firstOrNull()
+            }
+        }.getOrNull() ?: return false
+        afterStop = null
+        pick(first)
+        return true
     }
 
     /** Drive times for the Home / Work shortcuts (keyed by address), refreshed at most every 10 minutes. */
@@ -277,6 +331,12 @@ class RouteManager(
             val left = s.car?.let { car -> s.route?.points?.lastOrNull()?.let { RouteMath.distanceM(car, it) } }
             if (com.ahu.tlauncher.system.DriveStartRules.forgetOnEnd(byUser, left)) onTripFinished()
         }
+        if (byUser) {
+            // Cancelled the preview of a fuel stop: offer the trip it interrupted again.
+            val back = afterStop.takeIf { s?.phase == RoutePhase.PREVIEW }
+            afterStop = null
+            back?.let(onStopReached)
+        }
         routeJob?.cancel(); if (s?.guided == true) stopSpeaking(); _route.value = null
     }
 
@@ -320,7 +380,14 @@ class RouteManager(
         }
         // Arrived.
         if (RouteMath.distanceM(p, r.points.last()) < 40) {
-            if (!arriving) { arriving = true; scope.launch { delay(8_000); if (_route.value?.destination == s.destination) end() } }
+            if (!arriving) {
+                arriving = true
+                val next = afterStop; afterStop = null
+                scope.launch {
+                    delay(8_000)
+                    if (_route.value?.destination == s.destination) { end(); next?.let(onStopReached) }
+                }
+            }
             return
         }
         // Off the line (a missed turn, the wrong way, or Google Maps chose another road): recalculate after a few
@@ -387,6 +454,8 @@ class RouteManager(
             "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.description,routes.travelAdvisory.speedReadingIntervals", "Routes API")
         return RouteMath.parseRoutes(json).take(3).ifEmpty { throw ApiException("No route found") }
     }
+
+    private companion object { const val FUEL_QUERY = "Fuel stations" }
 
     private fun here(): LatLon? = location.value?.let { LatLon(it.latitude, it.longitude) }
 }

@@ -19,6 +19,8 @@
 
     <!-- Answer / end calls from the dashboard (Bluetooth hands-free calls on the head unit). -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- "Call Mom" by voice: look the name up in the head unit's contacts (asked the first time). -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 

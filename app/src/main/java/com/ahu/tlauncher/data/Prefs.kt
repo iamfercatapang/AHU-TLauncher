@@ -83,6 +83,9 @@ data class Settings(
     val offerTrip: Boolean = true,
     /** When the car starts: bring the dashboard to the front, even if the head unit restored another app. */
     val openOnStart: Boolean = true,
+    /** Number coding: last digit of the plate (-1 = off), and the coding hours ("7-10, 17-20"). */
+    val codingDigit: Int = -1,
+    val codingHours: String = com.ahu.tlauncher.system.Coding.DEFAULT_HOURS,
 )
 
 class Prefs(private val context: Context) {
@@ -121,6 +124,11 @@ class Prefs(private val context: Context) {
         val resumeMusic = booleanPreferencesKey("resume_music")
         val offerTrip = booleanPreferencesKey("offer_trip")
         val openOnStart = booleanPreferencesKey("open_on_start")
+        val codingDigit = androidx.datastore.preferences.core.intPreferencesKey("coding_digit")
+        val codingHours = stringPreferencesKey("coding_hours")
+        val trips = stringPreferencesKey("trip_log")
+        val loggedKm = androidx.datastore.preferences.core.doublePreferencesKey("trip_log_km")
+        val maintenance = stringPreferencesKey("maintenance")
         val tripPlace = stringPreferencesKey("trip_place")
         val tripStarted = androidx.datastore.preferences.core.longPreferencesKey("trip_started")
     }
@@ -159,6 +167,8 @@ class Prefs(private val context: Context) {
         resumeMusic = this[K.resumeMusic] ?: true,
         offerTrip = this[K.offerTrip] ?: true,
         openOnStart = this[K.openOnStart] ?: true,
+        codingDigit = this[K.codingDigit] ?: -1,
+        codingHours = this[K.codingHours] ?: com.ahu.tlauncher.system.Coding.DEFAULT_HOURS,
     )
 
     suspend fun setTheme(m: ThemeMode) = context.store.edit { it[K.theme] = m.name }
@@ -210,6 +220,17 @@ class Prefs(private val context: Context) {
     suspend fun setResumeMusic(on: Boolean) = context.store.edit { it[K.resumeMusic] = on }
     suspend fun setOfferTrip(on: Boolean) = context.store.edit { it[K.offerTrip] = on }
     suspend fun setOpenOnStart(on: Boolean) = context.store.edit { it[K.openOnStart] = on }
+    suspend fun setCoding(digit: Int, hours: String) = context.store.edit { it[K.codingDigit] = digit; it[K.codingHours] = hours }
+
+    /** Trip log and maintenance: kept outside [Settings] (they change during drives). */
+    suspend fun loadTrips(): Pair<List<com.ahu.tlauncher.system.Trip>, Double> =
+        context.store.data.first().let { com.ahu.tlauncher.system.TripMath.decode(it[K.trips]) to (it[K.loggedKm] ?: 0.0) }
+    suspend fun saveTrips(trips: List<com.ahu.tlauncher.system.Trip>, loggedKm: Double) = context.store.edit {
+        it[K.trips] = com.ahu.tlauncher.system.TripMath.encode(trips); it[K.loggedKm] = loggedKm
+    }
+    suspend fun loadMaintenance(): com.ahu.tlauncher.system.Maintenance =
+        com.ahu.tlauncher.system.MaintenanceMath.decode(context.store.data.first()[K.maintenance])
+    suspend fun saveMaintenance(m: com.ahu.tlauncher.system.Maintenance) = context.store.edit { it[K.maintenance] = com.ahu.tlauncher.system.MaintenanceMath.encode(m) }
 
     /** The trip in progress, kept so it can be offered again after the car is switched off mid-trip. */
     suspend fun savedTrip(): com.ahu.tlauncher.system.SavedTrip? = context.store.data.first().let { p ->

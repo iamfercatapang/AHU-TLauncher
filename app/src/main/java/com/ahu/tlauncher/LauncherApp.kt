@@ -33,6 +33,7 @@ class LauncherApp : Application() {
     lateinit var brightness: com.ahu.tlauncher.system.BrightnessControl; private set
     lateinit var updater: com.ahu.tlauncher.update.Updater; private set
     lateinit var resumeOnStart: com.ahu.tlauncher.system.ResumeOnStart; private set
+    lateinit var carCare: com.ahu.tlauncher.system.CarCare; private set
     lateinit var offlineMaps: com.ahu.tlauncher.map.OfflineMaps; private set
 
     override fun onCreate() {
@@ -41,6 +42,8 @@ class LauncherApp : Application() {
         apps = AppRepository(this, appScope)
         obd = ObdManager(appScope, prefs.settings)
         location = LocationTracker(this)
+        // GPS from the start (the trip log runs even before the dashboard is first shown); 1 s updates throughout.
+        location.start(); location.setFast(true)
         volume = VolumeController(this)
         weather = com.ahu.tlauncher.system.WeatherRepository(appScope, location.location)
         lights = com.ahu.tlauncher.system.LightsMonitor(this)
@@ -55,6 +58,7 @@ class LauncherApp : Application() {
             mph = { fuelSettings.speedUnit == com.ahu.tlauncher.data.SpeedUnit.MPH },
             onTripStarted = { p -> appScope.launch { prefs.saveTrip(p, System.currentTimeMillis()) } },
             onTripFinished = { appScope.launch { prefs.clearTrip() } },
+            onStopReached = { p -> resumeOnStart.offerNow(p) },
         )
         fuel = com.ahu.tlauncher.obd.FuelTracker(
             appScope, obd.state, tankL = { fuelSettings.tankL }, displacementL = { fuelSettings.engineCc / 1000.0 }, store = prefs.fuelStore,
@@ -66,6 +70,7 @@ class LauncherApp : Application() {
             }
         }
         updater = com.ahu.tlauncher.update.Updater(this, appScope).also { it.startPeriodicChecks() }
+        carCare = com.ahu.tlauncher.system.CarCare(this, appScope)
         resumeOnStart = com.ahu.tlauncher.system.ResumeOnStart(this, appScope)
         offlineMaps = com.ahu.tlauncher.map.OfflineMaps(this, appScope)
     }

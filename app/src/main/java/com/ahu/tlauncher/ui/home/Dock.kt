@@ -1,5 +1,6 @@
 package com.ahu.tlauncher.ui.home
 
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -74,6 +75,7 @@ fun Dock(
         }
         DockButton(TIcons.Music, "Music", overlay == Overlay.MUSIC, onToggleMusic)
         DockButton(TIcons.AppGrid, "All apps", overlay == Overlay.APPS, onToggleApps)
+        DockButton(androidx.compose.material.icons.Icons.Rounded.Mic, "Voice command", false, actions::voiceCommand)
         DockButton(TIcons.Sun, "Brightness", overlay == Overlay.BRIGHTNESS, onToggleBrightness)
         VolumeControl(state, actions, overlay == Overlay.VOLUME, onToggleVolume)
     }

@@ -151,6 +151,46 @@ object RouteMath {
         return d
     }
 
+    /** Places API (New) Nearby Search body: gas stations within 8 km, nearest first. */
+    fun nearbyFuelBody(at: LatLon): JSONObject = JSONObject()
+        .put("includedTypes", org.json.JSONArray().put("gas_station"))
+        .put("maxResultCount", 15)
+        .put("rankPreference", "DISTANCE")
+        .put("locationRestriction", JSONObject().put("circle", JSONObject()
+            .put("center", JSONObject().put("latitude", at.lat).put("longitude", at.lon)).put("radius", 8_000.0)))
+
+    fun parseNearby(json: String, from: LatLon): List<Suggestion> {
+        val arr = JSONObject(json).optJSONArray("places") ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val p = arr.getJSONObject(i)
+            val loc = p.optJSONObject("location") ?: return@mapNotNull null
+            val at = LatLon(loc.optDouble("latitude"), loc.optDouble("longitude"))
+            Suggestion(
+                placeId = p.optString("id").ifEmpty { return@mapNotNull null },
+                title = p.optJSONObject("displayName")?.optString("text").orEmpty().ifBlank { "Gas station" },
+                subtitle = p.optString("formattedAddress"),
+                distanceM = distanceM(from, at).toInt(), lat = at.lat, lon = at.lon,
+            )
+        }
+    }
+
+    /** Off the road ahead by more than this, a station counts as a detour. */
+    const val FUEL_DETOUR_M = 700.0
+
+    /**
+     * Fuel stations to offer: with a route, those within [FUEL_DETOUR_M] of the road still ahead come first (nearest
+     * to the car first), then the rest; without one, nearest first.
+     */
+    fun fuelOrder(found: List<Suggestion>, ahead: List<LatLon>?): List<Suggestion> {
+        if (ahead == null || ahead.size < 2) return nearestFirst(found)
+        fun offRoute(s: Suggestion): Double {
+            val at = LatLon(s.lat ?: return Double.MAX_VALUE, s.lon ?: return Double.MAX_VALUE)
+            return (0 until ahead.size - 1).minOf { toSegment(at, ahead[it], ahead[it + 1]).first }
+        }
+        val (on, off) = found.partition { offRoute(it) <= FUEL_DETOUR_M }
+        return nearestFirst(on) + nearestFirst(off)
+    }
+
     /** Search results nearest first (both maps). Ones without a distance keep their order, after the rest. */
     fun nearestFirst(list: List<Suggestion>): List<Suggestion> = list.sortedBy { it.distanceM ?: Int.MAX_VALUE }
 

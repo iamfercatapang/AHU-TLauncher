@@ -12,6 +12,7 @@ import android.app.ActivityManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.SystemClock
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -298,7 +299,7 @@ internal fun LifecycleBinding(onStart: () -> Unit, onResume: () -> Unit, onPause
 private fun drawFreeRoute(style: Style, r: com.ahu.tlauncher.route.RouteState?, data: com.ahu.tlauncher.route.RouteData?, density: Float) {
     val lineSrc = "tl-route"; val altSrc = "tl-route-alts"; val destSrc = "tl-route-dest"
     if (style.getSource(lineSrc) == null) {
-        listOf(lineSrc, altSrc, destSrc).forEach { style.addSource(org.maplibre.android.style.sources.GeoJsonSource(it)) }
+        listOf(lineSrc, altSrc, destSrc, FREE_HEAD_SRC).forEach { style.addSource(org.maplibre.android.style.sources.GeoJsonSource(it)) }
         style.addImage("tl-dest-flag", destinationBitmap(density))
         fun lineLayer(id: String, src: String, color: androidx.compose.ui.graphics.Color, width: Float) =
             org.maplibre.android.style.layers.LineLayer(id, src).withProperties(
@@ -316,16 +317,20 @@ private fun drawFreeRoute(style: Style, r: com.ahu.tlauncher.route.RouteState?, 
         val under = org.maplibre.android.location.LocationComponentConstants.SHADOW_LAYER
         listOf(
             lineLayer("tl-route-alt-casing", altSrc, ROUTE_ALT_CASING, 9f), lineLayer("tl-route-alt-line", altSrc, ROUTE_ALT, 5.5f),
-            lineLayer("tl-route-casing", lineSrc, ROUTE_LINE_CASING, 10f), lineLayer("tl-route-line", lineSrc, ROUTE_LINE, 6.5f), dest,
+            lineLayer("tl-route-casing", lineSrc, ROUTE_LINE_CASING, 10f), lineLayer("tl-route-head-casing", FREE_HEAD_SRC, ROUTE_LINE_CASING, 10f),
+            lineLayer("tl-route-line", lineSrc, ROUTE_LINE, 6.5f), lineLayer("tl-route-head-line", FREE_HEAD_SRC, ROUTE_LINE, 6.5f), dest,
         ).forEach { if (style.getLayer(under) != null) style.addLayerBelow(it, under) else style.addLayer(it) }
     }
     fun line(points: List<com.ahu.tlauncher.route.LatLon>) =
         org.maplibre.geojson.Feature.fromGeometry(org.maplibre.geojson.LineString.fromLngLats(points.map { org.maplibre.geojson.Point.fromLngLat(it.lon, it.lat) }))
+    // While driving, the line from the car to the next point is a separate tiny line (see [drawFreeHead]) that moves
+    // with the gliding car every frame; this one only changes when progress moves on.
     val pts = if (data == null || r == null) emptyList() else {
         val active = r.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE
         val start = if (active) (r.progressSeg + 1).coerceAtMost(data.points.size - 1) else 0
-        buildList { if (active) r.car?.let { add(it) }; addAll(data.points.drop(start)) }
+        data.points.drop(start)
     }
+    if (r?.phase != com.ahu.tlauncher.route.RoutePhase.ACTIVE) drawFreeHead(style, null, null)
     val alts = r?.takeIf { it.phase == com.ahu.tlauncher.route.RoutePhase.PREVIEW }?.alternatives
         ?.filterIndexed { i, _ -> i != r.selected }?.filter { it.points.size >= 2 }.orEmpty()
     style.getSourceAs<org.maplibre.android.style.sources.GeoJsonSource>(lineSrc)?.setGeoJson(
@@ -334,6 +339,19 @@ private fun drawFreeRoute(style: Style, r: com.ahu.tlauncher.route.RouteState?, 
         org.maplibre.geojson.FeatureCollection.fromFeatures(alts.map { line(it.points) }.toTypedArray()))
     style.getSourceAs<org.maplibre.android.style.sources.GeoJsonSource>(destSrc)?.setGeoJson(org.maplibre.geojson.FeatureCollection.fromFeatures(
         data?.points?.lastOrNull()?.let { arrayOf(org.maplibre.geojson.Feature.fromGeometry(org.maplibre.geojson.Point.fromLngLat(it.lon, it.lat))) } ?: emptyArray(),
+    ))
+}
+
+private const val FREE_HEAD_SRC = "tl-route-head"
+
+/** The start of the route line: from where the car is drawn to the next route point (cleared with nulls). */
+private fun drawFreeHead(style: Style, car: com.ahu.tlauncher.route.LatLon?, next: com.ahu.tlauncher.route.LatLon?) {
+    val src = style.getSourceAs<org.maplibre.android.style.sources.GeoJsonSource>(FREE_HEAD_SRC) ?: return
+    src.setGeoJson(org.maplibre.geojson.FeatureCollection.fromFeatures(
+        if (car == null || next == null) emptyArray()
+        else arrayOf(org.maplibre.geojson.Feature.fromGeometry(org.maplibre.geojson.LineString.fromLngLats(listOf(
+            org.maplibre.geojson.Point.fromLngLat(car.lon, car.lat), org.maplibre.geojson.Point.fromLngLat(next.lon, next.lat),
+        )))),
     ))
 }
 
@@ -473,6 +491,8 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier, onL
     val ctx = LocalContext.current
     val current = rememberUpdatedState(state)
     val longPress = rememberUpdatedState(onLongPress)
+    /** The app's GPS (null in previews and tests, where MapLibre's own location engine is used). */
+    val launcher = ctx.applicationContext as? com.ahu.tlauncher.LauncherApp
     val handle = remember {
         com.ahu.tlauncher.map.OfflineMaps.setUp(ctx)
         val opts = MapLibreMapOptions.createFromAttributes(ctx)
@@ -532,7 +552,8 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier, onL
                                     .pulseEnabled(false).trackingGesturesManagement(true).elevation(0f)
                                     .build()
                             )
-                            .useDefaultLocationEngine(true)
+                            // TLauncher feeds the positions itself (see below), with the heading held while crawling.
+                            .useDefaultLocationEngine(launcher == null)
                             .locationEngineRequest(
                                 LocationEngineRequest.Builder(1000).setFastestInterval(500)
                                     .setPriority(LocationEngineRequest.PRIORITY_HIGH_ACCURACY).build()
@@ -554,11 +575,49 @@ private fun vectorMap(dark: Boolean, state: HomeUiState, modifier: Modifier, onL
             }
         }
     }
+    // Car position for the puck: the app's own GPS fixes, with the course held below 5 km/h (GPS course is noise when
+    // crawling, which made the heading-up map twitch at lights). The same fixes drive the glide of the route line's start.
+    val glide = remember { MapGlide() }
+    val glideTicks = remember { kotlinx.coroutines.flow.MutableStateFlow(0) }
+    LaunchedEffect(m, styleTick, launcher) {
+        val gm = m ?: return@LaunchedEffect
+        val src = launcher?.location?.location ?: return@LaunchedEffect
+        var heldBearing: Float? = null
+        src.collect { loc ->
+            if (loc == null || !handle.locationActive) return@collect
+            val kmh = if (loc.hasSpeed()) loc.speed * 3.6f else 0f
+            val fix = android.location.Location(loc)
+            if (kmh >= 5f && loc.hasBearing()) heldBearing = loc.bearing
+            else heldBearing?.let { fix.bearing = it } ?: fix.removeBearing()
+            runCatching { gm.locationComponent.forceLocationUpdate(fix) }
+            glide.fix(fix.latitude, fix.longitude, if (fix.hasBearing()) fix.bearing else null, SystemClock.elapsedRealtime())
+            glideTicks.value++
+        }
+    }
+    // While driving a route: the line's start follows the gliding car every frame (a two-point line, cheap to update).
+    val routeNow = state.route
+    val drivingRoute = routeNow?.takeIf { it.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE }
+    LaunchedEffect(m, styleTick, drivingRoute?.route, drivingRoute?.progressSeg) {
+        val gm = m ?: return@LaunchedEffect
+        val r = drivingRoute ?: return@LaunchedEffect
+        val pts = r.route?.points ?: return@LaunchedEffect
+        val next = pts[(r.progressSeg + 1).coerceAtMost(pts.size - 1)]
+        while (true) {
+            val seen = glideTicks.value
+            val style = gm.style?.takeIf { it.isFullyLoaded }
+            val now = SystemClock.elapsedRealtime()
+            val car = if (glide.hasFix) com.ahu.tlauncher.route.LatLon(glide.lat(now), glide.lon(now)) else r.car
+            if (style != null) drawFreeHead(style, car, next)
+            if (glide.moving(now)) androidx.compose.runtime.withFrameMillis { } else glideTicks.first { it != seen }
+        }
+    }
     // Route (free map): blue line with a darker edge from the car to the destination, driven part trimmed.
-    LaunchedEffect(m, styleTick, state.route) {
+    // Redrawn when the route or progress changes, not on every GPS fix (the car end of the line moves on its own).
+    val rk = state.route
+    LaunchedEffect(m, styleTick, rk?.route, rk?.phase, rk?.progressSeg, rk?.alternatives, rk?.selected, rk?.destination, rk == null) {
         val gm = m ?: return@LaunchedEffect
         val style = gm.style?.takeIf { it.isFullyLoaded } ?: return@LaunchedEffect
-        val r = state.route
+        val r = current.value.route
         val data = r?.route
         val d = handle.view.resources.displayMetrics.density
         drawFreeRoute(style, r, data, d)
