@@ -86,6 +86,8 @@ data class Settings(
     val resumeMusic: Boolean = true,
     /** When the car starts: offer to continue a trip that wasn't finished. */
     val offerTrip: Boolean = true,
+    /** When the car starts: bring the dashboard to the front, even if the head unit restored another app. */
+    val openOnStart: Boolean = true,
 )
 
 class Prefs(private val context: Context) {
@@ -126,6 +128,7 @@ class Prefs(private val context: Context) {
         val perfMode = stringPreferencesKey("perf_mode")
         val resumeMusic = booleanPreferencesKey("resume_music")
         val offerTrip = booleanPreferencesKey("offer_trip")
+        val openOnStart = booleanPreferencesKey("open_on_start")
         val tripPlace = stringPreferencesKey("trip_place")
         val tripStarted = androidx.datastore.preferences.core.longPreferencesKey("trip_started")
     }
@@ -166,6 +169,7 @@ class Prefs(private val context: Context) {
         perfMode = enumOr(this[K.perfMode], PerfMode.AUTO),
         resumeMusic = this[K.resumeMusic] ?: true,
         offerTrip = this[K.offerTrip] ?: true,
+        openOnStart = this[K.openOnStart] ?: true,
     )
 
     suspend fun setTheme(m: ThemeMode) = context.store.edit { it[K.theme] = m.name }
@@ -219,6 +223,7 @@ class Prefs(private val context: Context) {
     suspend fun setPerfMode(m: PerfMode) = context.store.edit { it[K.perfMode] = m.name }
     suspend fun setResumeMusic(on: Boolean) = context.store.edit { it[K.resumeMusic] = on }
     suspend fun setOfferTrip(on: Boolean) = context.store.edit { it[K.offerTrip] = on }
+    suspend fun setOpenOnStart(on: Boolean) = context.store.edit { it[K.openOnStart] = on }
 
     /** The trip in progress, kept so it can be offered again after the car is switched off mid-trip. */
     suspend fun savedTrip(): com.ahu.tlauncher.system.SavedTrip? = context.store.data.first().let { p ->

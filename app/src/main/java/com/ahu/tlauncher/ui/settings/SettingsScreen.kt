@@ -390,6 +390,14 @@ private fun PermissionsSettings(state: HomeUiState, a: HomeActions) {
         if (!state.isDefaultLauncher) PillButton("Set", kind = com.ahu.tlauncher.ui.components.ButtonKind.PRIMARY, onClick = a::setDefaultLauncher) else Text("On", style = TType.button, color = T.colors.muted)
     }
     Divider()
+    SettingRow(
+        "Open when the car starts",
+        if (state.returnPermission) "Show the dashboard when the head unit turns on, even if it reopens the last app"
+        else "Also needs \"Return to dashboard\" below (Display over other apps)",
+    ) {
+        com.ahu.tlauncher.ui.components.TSwitch(state.settings.openOnStart, a::setOpenOnStart)
+    }
+    Divider()
     SettingRow("Notification access", "Needed for the music card and Maps/Waze turn-by-turn") {
         if (!state.notificationAccess) PillButton("Allow", kind = com.ahu.tlauncher.ui.components.ButtonKind.PRIMARY, onClick = a::requestNotificationAccess) else Text("On", style = TType.button, color = T.colors.muted)
     }
@@ -398,7 +406,7 @@ private fun PermissionsSettings(state: HomeUiState, a: HomeActions) {
         if (!state.locationPermission) PillButton("Allow", onClick = a::requestLocation) else Text("On", style = TType.button, color = T.colors.muted)
     }
     Divider()
-    SettingRow("Return to dashboard", "After Start opens Google Maps for a trip, come back to the dashboard automatically (Android calls this \"Display over other apps\")") {
+    SettingRow("Return to dashboard", "Come back to the dashboard after Start opens Google Maps, and when the car starts (Android calls this \"Display over other apps\")") {
         if (!state.returnPermission) PillButton("Allow", onClick = a::requestReturnPermission) else Text("On", style = TType.button, color = T.colors.muted)
     }
     Divider()

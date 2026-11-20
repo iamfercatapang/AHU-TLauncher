@@ -124,6 +124,7 @@ class MainActivity : ComponentActivity(), HomeActions {
 
     override fun onResume() {
         super.onResume()
+        app.dashboardVisible = true
         hideSystemBars()
         NotificationHub.refresh(this)
         app.location.start()
@@ -138,6 +139,7 @@ class MainActivity : ComponentActivity(), HomeActions {
 
     override fun onPause() {
         super.onPause()
+        app.dashboardVisible = false
         app.location.setFast(false)
         app.androidAuto.setActive(false)
     }
@@ -713,6 +715,7 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun setMapTraffic(on: Boolean) { lifecycleScope.launch { app.prefs.setMapTraffic(on) } }
     override fun setResumeMusic(on: Boolean) { lifecycleScope.launch { app.prefs.setResumeMusic(on) } }
     override fun setOfferTrip(on: Boolean) { lifecycleScope.launch { app.prefs.setOfferTrip(on) } }
+    override fun setOpenOnStart(on: Boolean) { lifecycleScope.launch { app.prefs.setOpenOnStart(on) } }
     override fun loadOfflineAreas() = app.offlineMaps.load()
     override fun saveOfflineArea(name: String, lat: Double, lon: Double, radiusKm: Int) = app.offlineMaps.save(name, lat, lon, radiusKm)
     override fun updateOfflineArea(id: Long) = app.offlineMaps.update(id)

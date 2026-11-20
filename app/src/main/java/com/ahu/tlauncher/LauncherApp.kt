@@ -28,6 +28,8 @@ class LauncherApp : Application() {
     lateinit var voice: com.ahu.tlauncher.system.Voice; private set
     /** Free map in use (chosen in Settings, or Google not available): free routing + TLauncher's own guidance. */
     @Volatile var freeMap = true
+    /** The dashboard (MainActivity) is in the foreground. */
+    @Volatile var dashboardVisible = false
     lateinit var lastMedia: com.ahu.tlauncher.notify.LastMedia; private set
     lateinit var brightness: com.ahu.tlauncher.system.BrightnessControl; private set
     lateinit var soundEq: com.ahu.tlauncher.system.SoundEq; private set

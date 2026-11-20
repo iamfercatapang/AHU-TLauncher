@@ -235,6 +235,7 @@ interface HomeActions {
     fun setMapTraffic(on: Boolean) {}
     fun setResumeMusic(on: Boolean) {}
     fun setOfferTrip(on: Boolean) {}
+    fun setOpenOnStart(on: Boolean) {}
     // offline maps (free map)
     fun loadOfflineAreas() {}
     fun saveOfflineArea(name: String, lat: Double, lon: Double, radiusKm: Int) {}
