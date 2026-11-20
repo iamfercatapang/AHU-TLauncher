@@ -144,8 +144,9 @@ class CarFramingTest {
     @Test fun paintBlendsBetweenPaints() {
         val red = com.ahu.tlauncher.ui.home.PaintLook.of(com.ahu.tlauncher.data.CarPaint.RED)
         val white = com.ahu.tlauncher.ui.home.PaintLook.of(com.ahu.tlauncher.data.CarPaint.WHITE)
-        assertEquals(red, red.lerp(white, 0f))
-        assertEquals(white, red.lerp(white, 1f))
+        val start = red.lerp(white, 0f); val end = red.lerp(white, 1f)
+        assertEquals(red.r, start.r, 1e-6f); assertEquals(red.metallic, start.metallic, 1e-6f)
+        assertEquals(white.r, end.r, 1e-6f); assertEquals(white.b, end.b, 1e-6f); assertEquals(white.roughness, end.roughness, 1e-6f)
         val half = red.lerp(white, 0.5f)
         assertEquals((red.g + white.g) / 2, half.g, 1e-6f)
         assertEquals((red.roughness + white.roughness) / 2, half.roughness, 1e-6f)

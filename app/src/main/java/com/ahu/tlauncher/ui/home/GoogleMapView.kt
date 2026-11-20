@@ -134,9 +134,10 @@ private class GoogleHandle(val view: MapView) : MapControls {
     private var headAt = 0L
 
     /** Where the car is drawn: gliding (smooth), or the latest fix. */
-    fun carPos(): LatLng? =
-        if (smooth && glide.hasFix) SystemClock.elapsedRealtime().let { LatLng(glide.lat(it), glide.lon(it)) }
-        else LatLng(lat ?: return null, lon ?: return null)
+    fun carPos(): LatLng? {
+        if (smooth && glide.hasFix) return SystemClock.elapsedRealtime().let { LatLng(glide.lat(it), glide.lon(it)) }
+        return LatLng(lat ?: return null, lon ?: return null)
+    }
 
     private fun applyPadding(m: GoogleMap, drive: Boolean) {
         val pad = if (drive && view.width > 0) DriveCamera.padding(view.width, view.height, DriveCamera.carAnchor(navigating, cardsRight)) else IntArray(4)
@@ -341,7 +342,7 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
             }
             val all = data.points.map(::ll)
             val lines = listOf(line(gm, all, ROUTE_LINE_CASING, 10f, 1f), line(gm, all, ROUTE_LINE, 6.5f, 2f))
-            handle.routeShapes += lines
+            handle.routeShapes.addAll(lines)
             // While driving, the progress effect below trims the lines and moves their start with the car.
             if (isActive) handle.routeLines = lines
             else data.traffic.filter { it.speed != com.ahu.tlauncher.route.Traffic.NORMAL }.forEach { t ->
