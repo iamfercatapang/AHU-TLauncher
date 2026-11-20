@@ -33,10 +33,9 @@ object TIcons {
     } }
 
     /** "More" / all apps: rounded square with three dots. */
-    val More by lazy { icon("More") {
-        line { moveTo(6f, 4f); horizontalLineTo(18f); arcTo(2f, 2f, 0f, false, true, 20f, 6f); verticalLineTo(18f); arcTo(2f, 2f, 0f, false, true, 18f, 20f)
-            horizontalLineTo(6f); arcTo(2f, 2f, 0f, false, true, 4f, 18f); verticalLineTo(6f); arcTo(2f, 2f, 0f, false, true, 6f, 4f); close() }
-        fill { circle(8f, 12f, 1.2f); circle(12f, 12f, 1.2f); circle(16f, 12f, 1.2f) }
+    /** App drawer: a 3 × 3 grid of dots, the usual sign for "all apps", drawn as plainly as the other icons. */
+    val AppGrid by lazy { icon("AppGrid") {
+        fill { for (y in listOf(5.5f, 12f, 18.5f)) for (x in listOf(5.5f, 12f, 18.5f)) circle(x, y, 1.9f) }
     } }
 
     val Speaker by lazy { icon("Speaker") {
@@ -175,16 +174,6 @@ object TIcons {
     /** Service wrench (Car settings). */
     val Wrench by lazy { icon("Wrench") {
         line { moveTo(14.5f, 4f); arcTo(4.5f, 4.5f, 0f, false, false, 13.2f, 10.8f); lineTo(4.5f, 19.5f); lineTo(5.5f, 20.5f) ; lineTo(14.2f, 11.8f); arcTo(4.5f, 4.5f, 0f, false, false, 20f, 9.5f); lineTo(17f, 9.8f); lineTo(14.6f, 7.4f); close() }
-    } }
-    val PhoneLink by lazy { icon("PhoneLink") {
-        line { moveTo(8f, 3f); horizontalLineTo(16f); arcTo(1.5f, 1.5f, 0f, false, true, 17.5f, 4.5f); verticalLineTo(19.5f); arcTo(1.5f, 1.5f, 0f, false, true, 16f, 21f)
-            horizontalLineTo(8f); arcTo(1.5f, 1.5f, 0f, false, true, 6.5f, 19.5f); verticalLineTo(4.5f); arcTo(1.5f, 1.5f, 0f, false, true, 8f, 3f); close() }
-        line { moveTo(10.5f, 18f); horizontalLineTo(13.5f) }
-    } }
-    /** Equalizer bars (Sound). */
-    val EqBars by lazy { icon("EqBars") {
-        line { moveTo(5f, 20f); verticalLineTo(4f); moveTo(12f, 20f); verticalLineTo(4f); moveTo(19f, 20f); verticalLineTo(4f) }
-        line(2.6f) { moveTo(3.2f, 14f); horizontalLineTo(6.8f); moveTo(10.2f, 8f); horizontalLineTo(13.8f); moveTo(17.2f, 16f); horizontalLineTo(20.8f) }
     } }
     val Shield by lazy { icon("Shield") {
         line { moveTo(12f, 3f); lineTo(19.5f, 6f); verticalLineTo(11.5f); curveTo(19.5f, 16f, 16.5f, 19.5f, 12f, 21f); curveTo(7.5f, 19.5f, 4.5f, 16f, 4.5f, 11.5f); verticalLineTo(6f); close() }

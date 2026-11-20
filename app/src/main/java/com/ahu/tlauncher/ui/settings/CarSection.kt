@@ -32,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import com.ahu.tlauncher.data.ObdSourceType
 import com.ahu.tlauncher.data.TempUnit
 import com.ahu.tlauncher.ui.components.Segmented
+import com.ahu.tlauncher.ui.components.TSwitch
 import com.ahu.tlauncher.ui.components.pressable
 import com.ahu.tlauncher.obd.Dtc
 import com.ahu.tlauncher.obd.ObdData
@@ -61,6 +62,18 @@ internal fun CarSection(state: HomeUiState, a: HomeActions) {
     // Poll the extra PIDs only while this page is on screen.
     DisposableEffect(Unit) { a.setObdExtended(true); onDispose { a.setObdExtended(false) } }
 
+    SmallTitle("When the car starts")
+    SettingRow(
+        "Open the dashboard",
+        if (state.returnPermission) "Show TLauncher when the head unit turns on, even if it reopens the last app"
+        else "Also needs \"Return to dashboard\" in Permissions (Display over other apps)",
+    ) { TSwitch(s.openOnStart, a::setOpenOnStart) }
+    SettingRow("Resume music", "Plays YouTube Music or Spotify again if it was playing when the car was switched off") {
+        TSwitch(s.resumeMusic, a::setResumeMusic)
+    }
+    Divider()
+
+    SmallTitle("OBD adapter")
     SettingRow("Data source", "Without a connected adapter, engine data is hidden and speed comes from GPS. Demo shows simulated data.") {
         Segmented(listOf(ObdSourceType.DEMO to "Demo", ObdSourceType.BLUETOOTH to "Bluetooth"), s.obdSource, a::setObdSource)
     }

@@ -83,8 +83,7 @@ enum class Section(val label: String, val icon: ImageVector) {
     HOME("Home screen", com.ahu.tlauncher.ui.components.TIcons.DockBar),
     NAVIGATION("Navigation", com.ahu.tlauncher.ui.components.TIcons.Navigate),
     CAR("Car", com.ahu.tlauncher.ui.components.TIcons.Wrench),
-    SOUND("Sound", com.ahu.tlauncher.ui.components.TIcons.EqBars),
-    CONNECTIONS("Connections", com.ahu.tlauncher.ui.components.TIcons.PhoneLink),
+    PERMISSIONS("Permissions", com.ahu.tlauncher.ui.components.TIcons.Shield),
     ABOUT("About", com.ahu.tlauncher.ui.components.TIcons.Info),
 }
 
@@ -124,8 +123,7 @@ fun SettingsScreen(state: HomeUiState, actions: HomeActions, onClose: () -> Unit
                     Section.HOME -> HomeScreenSection(state, actions)
                     Section.NAVIGATION -> NavigationSection(state, actions)
                     Section.CAR -> CarSection(state, actions)
-                    Section.SOUND -> SoundSection(state, actions)
-                    Section.CONNECTIONS -> ConnectionsSection(state, actions)
+                    Section.PERMISSIONS -> PermissionsSettings(state, actions)
                     Section.ABOUT -> AboutSection(state, actions)
                 }
             }
@@ -280,7 +278,7 @@ private fun HomeScreenSection(state: HomeUiState, a: HomeActions) {
     Divider()
     SmallTitle("Dock apps")
     val pinned = state.settings.pinnedApps.mapNotNull { k -> state.apps.firstOrNull { it.key == k } }
-    Text("Long-press any app in the app drawer to pin or unpin it. Up to 6 apps are shown.", style = TType.label, color = T.colors.muted)
+    Text("Long-press any app in the app drawer to pin or unpin it. Up to ${com.ahu.tlauncher.ui.home.MAX_DOCK_APPS} apps are shown.", style = TType.label, color = T.colors.muted)
     Spacer(Modifier.height(8.dp))
     if (pinned.isEmpty()) Text("No apps pinned yet.", style = TType.body, color = T.colors.secondary)
     pinned.forEachIndexed { i, app ->
@@ -376,15 +374,6 @@ private fun AddressField(label: String, value: String, pinned: Boolean, onSave: 
 }
 
 @Composable
-private fun ConnectionsSection(state: HomeUiState, a: HomeActions) {
-    SmallTitle("Android Auto")
-    AndroidAutoSettings(state, a)
-    Divider()
-    SmallTitle("Permissions")
-    PermissionsSettings(state, a)
-}
-
-@Composable
 private fun PermissionsSettings(state: HomeUiState, a: HomeActions) {
     SettingRow("Default home app", if (state.isDefaultLauncher) "This launcher opens when you press Home" else "Not set — press Home and choose TLauncher → Always") {
         if (!state.isDefaultLauncher) PillButton("Set", kind = com.ahu.tlauncher.ui.components.ButtonKind.PRIMARY, onClick = a::setDefaultLauncher) else Text("On", style = TType.button, color = T.colors.muted)
@@ -398,7 +387,7 @@ private fun PermissionsSettings(state: HomeUiState, a: HomeActions) {
         if (!state.locationPermission) PillButton("Allow", onClick = a::requestLocation) else Text("On", style = TType.button, color = T.colors.muted)
     }
     Divider()
-    SettingRow("Return to dashboard", "After Start opens Google Maps for a trip, come back to the dashboard automatically (Android calls this \"Display over other apps\")") {
+    SettingRow("Return to dashboard", "Come back to the dashboard after Start opens Google Maps, and when the car starts (Android calls this \"Display over other apps\")") {
         if (!state.returnPermission) PillButton("Allow", onClick = a::requestReturnPermission) else Text("On", style = TType.button, color = T.colors.muted)
     }
     Divider()

@@ -48,6 +48,40 @@ data class Step(
 data class Turn(val step: Step, val distanceM: Int)
 
 /** Pure parsing and geometry, unit tested. */
+/**
+ * When the car counts as off the route, and how soon a new route is asked for. Pure, unit tested.
+ * "Guided" is TLauncher's own turn-by-turn (free map); otherwise Google Maps / Waze guide and reroute
+ * themselves, and the dashboard line only has to catch up.
+ */
+object OffRoute {
+    /** Further than this from the line (or [ACCURACY_FACTOR] × the GPS accuracy, up to [MAX_M]) is off route. */
+    const val MIN_M = 45.0
+    const val MAX_M = 100.0
+    const val ACCURACY_FACTOR = 1.5
+    /** Driving against the route's direction (a missed exit onto the other carriageway, a wrong turn back). */
+    const val WRONG_WAY_DEG = 120.0
+    const val WRONG_WAY_MIN_KMH = 15
+    const val WRONG_WAY_MIN_SEG_M = 15.0
+    /** Off route this long before asking for a new route. */
+    fun waitMs(guided: Boolean): Long = if (guided) 3_000 else 8_000
+    /** At least this long between new routes. */
+    fun gapMs(guided: Boolean): Long = if (guided) 8_000 else 20_000
+    /** After a failed request, try again this soon. */
+    const val RETRY_MS = 5_000L
+
+    fun limitM(accuracyM: Float?): Double = ((accuracyM ?: 0f) * ACCURACY_FACTOR).coerceIn(MIN_M, MAX_M)
+
+    fun wrongWay(carBearing: Float?, speedKmh: Int, segBearing: Double?, segLengthM: Double): Boolean =
+        carBearing != null && segBearing != null && speedKmh >= WRONG_WAY_MIN_KMH && segLengthM >= WRONG_WAY_MIN_SEG_M &&
+            RouteMath.angleDiff(carBearing.toDouble(), segBearing) > WRONG_WAY_DEG
+
+    fun isOff(offM: Double, accuracyM: Float?, wrongWay: Boolean): Boolean = wrongWay || offM > limitM(accuracyM)
+
+    /** Time to ask for a new route: off for [waitMs] since [offSince], and [gapMs] since the last request (0 = none). */
+    fun due(guided: Boolean, offSince: Long, lastRequest: Long, now: Long): Boolean =
+        offSince > 0 && now - offSince >= waitMs(guided) && (lastRequest == 0L || now - lastRequest >= gapMs(guided))
+}
+
 object RouteMath {
     /** Google encoded polyline → points. */
     fun decode(encoded: String): List<LatLon> {
@@ -98,6 +132,16 @@ object RouteMath {
         }
         return best to bestD
     }
+
+    /** Compass bearing from [a] to [b], degrees 0–360 (flat-earth, fine for short segments). */
+    fun bearingDeg(a: LatLon, b: LatLon): Double {
+        val kx = cos(Math.toRadians(a.lat))
+        val deg = Math.toDegrees(atan2((b.lon - a.lon) * kx, b.lat - a.lat))
+        return (deg + 360) % 360
+    }
+
+    /** Smallest angle between two bearings, 0–180. */
+    fun angleDiff(a: Double, b: Double): Double { val d = ((a - b) % 360 + 360) % 360; return if (d > 180) 360 - d else d }
 
     /** Metres left from the car (on segment [seg]) to the end. */
     fun remainingM(points: List<LatLon>, seg: Int, p: LatLon): Double {

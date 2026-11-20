@@ -81,15 +81,8 @@ data class HomeUiState(
     val brightness: Int = 50,
     val brightnessNight: Boolean = false,
     val brightnessAllowed: Boolean = true,
-    /** What the head unit's audio system lets the equalizer do. */
-    val eqCaps: com.ahu.tlauncher.system.EqCaps = com.ahu.tlauncher.system.EqCaps(true, listOf(60, 230, 910, 3600, 14000), -15f, 15f, true, true),
     /** Package that last posted a call notification (Settings readout). */
     val callSource: String? = null,
-    val aa: com.ahu.tlauncher.system.AaState = com.ahu.tlauncher.system.AaState.Idle,
-    /** Name of the installed Android Auto receiver app, null if none. */
-    val aaReceiver: String? = null,
-    /** "Android Auto ready" prompt dismissed for this network. */
-    val aaDismissed: Boolean = false,
     // dashboard route (Google search + Routes)
     val route: com.ahu.tlauncher.route.RouteState? = null,
     val search: com.ahu.tlauncher.route.SearchState = com.ahu.tlauncher.route.SearchState(),
@@ -167,8 +160,6 @@ interface HomeActions {
     fun togglePin(app: AppEntry) {}
     fun appInfo(app: AppEntry) {}
     fun setBrightness(percent: Int) {}
-    fun setEq(s: com.ahu.tlauncher.system.EqSettings) {}
-    fun chooseUnitEq(pkg: String) {}
     fun requestBrightnessPermission() {}
     fun uninstallApp(app: AppEntry) {}
     fun movePin(key: String, delta: Int) {}
@@ -235,6 +226,7 @@ interface HomeActions {
     fun setMapTraffic(on: Boolean) {}
     fun setResumeMusic(on: Boolean) {}
     fun setOfferTrip(on: Boolean) {}
+    fun setOpenOnStart(on: Boolean) {}
     // offline maps (free map)
     fun loadOfflineAreas() {}
     fun saveOfflineArea(name: String, lat: Double, lon: Double, radiusKm: Int) {}
@@ -278,10 +270,6 @@ interface HomeActions {
     fun switchCallAudio() {}
     fun requestCallPermission() {}
     // Android Auto
-    fun openAndroidAuto() {}
-    fun dismissAndroidAuto() {}
-    fun setAaDetect(on: Boolean) {}
-    fun getHeadunitReloaded() {}
 }
 
 object NoopActions : HomeActions

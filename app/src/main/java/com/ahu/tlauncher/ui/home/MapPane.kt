@@ -442,8 +442,9 @@ private class VectorHandle(val view: MapView) : MapControls {
                 lc.renderMode = RenderMode.GPS
                 lc.tiltWhileTracking(DriveCamera.driveTilt(lowPerf), 750)
                 lc.zoomWhileTracking(z, 750); appliedZoom = z
-            } else if (kotlin.math.abs(z - appliedZoom) >= 0.25) {
-                lc.zoomWhileTracking(z, 1200); appliedZoom = z
+            } else if (kotlin.math.abs(z - appliedZoom) >= 0.1) {
+                // Small, slow steps as the speed changes, so the zoom drifts instead of jumping.
+                lc.zoomWhileTracking(z, 2000); appliedZoom = z
             }
         } else if (appliedDrive != false) {
             lc.cameraMode = CameraMode.TRACKING

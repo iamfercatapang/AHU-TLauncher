@@ -41,6 +41,9 @@ private val DOCK_MUTED = Color.White.copy(alpha = 0.6f)
 private val ACTIVE_BG = Color(0x12C5D8EE)
 private val ACTIVE_LINE = Color(0xFFB9CBDD)
 
+/** Pinned apps shown in the dock (it fits nine at 1024 dp wide with the other buttons). */
+const val MAX_DOCK_APPS = 9
+
 /**
  * Laid out like the prototype's control bar: car on the left, then (where climate sits there) your
  * pinned apps, music, "…" for all apps, brightness, and a vertical volume control on the right.
@@ -58,19 +61,19 @@ fun Dock(
     onToggleBrightness: () -> Unit = {},
     onToggleVolume: () -> Unit = {},
 ) {
-    val pinned = state.settings.pinnedApps.mapNotNull { key -> state.apps.firstOrNull { it.key == key } }.take(6)
+    val pinned = state.settings.pinnedApps.mapNotNull { key -> state.apps.firstOrNull { it.key == key } }.take(MAX_DOCK_APPS)
     Row(
         modifier.background(DOCK_BG).padding(horizontal = 22.dp),
         horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically,
     ) {
         DockButton(com.ahu.tlauncher.ui.components.MpvFrontIcon, "Vehicle & settings", overlay == Overlay.SETTINGS, onOpenSettings)
         pinned.forEach { app ->
-            Box(Modifier.size(46.dp).pressable { onLaunch(app) }, contentAlignment = Alignment.Center) {
-                Image(app.icon, app.label, modifier = Modifier.size(34.dp).clip(TShapes.button))
+            Box(Modifier.size(54.dp).pressable { onLaunch(app) }, contentAlignment = Alignment.Center) {
+                Image(app.icon, app.label, modifier = Modifier.size(40.dp).clip(TShapes.button))
             }
         }
         DockButton(TIcons.Music, "Music", overlay == Overlay.MUSIC, onToggleMusic)
-        DockButton(TIcons.More, "All apps", overlay == Overlay.APPS, onToggleApps)
+        DockButton(TIcons.AppGrid, "All apps", overlay == Overlay.APPS, onToggleApps)
         DockButton(TIcons.Sun, "Brightness", overlay == Overlay.BRIGHTNESS, onToggleBrightness)
         VolumeControl(state, actions, overlay == Overlay.VOLUME, onToggleVolume)
     }
@@ -80,10 +83,10 @@ fun Dock(
 @Composable
 private fun DockButton(icon: ImageVector, desc: String, active: Boolean, onClick: () -> Unit) {
     val a by animateFloatAsState(if (active) 1f else 0f, TMotion.panel(), label = "dockActive")
-    Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(46.dp).graphicsLayer { alpha = a }.clip(TShapes.surface).background(ACTIVE_BG))
-        Box(Modifier.size(46.dp).clip(TShapes.surface).pressable(onClick = onClick), contentAlignment = Alignment.Center) {
-            Icon(icon, desc, tint = DOCK_FG, modifier = Modifier.size(28.dp))
+    Box(Modifier.size(60.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(54.dp).graphicsLayer { alpha = a }.clip(TShapes.surface).background(ACTIVE_BG))
+        Box(Modifier.size(54.dp).clip(TShapes.surface).pressable(onClick = onClick), contentAlignment = Alignment.Center) {
+            Icon(icon, desc, tint = DOCK_FG, modifier = Modifier.size(32.dp))
         }
         // underline grows in from the centre
         Box(
@@ -97,15 +100,15 @@ private fun DockButton(icon: ImageVector, desc: String, active: Boolean, onClick
 @Composable
 private fun VolumeControl(state: HomeUiState, actions: HomeActions, active: Boolean, onToggle: () -> Unit) {
     val v = state.volume
-    Column(Modifier.width(56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(width = 44.dp, height = 16.dp).pressable { actions.volumeStep(true) }, contentAlignment = Alignment.Center) {
-            Icon(TIcons.ChevronUp, "Volume up", tint = DOCK_MUTED, modifier = Modifier.size(16.dp))
+    Column(Modifier.width(64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(width = 52.dp, height = 18.dp).pressable { actions.volumeStep(true) }, contentAlignment = Alignment.Center) {
+            Icon(TIcons.ChevronUp, "Volume up", tint = DOCK_MUTED, modifier = Modifier.size(18.dp))
         }
-        Box(Modifier.size(width = 44.dp, height = 28.dp).clip(TShapes.surface).background(if (active) ACTIVE_BG else Color.Transparent).pressable(onClick = onToggle), contentAlignment = Alignment.Center) {
-            Icon(if (v.muted || v.level == 0) TIcons.SpeakerOff else TIcons.SpeakerWaves, "Volume", tint = DOCK_FG, modifier = Modifier.size(24.dp))
+        Box(Modifier.size(width = 52.dp, height = 32.dp).clip(TShapes.surface).background(if (active) ACTIVE_BG else Color.Transparent).pressable(onClick = onToggle), contentAlignment = Alignment.Center) {
+            Icon(if (v.muted || v.level == 0) TIcons.SpeakerOff else TIcons.SpeakerWaves, "Volume", tint = DOCK_FG, modifier = Modifier.size(28.dp))
         }
-        Box(Modifier.size(width = 44.dp, height = 16.dp).pressable { actions.volumeStep(false) }, contentAlignment = Alignment.Center) {
-            Icon(TIcons.ChevronDown, "Volume down", tint = DOCK_MUTED, modifier = Modifier.size(16.dp))
+        Box(Modifier.size(width = 52.dp, height = 18.dp).pressable { actions.volumeStep(false) }, contentAlignment = Alignment.Center) {
+            Icon(TIcons.ChevronDown, "Volume down", tint = DOCK_MUTED, modifier = Modifier.size(18.dp))
         }
     }
 }

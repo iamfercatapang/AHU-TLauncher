@@ -64,7 +64,6 @@ data class Settings(
     /** How the head unit reports its ILL (lights-on) wire, see LightsSource.encode(). */
     val lightsSource: String = "off",
     /** Look for the phone's Android Auto head unit server on Wi-Fi. */
-    val aaDetect: Boolean = true,
     /** Fuel tank capacity in litres (2018 Avanza: 43 L), for the range estimate. */
     val tankL: Int = 43,
     /** Google is used when available (key + Play services); OpenFreeMap otherwise. */
@@ -73,10 +72,6 @@ data class Settings(
     /** Screen brightness % for day and night (sunset to sunrise); -1 = not set yet. */
     val brightDay: Int = -1,
     val brightNight: Int = -1,
-    /** Sound equalizer settings (EqMath.encode). */
-    val eq: String = "",
-    /** Package of the head unit's own EQ / DSP app, chosen once in Settings → Sound. */
-    val unitEqApp: String = "",
     /** Engine size in cc (1.3 = 1329, 1.5 = 1496); only used when the car has no MAF sensor. */
     val engineCc: Int = 1496,
     val onboardingDone: Boolean = false,
@@ -86,6 +81,8 @@ data class Settings(
     val resumeMusic: Boolean = true,
     /** When the car starts: offer to continue a trip that wasn't finished. */
     val offerTrip: Boolean = true,
+    /** When the car starts: bring the dashboard to the front, even if the head unit restored another app. */
+    val openOnStart: Boolean = true,
 )
 
 class Prefs(private val context: Context) {
@@ -108,12 +105,9 @@ class Prefs(private val context: Context) {
         val navApp = stringPreferencesKey("nav_app")
         val carSide = stringPreferencesKey("car_side")
         val lights = stringPreferencesKey("lights_source")
-        val aaDetect = booleanPreferencesKey("aa_detect")
         val mapEngine = stringPreferencesKey("map_engine")
         val mapTraffic = booleanPreferencesKey("map_traffic")
         val recents = stringPreferencesKey("recent_places")
-        val eq = stringPreferencesKey("eq")
-        val unitEqApp = stringPreferencesKey("unit_eq_app")
         val brightDay = androidx.datastore.preferences.core.intPreferencesKey("bright_day")
         val brightNight = androidx.datastore.preferences.core.intPreferencesKey("bright_night")
         val favourites = stringPreferencesKey("favourite_places")
@@ -126,6 +120,7 @@ class Prefs(private val context: Context) {
         val perfMode = stringPreferencesKey("perf_mode")
         val resumeMusic = booleanPreferencesKey("resume_music")
         val offerTrip = booleanPreferencesKey("offer_trip")
+        val openOnStart = booleanPreferencesKey("open_on_start")
         val tripPlace = stringPreferencesKey("trip_place")
         val tripStarted = androidx.datastore.preferences.core.longPreferencesKey("trip_started")
     }
@@ -152,12 +147,9 @@ class Prefs(private val context: Context) {
         navApp = enumOr(this[K.navApp], NavApp.MAPS),
         carSide = enumOr(this[K.carSide], CarSide.LEFT),
         lightsSource = this[K.lights] ?: "off",
-        aaDetect = this[K.aaDetect] ?: true,
         tankL = this[K.tankL] ?: 43,
         mapEngine = enumOr(this[K.mapEngine], MapEngine.GOOGLE),
         mapTraffic = this[K.mapTraffic] ?: true,
-        eq = this[K.eq] ?: "",
-        unitEqApp = this[K.unitEqApp] ?: "",
         brightDay = this[K.brightDay] ?: -1,
         brightNight = this[K.brightNight] ?: -1,
         engineCc = this[K.engineCc] ?: 1496,
@@ -166,6 +158,7 @@ class Prefs(private val context: Context) {
         perfMode = enumOr(this[K.perfMode], PerfMode.AUTO),
         resumeMusic = this[K.resumeMusic] ?: true,
         offerTrip = this[K.offerTrip] ?: true,
+        openOnStart = this[K.openOnStart] ?: true,
     )
 
     suspend fun setTheme(m: ThemeMode) = context.store.edit { it[K.theme] = m.name }
@@ -194,7 +187,6 @@ class Prefs(private val context: Context) {
     suspend fun setCar3d(on: Boolean) = context.store.edit { it[K.car3d] = on }
     suspend fun setCarPaint(p: CarPaint) = context.store.edit { it[K.carPaint] = p.name }
     suspend fun setLightsSource(s: String) = context.store.edit { it[K.lights] = s }
-    suspend fun setAaDetect(on: Boolean) = context.store.edit { it[K.aaDetect] = on }
     /** Recent and favourite destinations for the route search. */
     val placesStore = object : com.ahu.tlauncher.route.PlacesStore {
         override suspend fun recents() = com.ahu.tlauncher.route.RouteMath.decodePlaces(context.store.data.first()[K.recents])
@@ -202,8 +194,6 @@ class Prefs(private val context: Context) {
         override suspend fun saveRecents(list: List<com.ahu.tlauncher.route.Place>) { context.store.edit { it[K.recents] = com.ahu.tlauncher.route.RouteMath.encodePlaces(list) } }
         override suspend fun saveFavourites(list: List<com.ahu.tlauncher.route.Place>) { context.store.edit { it[K.favourites] = com.ahu.tlauncher.route.RouteMath.encodePlaces(list) } }
     }
-    suspend fun setEq(json: String) = context.store.edit { it[K.eq] = json }
-    suspend fun setUnitEqApp(pkg: String) = context.store.edit { it[K.unitEqApp] = pkg }
     suspend fun setBrightness(night: Boolean, percent: Int) = context.store.edit { if (night) it[K.brightNight] = percent else it[K.brightDay] = percent }
     suspend fun setMapEngine(e: MapEngine) = context.store.edit { it[K.mapEngine] = e.name }
     suspend fun setMapTraffic(on: Boolean) = context.store.edit { it[K.mapTraffic] = on }
@@ -219,6 +209,7 @@ class Prefs(private val context: Context) {
     suspend fun setPerfMode(m: PerfMode) = context.store.edit { it[K.perfMode] = m.name }
     suspend fun setResumeMusic(on: Boolean) = context.store.edit { it[K.resumeMusic] = on }
     suspend fun setOfferTrip(on: Boolean) = context.store.edit { it[K.offerTrip] = on }
+    suspend fun setOpenOnStart(on: Boolean) = context.store.edit { it[K.openOnStart] = on }
 
     /** The trip in progress, kept so it can be offered again after the car is switched off mid-trip. */
     suspend fun savedTrip(): com.ahu.tlauncher.system.SavedTrip? = context.store.data.first().let { p ->

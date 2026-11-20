@@ -6,6 +6,9 @@ import android.view.Choreographer
 import android.view.Surface
 import android.view.TextureView
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.exponentialDecay
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -29,7 +32,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -58,6 +63,7 @@ import com.google.android.filament.gltfio.UbershaderProvider
 import com.google.android.filament.utils.IBLPrefilterContext
 import com.google.android.filament.utils.Utils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -135,9 +141,17 @@ internal class Car3dState {
     var dragging by mutableStateOf(false)
     /** Bumped on every touch, restarting the wait before the car turns back. */
     var touches by mutableIntStateOf(0)
+    /** The car still turning after a flick. */
+    var fling: Job? = null
 
+    fun stopFling() { fling?.cancel(); fling = null }
+
+    /**
+     * The car follows the finger: dragging right turns its near side to the right (the camera circles to its left,
+     * which is +yaw in [CarFraming.eye]); dragging down tips its roof toward you.
+     */
     fun drag(dx: Float, dy: Float, viewW: Float, viewH: Float) {
-        yaw -= dx / viewW * 2 * PI.toFloat()
+        yaw += dx / viewW * 2 * PI.toFloat()
         elevation = (elevation + dy / viewH * PI.toFloat() / 2)
             .coerceIn(CarFraming.ORBIT_EL_MIN.toFloat(), CarFraming.ORBIT_EL_MAX.toFloat())
     }
@@ -169,12 +183,18 @@ internal fun Car3dLayer(
     val full = progress >= 0.999f
 
     // Back to the default view: when the panel reaches split view, or 5 s after the last touch (700 ms ease-out).
-    LaunchedEffect(progress <= 0f) { if (progress <= 0f) { car.yaw = 0f; car.elevation = 0f } }
+    LaunchedEffect(progress <= 0f) { if (progress <= 0f) { car.stopFling(); car.yaw = 0f; car.elevation = 0f } }
     LaunchedEffect(car.touches, car.dragging, full) {
         if (car.dragging || !full || (car.yaw == 0f && car.elevation == 0f)) return@LaunchedEffect
         delay(CarFraming.RETURN_DELAY_MS)
         returnToView(car)
     }
+
+    // Lamps fade on and off, and a new paint blends in (instant in low-performance mode).
+    val lampLevel by animateFloatAsState(
+        if (lightsOn) 1f else 0f, if (lowPerf) snap<Float>() else tween<Float>(CarFraming.LAMP_FADE_MS, easing = com.ahu.tlauncher.ui.theme.TMotion.EaseOutCubic), label = "lamps",
+    )
+    val paintLook = animatedPaint(paint, lowPerf)
 
     // Frames drawn while the view was still (almost) invisible may not stay on screen: draw again once it shows.
     LaunchedEffect(car.ready) { if (car.ready) { delay(600); holder[0]?.refresh() } }
@@ -198,7 +218,7 @@ internal fun Car3dLayer(
             onRelease = { _: TextureView -> holder[0]?.destroy(); holder[0] = null },
             update = {
                 holder[0]?.update(
-                    Car3dRenderer.Frame(paint, dark, lowPerf, lightsOn, progress, car.yaw.toDouble(), car.elevation.toDouble(), visibleWidthPx),
+                    Car3dRenderer.Frame(paintLook, dark, lowPerf, lightsOn, lampLevel, progress, car.yaw.toDouble(), car.elevation.toDouble(), visibleWidthPx),
                 )
             },
         )
@@ -212,11 +232,22 @@ internal fun Car3dLayer(
                     .offset { IntOffset((b[0] - pad).roundToInt(), (b[1] - pad).roundToInt()) }
                     .size(with(density) { (b[2] - b[0] + 2 * pad).toDp() }, with(density) { (b[3] - b[1] + 2 * pad).toDp() })
                     .pointerInput(Unit) {
+                        // The touch area moves with the car, so speed is measured on the summed drag, not on positions.
+                        val tracker = VelocityTracker()
+                        var x = 0f
                         detectDragGestures(
-                            onDragStart = { car.dragging = true },
-                            onDragEnd = { car.dragging = false; car.touches++ },
+                            onDragStart = { car.stopFling(); tracker.resetTracking(); x = 0f; car.dragging = true },
+                            onDragEnd = {
+                                car.dragging = false; car.touches++
+                                val speed = CarFraming.flingRadPerSec(tracker.calculateVelocity().x, viewWf)
+                                car.fling = scope.launch { flingYaw(car, speed) }
+                            },
                             onDragCancel = { car.dragging = false; car.touches++ },
-                        ) { change, d -> change.consume(); car.drag(d.x, d.y, viewWf, viewH.toFloat()) }
+                        ) { change, d ->
+                            change.consume()
+                            x += d.x; tracker.addPosition(change.uptimeMillis, Offset(x, 0f))
+                            car.drag(d.x, d.y, viewWf, viewH.toFloat())
+                        }
                     }
                     .pointerInput(Unit) { detectTapGestures(onDoubleTap = { scope.launch { returnToView(car) } }) },
             )
@@ -224,8 +255,32 @@ internal fun Car3dLayer(
     }
 }
 
+/** Keeps the car turning after a flick, slowing down like a turntable. */
+private suspend fun flingYaw(car: Car3dState, radPerSec: Float) {
+    if (abs(radPerSec) < CarFraming.FLING_MIN_RAD_S) return
+    Animatable(car.yaw).animateDecay(radPerSec, exponentialDecay(frictionMultiplier = CarFraming.FLING_FRICTION)) { car.yaw = value }
+}
+
+/** The paint shown: blends from the previous one when it changes (where it had got to, if still blending). */
+@Composable
+private fun animatedPaint(paint: CarPaint, lowPerf: Boolean): PaintLook {
+    val target = remember(paint) { PaintLook.of(paint) }
+    var from by remember { mutableStateOf(target) }
+    var to by remember { mutableStateOf(target) }
+    val t = remember { Animatable(1f) }
+    LaunchedEffect(target) {
+        if (target == to) return@LaunchedEffect
+        from = from.lerp(to, t.value); to = target
+        if (lowPerf) { t.snapTo(1f); return@LaunchedEffect }
+        t.snapTo(0f)
+        t.animateTo(1f, tween(CarFraming.PAINT_FADE_MS, easing = com.ahu.tlauncher.ui.theme.TMotion.EaseOutCubic))
+    }
+    return from.lerp(to, t.value)
+}
+
 /** Turns the car back to its view: yaw the short way round, 700 ms ease-out cubic (the prototype's return). */
 private suspend fun returnToView(car: Car3dState) {
+    car.stopFling()
     val startYaw = atan2(sin(car.yaw.toDouble()), cos(car.yaw.toDouble())).toFloat()
     val startEl = car.elevation
     val anim = Animatable(0f)
@@ -245,10 +300,13 @@ internal class Car3dRenderer(
 ) : Choreographer.FrameCallback {
     /** Everything a frame depends on. */
     data class Frame(
-        val paint: CarPaint,
+        val paint: PaintLook,
         val dark: Boolean,
         val lowPerf: Boolean,
+        /** Headlights on: the beams show on the night floor. */
         val lightsOn: Boolean,
+        /** How lit the lamps are, 0–1 (fades with [lightsOn]). */
+        val lampLevel: Float,
         val progress: Float,
         val yaw: Double,
         val elevation: Double,
@@ -280,12 +338,12 @@ internal class Car3dRenderer(
     private var width = 0
     private var height = 0
     private var frame: Frame? = null
-    private var paintShown: CarPaint? = null
+    private var paintShown: PaintLook? = null
     private var mirrorShown = true
     private var darkShown: Boolean? = null
     private var lowPerfShown: Boolean? = null
     private var beamsShown = true // every part starts in the scene
-    private var lampsLit: Boolean? = null
+    private var lampsShown: Float? = null
     private var framesLeft = 0
     private var scheduled = false
     private var shown = false
@@ -406,7 +464,7 @@ internal class Car3dRenderer(
             if (wantBeams) scene.addEntities(beams) else scene.removeEntities(beams)
             beamsShown = wantBeams
         }
-        if (f.lightsOn != lampsLit) { applyLamps(f.lightsOn); lampsLit = f.lightsOn }
+        if (f.lampLevel != lampsShown) { applyLamps(f.lampLevel); lampsShown = f.lampLevel }
         // The reflection only shows in full screen (the prototype fades it in with the panel).
         val wantMirror = f.progress > 0.15f
         if (wantMirror != mirrorShown) {
@@ -414,20 +472,27 @@ internal class Car3dRenderer(
             mirrorShown = wantMirror
         }
         if (f.lowPerf != lowPerfShown) {
-            // Low-performance mode: no anti-aliasing or glow.
+            // Low-performance mode: no anti-aliasing, glow or contact shadows. Frames are only drawn when something
+            // changes, so the extra work only counts while the car moves.
+            val q = if (f.lowPerf) View.QualityLevel.LOW else View.QualityLevel.HIGH
             view.multiSampleAntiAliasingOptions = view.multiSampleAntiAliasingOptions.apply { enabled = !f.lowPerf; sampleCount = 4 }
             view.bloomOptions = view.bloomOptions.apply {
-                enabled = !f.lowPerf; strength = 0.12f; threshold = true; levels = 5; resolution = 360
+                enabled = !f.lowPerf; strength = 0.12f; threshold = true; levels = 5; resolution = 512; quality = q
             }
+            // Soft contact shadows (ambient occlusion): wheel arches, panel gaps, under the bumpers and mirrors.
+            view.ambientOcclusionOptions = view.ambientOcclusionOptions.apply {
+                enabled = !f.lowPerf; radius = 0.3f; intensity = 1f; power = 1.2f; resolution = 0.5f
+                quality = View.QualityLevel.MEDIUM; lowPassFilter = View.QualityLevel.MEDIUM; upsampling = View.QualityLevel.HIGH
+            }
+            // 16-bit colour while rendering: no banding in the paint's gradients and the floor's fade.
+            view.renderQuality = view.renderQuality.apply { hdrColorBuffer = if (f.lowPerf) View.QualityLevel.MEDIUM else View.QualityLevel.HIGH }
             lowPerfShown = f.lowPerf
         }
     }
 
-    private fun applyPaint(p: CarPaint) {
+    private fun applyPaint(p: PaintLook) {
         val mi = asset.instance.materialInstances.firstOrNull { it.name == "paint" } ?: run { Log.w(TAG, "No paint material in the model"); return }
-        val r = CarFraming.srgbToLinear(((p.rgb shr 16) and 0xFF).toInt())
-        val g = CarFraming.srgbToLinear(((p.rgb shr 8) and 0xFF).toInt())
-        val b = CarFraming.srgbToLinear((p.rgb and 0xFF).toInt())
+        val r = p.r; val g = p.g; val b = p.b
         val m = mi.material
         if (m.hasParameter("baseColorFactor")) mi.setParameter("baseColorFactor", r, g, b, 1f)
         if (m.hasParameter("metallicFactor")) mi.setParameter("metallicFactor", p.metallic)
@@ -437,14 +502,14 @@ internal class Car3dRenderer(
     }
 
     /**
-     * Lamps lit or not: headlights warm white, fog lights yellow (#FFC400), tail lights red. Emissive light
-     * (the glow on the brightest parts comes from the bloom).
+     * How lit the lamps are (0–1): headlights warm white, fog lights yellow (#FFC400), tail lights red. Emissive
+     * light (the glow on the brightest parts comes from the bloom).
      */
-    private fun applyLamps(on: Boolean) {
+    private fun applyLamps(level: Float) {
         val all = asset.instance.materialInstances
         for ((name, rgb, strength) in LAMPS) {
             val mi = all.firstOrNull { it.name == name } ?: continue
-            val k = if (on) strength else 0f
+            val k = strength * level
             if (mi.material.hasParameter("emissiveFactor")) mi.setParameter("emissiveFactor", rgb[0] * k, rgb[1] * k, rgb[2] * k)
             if (mi.material.hasParameter("emissiveStrength")) mi.setParameter("emissiveStrength", 1f)
         }

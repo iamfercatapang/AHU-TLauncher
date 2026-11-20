@@ -41,3 +41,21 @@ class DriveStartTest {
     @Test fun navAppGoneAtDestinationForgets() = assertTrue(DriveStartRules.forgetOnEnd(byUser = false, metresToDestination = 120.0))
     @Test fun navAppGoneNoPositionKeeps() = assertFalse(DriveStartRules.forgetOnEnd(byUser = false, metresToDestination = null))
 }
+
+class BringToFrontTest {
+    private val min = 60_000L
+
+    @Test fun processStartRightAfterBootIsCarStart() = assertTrue(DriveStartRules.isCarStart(start = 1, sinceBootMs = 1 * min))
+    @Test fun processRestartLaterIsNot() = assertFalse(DriveStartRules.isCarStart(start = 1, sinceBootMs = 60 * min))
+    @Test fun wakeIsCarStart() = assertTrue(DriveStartRules.isCarStart(start = 2, sinceBootMs = 60 * min))
+
+    private fun front(enabled: Boolean = true, carStart: Boolean = true, visible: Boolean = false, inCall: Boolean = false, allowed: Boolean = true) =
+        DriveStartRules.shouldBringToFront(enabled, carStart, visible, inCall, allowed)
+
+    @Test fun bringsToFront() = assertTrue(front())
+    @Test fun notWhenOff() = assertFalse(front(enabled = false))
+    @Test fun notWhenNotACarStart() = assertFalse(front(carStart = false))
+    @Test fun notWhenAlreadyShowing() = assertFalse(front(visible = true))
+    @Test fun notOverACall() = assertFalse(front(inCall = true))
+    @Test fun notWithoutPermission() = assertFalse(front(allowed = false))
+}

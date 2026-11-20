@@ -25,6 +25,10 @@ object DriveStartRules {
     const val TRIP_MAX_AGE_MS = 12 * 60 * 60_000L
     /** Head units often restore their own audio (radio, Bluetooth) at start; wait this long before resuming music. */
     const val MUSIC_WAIT_MS = 8_000L
+    /** Head units restore their last app (or their own launcher) right after starting; come to the front after that. */
+    const val FRONT_WAIT_MS = 2_500L
+    /** The process starting this soon after boot is a car start; later it's just the app being restarted. */
+    const val BOOT_WINDOW_MS = 5 * 60_000L
 
     /** Screen came back on after being off since [offAtElapsed] (elapsedRealtime). */
     fun afterScreenOn(offAtElapsed: Long?, nowElapsed: Long): Boolean =
@@ -35,6 +39,13 @@ object DriveStartRules {
      * Head units that "power off" with the ignition usually just sleep, so this is the usual start signal.
      */
     fun slept(elapsedDelta: Long, uptimeDelta: Long): Boolean = elapsedDelta - uptimeDelta >= MIN_OFF_MS
+
+    /** Is this start a car start? The first one is the process starting, which only counts right after boot. */
+    fun isCarStart(start: Int, sinceBootMs: Long): Boolean = start > 1 || sinceBootMs < BOOT_WINDOW_MS
+
+    /** Bring the dashboard to the front when the car starts? Not over a call, and only if Android allows it. */
+    fun shouldBringToFront(enabled: Boolean, carStart: Boolean, visible: Boolean, inCall: Boolean, canStartFromBackground: Boolean): Boolean =
+        enabled && carStart && !visible && !inCall && canStartFromBackground
 
     fun shouldResumeMusic(enabled: Boolean, wasPlaying: Boolean, accessGranted: Boolean, somethingPlaying: Boolean, inCall: Boolean): Boolean =
         enabled && wasPlaying && accessGranted && !somethingPlaying && !inCall
@@ -56,7 +67,7 @@ object DriveStartRules {
 
 /**
  * Counts "car starts": the app starting (cold boot), the screen coming back on after being off for a while, or the
- * unit waking from deep sleep. [starts] begins at 1 for the process start; consumers act once per new value.
+ * unit waking from deep sleep (noticed within about 5 s). [starts] begins at 1 for the process start; consumers act once per new value.
  */
 class DriveStartDetector(
     context: Context,
@@ -88,7 +99,7 @@ class DriveStartDetector(
         scope.launch {
             var e = SystemClock.elapsedRealtime(); var u = SystemClock.uptimeMillis()
             while (true) {
-                delay(30_000)
+                delay(5_000)
                 val e2 = SystemClock.elapsedRealtime(); val u2 = SystemClock.uptimeMillis()
                 // A screen-on after a long screen-off already counted this start.
                 if (DriveStartRules.slept(e2 - e, u2 - u) && screenOffAt == null && !recentlyBumped(e2)) bump()

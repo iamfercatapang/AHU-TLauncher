@@ -131,17 +131,16 @@ class ScreenshotTest {
     @Test fun activeCall() = shot("call_active", dark = false) {
         HomeScreen(state().copy(call = com.ahu.tlauncher.ui.home.CallUi(ringing = false, caller = "+63 917 123 4567", startedAtMs = null, muted = true, canSwitchAudio = true)), NoopActions, initialMapVisible = false)
     }
-    @Test fun headlightsAndAa() = shot("headlights_android_auto") {
+    @Test fun headlights() = shot("headlights") {
         HomeScreen(
             state().withLive(obd = ObdState(ObdStatus.DISCONNECTED), gpsSpeedKmh = 38).copy(
                 lights = com.ahu.tlauncher.system.LightsState(on = true),
-                aa = com.ahu.tlauncher.system.AaState.Ready("192.168.43.1"), aaReceiver = "Headunit Reloaded",
             ),
             NoopActions,
         )
     }
-    @Test fun settingsAndroidAuto() = shot("settings_connections") {
-        HomeScreen(state().copy(aa = com.ahu.tlauncher.system.AaState.Searching("192.168.43.1")), NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.CONNECTIONS)
+    @Test fun settingsPermissions() = shot("settings_permissions") {
+        HomeScreen(state(), NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.PERMISSIONS)
     }
     @Test fun lowFuel() = shot("fuel_low", dark = false) {
         val st = state()
@@ -222,11 +221,6 @@ class ScreenshotTest {
             initialMenu = apps[2].copy(removable = true),
             modifier = androidx.compose.ui.Modifier.size(760.dp, 430.dp),
         )
-    }
-    @Test fun soundSettings() = shot("settings_sound") {
-        val eq = com.ahu.tlauncher.system.EqMath.encode(com.ahu.tlauncher.system.EqSettings(true, "Rock",
-            com.ahu.tlauncher.system.EqMath.curve(com.ahu.tlauncher.system.EqMath.PRESETS.getValue("Rock"), listOf(60, 230, 910, 3600, 14000)), 30, 0))
-        HomeScreen(state().copy(settings = state().settings.copy(eq = eq)), NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.SOUND)
     }
     private fun queued(): HomeUiState {
         val st = state()

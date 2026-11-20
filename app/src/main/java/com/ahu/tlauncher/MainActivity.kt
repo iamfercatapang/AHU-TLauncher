@@ -95,7 +95,6 @@ class MainActivity : ComponentActivity(), HomeActions {
     private var brightnessNow by mutableStateOf(50)
     private var brightnessIsNight = false
     private var brightSaveJob: kotlinx.coroutines.Job? = null
-    private var aaDismissedOn by mutableStateOf<String?>(null)
     private val roleRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { resumeTick++ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -124,13 +123,13 @@ class MainActivity : ComponentActivity(), HomeActions {
 
     override fun onResume() {
         super.onResume()
+        app.dashboardVisible = true
         hideSystemBars()
         NotificationHub.refresh(this)
         app.location.start()
         app.location.setFast(true)
         app.updater.checkIfStale()
         app.lights.refresh()
-        app.androidAuto.setActive(true)
         resumeTick++
         // Back from the "Display over other apps" page: carry on with the trip.
         if (pendingRouteStart) { pendingRouteStart = false; launchRoute() }
@@ -138,8 +137,8 @@ class MainActivity : ComponentActivity(), HomeActions {
 
     override fun onPause() {
         super.onPause()
+        app.dashboardVisible = false
         app.location.setFast(false)
-        app.androidAuto.setActive(false)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -175,7 +174,6 @@ class MainActivity : ComponentActivity(), HomeActions {
         val diag by app.obd.diag.collectAsStateWithLifecycle()
         val lights by app.lights.state.collectAsStateWithLifecycle()
         val notifCall by NotificationHub.call.collectAsStateWithLifecycle()
-        val aa by app.androidAuto.state.collectAsStateWithLifecycle()
         val route by app.routes.route.collectAsStateWithLifecycle()
         val search by app.routes.search.collectAsStateWithLifecycle()
         val recents by app.routes.recents.collectAsStateWithLifecycle()
@@ -184,7 +182,6 @@ class MainActivity : ComponentActivity(), HomeActions {
         val picking by app.routes.picking.collectAsStateWithLifecycle()
         val etaMin by app.routes.etaMin.collectAsStateWithLifecycle()
         val lastMedia by app.lastMedia.last.collectAsStateWithLifecycle()
-        val eqCaps by app.soundEq.caps.collectAsStateWithLifecycle()
         val resumingMedia by app.lastMedia.resuming.collectAsStateWithLifecycle()
         val inbox by NotificationHub.inbox.collectAsStateWithLifecycle()
         val tripOffer by app.resumeOnStart.offer.collectAsStateWithLifecycle()
@@ -266,7 +263,6 @@ class MainActivity : ComponentActivity(), HomeActions {
             muted = callMuted,
             canSwitchAudio = n?.info?.actions?.containsKey(com.ahu.tlauncher.notify.CallAction.AUDIO_SWITCH) == true,
         )
-        val aaReceiver = remember(tick) { app.androidAuto.receiverPackage()?.let { app.androidAuto.receiverLabel(it) } }
         val callPerm = remember(tick) { app.calls.hasPermissions() }
         val returnPerm = remember(tick) { canReturnToFront() }
         // Brightness: one level for day, one for night (sunset to sunrise, same as the auto dark theme).
@@ -292,10 +288,7 @@ class MainActivity : ComponentActivity(), HomeActions {
             route = route, search = search, freeNav = freeMap, cell = cell, inbox = inbox, recents = recents, favourites = favourites, pin = pin, picking = picking, etaMin = etaMin,
             lights = lights,
             call = call, callPermission = callPerm, returnPermission = returnPerm,
-            eqCaps = eqCaps,
             brightness = brightnessNow, brightnessNight = night, brightnessAllowed = brightAllowed, callSource = remember(notifCall) { NotificationHub.lastCallPackage },
-            aa = aa, aaReceiver = aaReceiver,
-            aaDismissed = (aa as? com.ahu.tlauncher.system.AaState.Ready)?.gateway?.let { it == aaDismissedOn } == true,
             lowPerf = lowPerf, deviceSpec = spec,
             tripOffer = tripOffer, offlineAreas = offlineAreas,
         )
@@ -355,14 +348,6 @@ class MainActivity : ComponentActivity(), HomeActions {
         if (!this.app.apps.launch(app)) toastMissing(app.label)
     }
 
-    private var eqSaveJob: kotlinx.coroutines.Job? = null
-    /** Applied right away; saved once the slider settles. */
-    override fun setEq(s: com.ahu.tlauncher.system.EqSettings) {
-        app.soundEq.apply(s)
-        eqSaveJob?.cancel()
-        eqSaveJob = lifecycleScope.launch { delay(400); app.prefs.setEq(com.ahu.tlauncher.system.EqMath.encode(s)) }
-    }
-    override fun chooseUnitEq(pkg: String) { lifecycleScope.launch { app.prefs.setUnitEqApp(pkg) } }
 
     override fun setBrightness(percent: Int) {
         if (!app.brightness.canWrite()) { requestBrightnessPermission(); return }
@@ -393,7 +378,7 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun togglePin(app: AppEntry) {
         lifecycleScope.launch {
             val cur = this@MainActivity.app.prefs.settings.first().pinnedApps
-            this@MainActivity.app.prefs.setPinned(if (app.key in cur) cur - app.key else (cur + app.key).takeLast(6))
+            this@MainActivity.app.prefs.setPinned(if (app.key in cur) cur - app.key else (cur + app.key).takeLast(com.ahu.tlauncher.ui.home.MAX_DOCK_APPS))
         }
     }
 
@@ -686,19 +671,6 @@ class MainActivity : ComponentActivity(), HomeActions {
         phonePermission.launch(arrayOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.ANSWER_PHONE_CALLS))
     }
 
-    // ---- Android Auto (Headunit Reloaded)
-    override fun openAndroidAuto() {
-        val pkg = app.androidAuto.receiverPackage() ?: return getHeadunitReloaded()
-        if (app.apps.launchPackage(pkg)) app.androidAuto.reset()
-    }
-    override fun dismissAndroidAuto() { aaDismissedOn = (app.androidAuto.state.value as? com.ahu.tlauncher.system.AaState.Ready)?.gateway }
-    override fun setAaDetect(on: Boolean) { lifecycleScope.launch { app.prefs.setAaDetect(on) } }
-    override fun getHeadunitReloaded() {
-        if (!startSafely(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=gb.xxy.hr")))) {
-            startSafely(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=gb.xxy.hr")))
-        }
-    }
-
     override fun setObdExtended(on: Boolean) = app.obd.setExtended(on)
     override fun readObdCodes() = app.obd.readCodes()
     override fun clearObdCodes() = app.obd.clearCodes()
@@ -713,6 +685,7 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun setMapTraffic(on: Boolean) { lifecycleScope.launch { app.prefs.setMapTraffic(on) } }
     override fun setResumeMusic(on: Boolean) { lifecycleScope.launch { app.prefs.setResumeMusic(on) } }
     override fun setOfferTrip(on: Boolean) { lifecycleScope.launch { app.prefs.setOfferTrip(on) } }
+    override fun setOpenOnStart(on: Boolean) { lifecycleScope.launch { app.prefs.setOpenOnStart(on) } }
     override fun loadOfflineAreas() = app.offlineMaps.load()
     override fun saveOfflineArea(name: String, lat: Double, lon: Double, radiusKm: Int) = app.offlineMaps.save(name, lat, lon, radiusKm)
     override fun updateOfflineArea(id: Long) = app.offlineMaps.update(id)

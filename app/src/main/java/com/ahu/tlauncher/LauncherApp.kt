@@ -21,16 +21,16 @@ class LauncherApp : Application() {
     lateinit var weather: com.ahu.tlauncher.system.WeatherRepository; private set
     lateinit var lights: com.ahu.tlauncher.system.LightsMonitor; private set
     lateinit var calls: com.ahu.tlauncher.system.CallControl; private set
-    lateinit var androidAuto: com.ahu.tlauncher.system.AndroidAutoDetector; private set
     lateinit var fuel: com.ahu.tlauncher.obd.FuelTracker; private set
     @Volatile private var fuelSettings = com.ahu.tlauncher.data.Settings()
     lateinit var routes: com.ahu.tlauncher.route.RouteManager; private set
     lateinit var voice: com.ahu.tlauncher.system.Voice; private set
     /** Free map in use (chosen in Settings, or Google not available): free routing + TLauncher's own guidance. */
     @Volatile var freeMap = true
+    /** The dashboard (MainActivity) is in the foreground. */
+    @Volatile var dashboardVisible = false
     lateinit var lastMedia: com.ahu.tlauncher.notify.LastMedia; private set
     lateinit var brightness: com.ahu.tlauncher.system.BrightnessControl; private set
-    lateinit var soundEq: com.ahu.tlauncher.system.SoundEq; private set
     lateinit var updater: com.ahu.tlauncher.update.Updater; private set
     lateinit var resumeOnStart: com.ahu.tlauncher.system.ResumeOnStart; private set
     lateinit var offlineMaps: com.ahu.tlauncher.map.OfflineMaps; private set
@@ -46,7 +46,6 @@ class LauncherApp : Application() {
         lights = com.ahu.tlauncher.system.LightsMonitor(this)
         calls = com.ahu.tlauncher.system.CallControl(this)
         brightness = com.ahu.tlauncher.system.BrightnessControl(this)
-        soundEq = com.ahu.tlauncher.system.SoundEq(this)
         lastMedia = com.ahu.tlauncher.notify.LastMedia(this, appScope)
         voice = com.ahu.tlauncher.system.Voice(this)
         routes = com.ahu.tlauncher.route.RouteManager(
@@ -57,17 +56,13 @@ class LauncherApp : Application() {
             onTripStarted = { p -> appScope.launch { prefs.saveTrip(p, System.currentTimeMillis()) } },
             onTripFinished = { appScope.launch { prefs.clearTrip() } },
         )
-        androidAuto = com.ahu.tlauncher.system.AndroidAutoDetector(this, appScope)
         fuel = com.ahu.tlauncher.obd.FuelTracker(
             appScope, obd.state, tankL = { fuelSettings.tankL }, displacementL = { fuelSettings.engineCc / 1000.0 }, store = prefs.fuelStore,
         )
         appScope.launch {
             prefs.settings.collect { s ->
                 fuelSettings = s
-                // Equalizer is restored from saved settings at start and follows every change.
-                soundEq.apply(com.ahu.tlauncher.system.EqMath.decode(s.eq))
                 lights.setSource(com.ahu.tlauncher.system.LightsSource.decode(s.lightsSource))
-                androidAuto.enabled = s.aaDetect
             }
         }
         updater = com.ahu.tlauncher.update.Updater(this, appScope).also { it.startPeriodicChecks() }

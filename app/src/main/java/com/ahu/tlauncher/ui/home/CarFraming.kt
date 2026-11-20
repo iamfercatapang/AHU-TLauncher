@@ -16,6 +16,25 @@ import kotlin.math.tan
  * The model (assets/models/avanza.glb) is 4.7 m long like the prototype's car: wheels on the floor
  * (y = 0), centred on x / z, front facing +Z. The prototype's car faces −Z, so its x and z are mirrored here.
  */
+/** A paint as the renderer applies it: linear colour, metallic, roughness. Blends smoothly between two paints. */
+internal data class PaintLook(val r: Float, val g: Float, val b: Float, val metallic: Float, val roughness: Float) {
+    fun lerp(to: PaintLook, t: Float): PaintLook {
+        val k = t.coerceIn(0f, 1f)
+        fun mix(a: Float, b: Float) = a + (b - a) * k
+        return PaintLook(mix(r, to.r), mix(g, to.g), mix(b, to.b), mix(metallic, to.metallic), mix(roughness, to.roughness))
+    }
+
+    companion object {
+        fun of(p: com.ahu.tlauncher.data.CarPaint): PaintLook {
+            val c = p.rgb.toInt()
+            return PaintLook(
+                CarFraming.srgbToLinear((c shr 16) and 0xFF), CarFraming.srgbToLinear((c shr 8) and 0xFF), CarFraming.srgbToLinear(c and 0xFF),
+                p.metallic, p.roughness,
+            )
+        }
+    }
+}
+
 internal object CarFraming {
     /**
      * The car's outline in metres (x, y, z triples): its outermost vertices in 160 directions, taken from the
@@ -75,6 +94,20 @@ internal object CarFraming {
     /** After the last touch, the car turns back to its view after this long, over [RETURN_MS]. */
     const val RETURN_DELAY_MS = 5_000L
     const val RETURN_MS = 700
+
+    /** Lamps fade on and off over this long; a new paint blends in over [PAINT_FADE_MS]. */
+    const val LAMP_FADE_MS = 450
+    const val PAINT_FADE_MS = 600
+
+    /** After a flick the car keeps turning and slows down; higher friction stops it sooner. */
+    const val FLING_FRICTION = 2f
+    /** Slowest flick that still spins on, and the fastest spin (rad/s). */
+    const val FLING_MIN_RAD_S = 0.3f
+    const val FLING_MAX_RAD_S = 10f
+
+    /** Horizontal finger speed (px/s) as a turn speed (rad/s): a drag across the whole view is a full turn. */
+    fun flingRadPerSec(vxPxPerS: Float, viewW: Float): Float =
+        if (viewW <= 0f) 0f else (vxPxPerS / viewW * 2 * PI.toFloat()).coerceIn(-FLING_MAX_RAD_S, FLING_MAX_RAD_S)
 
     const val NEAR = 0.1
     const val FAR = 100.0

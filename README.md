@@ -24,7 +24,7 @@ These screenshots are rendered offline, so they show a placeholder street grid a
 - **Navigation cards in the Tesla UI prototype's style**, the same on the Google map and on OpenFreeMap: a floating *Where to?* card (Home / Work with drive times, favourites, recent trips, live results and a "No places found" state), a *Routes* card with up to three route choices (tap one to pick it; the others show grey on the map), arrival time and range at arrival, then a next-turn card at the top and a trip card at the bottom (time, distance, arrival, **End navigation**, **Change destination**). The car is a red arrow on both maps, and the map has a scale bar. Day theme uses light cards.
 - **Drop a pin**: long-press anywhere on the map (Google or OpenFreeMap) to drop a pin. A card shows its address and how far away it is, with **Directions**, ★ favourite and ✕. Directions opens the usual route preview to that exact spot. Pins can't be dropped while a route is showing.
 - **Offline maps**: *Settings → Navigation → Offline maps* saves the free map (OpenFreeMap) within 10–50 km of where the car is, or of a dropped pin, so it still shows with no data connection. Each area is up to 50 MB, within OpenFreeMap's rules for offline use. Areas update weekly on Wi-Fi that isn't a phone hotspot, or when you press **Update**. Google Maps can't be saved this way.
-- **When the car starts**: music in YouTube Music or Spotify starts again if it was playing when you switched off. If you switched off before arriving, the map shows **Continue to …?**, and **Continue** routes there again. Turn these off in *Settings → Sound* (music) and *Settings → Navigation* (trip). A start means the head unit booting, or waking after being off for 2 minutes or more.
+- **When the car starts**: the dashboard comes to the front (even if the head unit reopened another app; needs *Return to dashboard* allowed), and music in YouTube Music or Spotify starts again if it was playing when you switched off. If you switched off before arriving, the map shows **Continue to …?**, and **Continue** routes there again. Turn these off in *Settings → Car* (dashboard, music) and *Settings → Navigation* (trip). A start means the head unit booting, or waking after being off for 2 minutes or more.
 - **Automatic day and night themes**, switched by sunrise and sunset at your location. You can also force light or dark.
 - **Volume control** in the dock.
 - **Light on slow head units**: engine and GPS readings only redraw the parts of the screen that show them, and nothing updates while another app is in front. *Settings → Display → Performance* has a low-performance mode for slow units. It turns off the car turn, panel sweep and counting numbers, sends engine data to the screen twice a second, and caps the map at 30 fps with no tilt. **Auto** (the default) turns it on for units with under ~2.5 GB of RAM or fewer than 4 cores.
@@ -32,10 +32,10 @@ These screenshots are rendered offline, so they show a placeholder street grid a
 ## Install on the head unit
 1. On the head unit's browser, open **https://github.com/iamfercatapang/AHU-TLauncher/releases/latest/download/TLauncher.apk**. You can also find it on the [Releases page](https://github.com/iamfercatapang/AHU-TLauncher/releases/latest). Each change to `main` updates this file automatically.
 2. Copy it to the head unit with a USB stick, or download it there, and open it. Allow installing from unknown sources if asked.
-3. Press **Home** and choose **TLauncher → Always**. You can also go to *Settings → Connections → Default home app*.
+3. Press **Home** and choose **TLauncher → Always**. You can also go to *Settings → Permissions → Default home app*.
 4. Grant the permissions:
    - **Location**: for the map and the automatic day/night theme.
-   - **Notification access** (*Settings → Connections*): needed for the music card and the Maps/Waze turn card. Nothing leaves the device.
+   - **Notification access** (*Settings → Permissions*): needed for the music card and the Maps/Waze turn card. Nothing leaves the device.
 5. Optional: replace the car photos in *Settings → Display → Car images*.
 
 ## Updates
