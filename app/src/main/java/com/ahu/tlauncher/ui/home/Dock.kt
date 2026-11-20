@@ -41,6 +41,9 @@ private val DOCK_MUTED = Color.White.copy(alpha = 0.6f)
 private val ACTIVE_BG = Color(0x12C5D8EE)
 private val ACTIVE_LINE = Color(0xFFB9CBDD)
 
+/** Pinned apps shown in the dock (it fits nine at 1024 dp wide with the other buttons). */
+const val MAX_DOCK_APPS = 9
+
 /**
  * Laid out like the prototype's control bar: car on the left, then (where climate sits there) your
  * pinned apps, music, "…" for all apps, brightness, and a vertical volume control on the right.
@@ -58,7 +61,7 @@ fun Dock(
     onToggleBrightness: () -> Unit = {},
     onToggleVolume: () -> Unit = {},
 ) {
-    val pinned = state.settings.pinnedApps.mapNotNull { key -> state.apps.firstOrNull { it.key == key } }.take(6)
+    val pinned = state.settings.pinnedApps.mapNotNull { key -> state.apps.firstOrNull { it.key == key } }.take(MAX_DOCK_APPS)
     Row(
         modifier.background(DOCK_BG).padding(horizontal = 22.dp),
         horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically,
@@ -70,7 +73,7 @@ fun Dock(
             }
         }
         DockButton(TIcons.Music, "Music", overlay == Overlay.MUSIC, onToggleMusic)
-        DockButton(TIcons.More, "All apps", overlay == Overlay.APPS, onToggleApps)
+        DockButton(TIcons.AppGrid, "All apps", overlay == Overlay.APPS, onToggleApps)
         DockButton(TIcons.Sun, "Brightness", overlay == Overlay.BRIGHTNESS, onToggleBrightness)
         VolumeControl(state, actions, overlay == Overlay.VOLUME, onToggleVolume)
     }

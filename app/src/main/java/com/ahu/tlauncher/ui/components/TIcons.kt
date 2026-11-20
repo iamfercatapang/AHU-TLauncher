@@ -33,10 +33,9 @@ object TIcons {
     } }
 
     /** "More" / all apps: rounded square with three dots. */
-    val More by lazy { icon("More") {
-        line { moveTo(6f, 4f); horizontalLineTo(18f); arcTo(2f, 2f, 0f, false, true, 20f, 6f); verticalLineTo(18f); arcTo(2f, 2f, 0f, false, true, 18f, 20f)
-            horizontalLineTo(6f); arcTo(2f, 2f, 0f, false, true, 4f, 18f); verticalLineTo(6f); arcTo(2f, 2f, 0f, false, true, 6f, 4f); close() }
-        fill { circle(8f, 12f, 1.2f); circle(12f, 12f, 1.2f); circle(16f, 12f, 1.2f) }
+    /** App drawer: a 3 × 3 grid of dots, the usual sign for "all apps", drawn as plainly as the other icons. */
+    val AppGrid by lazy { icon("AppGrid") {
+        fill { for (y in listOf(5.5f, 12f, 18.5f)) for (x in listOf(5.5f, 12f, 18.5f)) circle(x, y, 1.9f) }
     } }
 
     val Speaker by lazy { icon("Speaker") {

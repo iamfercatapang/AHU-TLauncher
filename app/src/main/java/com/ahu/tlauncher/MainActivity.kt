@@ -378,7 +378,7 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun togglePin(app: AppEntry) {
         lifecycleScope.launch {
             val cur = this@MainActivity.app.prefs.settings.first().pinnedApps
-            this@MainActivity.app.prefs.setPinned(if (app.key in cur) cur - app.key else (cur + app.key).takeLast(6))
+            this@MainActivity.app.prefs.setPinned(if (app.key in cur) cur - app.key else (cur + app.key).takeLast(com.ahu.tlauncher.ui.home.MAX_DOCK_APPS))
         }
     }
 
