@@ -108,6 +108,17 @@ data class HomeUiState(
     val tripOffer: com.ahu.tlauncher.system.SavedTrip? = null,
     /** Saved offline map areas (free map). */
     val offlineAreas: List<com.ahu.tlauncher.map.OfflineArea> = emptyList(),
+    /** Trip log (oldest first), all distance ever logged (km), and the drive under way (km so far). */
+    val trips: List<com.ahu.tlauncher.system.Trip> = emptyList(),
+    val loggedKm: Double = 0.0,
+    val currentTripKm: Double? = null,
+    /** Maintenance: odometer (null until read once), tracked items soonest first, and the reminder for this start. */
+    val odometerKm: Int? = null,
+    val maintenance: com.ahu.tlauncher.system.Maintenance = com.ahu.tlauncher.system.Maintenance(),
+    val serviceDue: List<com.ahu.tlauncher.system.ServiceDue> = emptyList(),
+    val serviceReminder: com.ahu.tlauncher.system.ServiceDue? = null,
+    /** Bumped to open the destination search (e.g. "find a gas station" said by voice). */
+    val searchRequest: Int = 0,
 ) {
     // Reading these in a composable redraws only that composable when they change.
     val obd: ObdState get() = live.obd
@@ -269,7 +280,20 @@ interface HomeActions {
     fun toggleCallMute() {}
     fun switchCallAudio() {}
     fun requestCallPermission() {}
-    // Android Auto
+    // number coding
+    fun setCoding(digit: Int, hours: String) {}
+    // trip log and maintenance
+    fun clearTrips() {}
+    fun setOdometer(km: Int) {}
+    fun markServiceDone(item: com.ahu.tlauncher.system.ServiceItem) {}
+    fun setServiceInterval(item: com.ahu.tlauncher.system.ServiceItem, km: Int) {}
+    fun stopService(item: com.ahu.tlauncher.system.ServiceItem) {}
+    /** "Later" on the service reminder. */
+    fun snoozeService() {}
+    /** Fuel stations near the car (ahead on the route while navigating), shown in the search panel. */
+    fun findFuel() {}
+    /** Mic in the dock: listen for a spoken command. */
+    fun voiceCommand() {}
 }
 
 object NoopActions : HomeActions

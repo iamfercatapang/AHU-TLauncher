@@ -21,6 +21,11 @@ object FreeNav {
         return "https://photon.komoot.io/api/?q=" + URLEncoder.encode(q, "UTF-8") + "&limit=6&lang=en" + bias
     }
 
+    /** Fuel stations (OpenStreetMap amenity=fuel) around [near]. */
+    fun fuelUrl(near: LatLon): String = String.format(
+        Locale.US, "https://photon.komoot.io/api/?q=fuel&osm_tag=amenity:fuel&limit=15&lang=en&lat=%.4f&lon=%.4f&location_bias_scale=0.9", near.lat, near.lon,
+    )
+
     fun reverseUrl(lat: Double, lon: Double): String =
         String.format(Locale.US, "https://photon.komoot.io/reverse?lat=%.6f&lon=%.6f&lang=en", lat, lon)
 

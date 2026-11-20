@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AcUnit
+import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Dehaze
@@ -185,6 +186,8 @@ fun HomeScreen(
         object : HomeActions by rawActions {
             override fun openNavApp() { if (routesOn) { mapVisible = true; overlay = Overlay.SEARCH } else rawActions.openNavApp() }
             override fun openMapSettings() { settingsStart = com.ahu.tlauncher.ui.settings.Section.NAVIGATION; overlay = Overlay.SETTINGS }
+            // Fuel stations are listed in the search panel, over the map.
+            override fun findFuel() { rawActions.findFuel(); if (routesOn) { mapVisible = true; overlay = Overlay.SEARCH } }
             override fun openCardPlayer() { overlay = if (overlay == Overlay.CARD_MUSIC) Overlay.NONE else Overlay.CARD_MUSIC }
             // Settings → "Pin on map": close Settings so the map is free; it opens again once the spot is saved or picking is cancelled.
             override fun pickOnMap(spot: com.ahu.tlauncher.data.SavedSpot): Boolean {
@@ -203,6 +206,8 @@ fun HomeScreen(
         }
     }
     BackHandler(enabled = overlay == Overlay.NONE && state.picking != null) { actions.cancelPicking() }
+    // "Find a gas station" said by voice: the stations show in the search panel.
+    LaunchedEffect(state.searchRequest) { if (state.searchRequest > 0 && routesOn) { mapVisible = true; overlay = Overlay.SEARCH } }
     // Settings, the dock's Music panel and search live on the map side: only in split view.
     LaunchedEffect(mapVisible) {
         if (!mapVisible && overlay in setOf(Overlay.SETTINGS, Overlay.MUSIC, Overlay.SEARCH)) overlay = Overlay.NONE
@@ -576,6 +581,7 @@ private fun StatusBar(
         val links = @Composable { Connectivity(state, onBellClick, onStatusClick, onAnchor) }
         val clock = @Composable {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                CodingChip(state)
                 state.weather?.let { w ->
                     val f = state.settings.tempUnit == com.ahu.tlauncher.data.TempUnit.F
                     val t = if (f) w.tempC * 9 / 5 + 32 else w.tempC
@@ -606,6 +612,28 @@ private fun StatusBar(
             }
         }
     }
+}
+
+/** Number coding on the plate's day: "Coding today 7 AM–10 AM, 5 PM–8 PM", amber "Coding until 10 AM" during the hours. */
+@Composable
+private fun CodingChip(state: HomeUiState) {
+    val s = state.settings
+    val hours = remember(s.codingHours) { com.ahu.tlauncher.system.Coding.parseHours(s.codingHours) }
+    val st = com.ahu.tlauncher.system.Coding.status(s.codingDigit, hours, state.now)
+    val text = com.ahu.tlauncher.system.Coding.label(st, is24h()) ?: return
+    val now = st is com.ahu.tlauncher.system.Coding.Status.Now
+    val amber = androidx.compose.ui.graphics.Color(0xFFF5A623)
+    Row(
+        Modifier.clip(androidx.compose.foundation.shape.CircleShape)
+            .background(if (now) amber.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.Block, null, tint = if (now) amber else T.colors.muted, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(text, style = TType.label, color = if (now) amber else T.colors.muted, maxLines = 1)
+    }
+    Spacer(Modifier.width(16.dp))
 }
 
 /** Bluetooth and Wi-Fi status icons (TLauncher's own line icons). */

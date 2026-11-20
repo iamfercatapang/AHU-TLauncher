@@ -36,7 +36,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.LocalGasStation
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.LocationOn
@@ -52,6 +54,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -246,6 +252,7 @@ private fun ColumnScope.SearchHome(state: HomeUiState, actions: HomeActions, onC
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         ShortcutTile(Icons.Rounded.Home, "Home", st.homeAddress, state.etaMin[st.homeAddress]) { actions.navigateHome(); onClose() }
         ShortcutTile(Icons.Rounded.Work, "Work", st.workAddress, state.etaMin[st.workAddress]) { actions.navigateWork(); onClose() }
+        FuelTile { actions.findFuel() }
     }
     if (state.favourites.isNotEmpty()) {
         SectionHeader("Favourites")
@@ -264,6 +271,23 @@ private fun ColumnScope.SearchHome(state: HomeUiState, actions: HomeActions, onC
             "Places you go and ★ favourites will show here", style = TType.caption, color = navColors.faint,
             modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 6.dp), textAlign = TextAlign.Center,
         )
+    }
+}
+
+/** Fuel stations nearby (ahead on the route while navigating), listed in place of the search home. */
+@Composable
+private fun RowScope.FuelTile(onClick: () -> Unit) {
+    val c = navColors
+    Row(
+        Modifier.weight(0.8f).height(58.dp).clip(TileShape).background(c.tile).pressable(onClick = onClick).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.LocalGasStation, null, tint = c.sub, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text("Fuel", style = TType.button, color = c.text, maxLines = 1)
+            Text("Nearby", style = TType.caption, color = c.faint, maxLines = 1)
+        }
     }
 }
 
@@ -642,7 +666,9 @@ fun RouteOverlays(state: HomeUiState, actions: HomeActions, modifier: Modifier, 
         val active = r?.takeIf { it.phase == RoutePhase.ACTIVE }
         val lastActive = remember { arrayOfNulls<RouteState>(1) }
         if (active != null) lastActive[0] = active
-        AnimatedVisibility(active != null, enter = navEnter(), exit = navExit(), modifier = Modifier.align(bottom).padding(12.dp).padding(bottom = 4.dp)) {
+        var tripCardH by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+        AnimatedVisibility(active != null, enter = navEnter(), exit = navExit(),
+            modifier = Modifier.align(bottom).padding(12.dp).padding(bottom = 4.dp).onSizeChanged { tripCardH = it.height }) {
             lastActive[0]?.let { TripCard(state, it, actions) }
         }
         // Traffic legend on the free side, level with the map-settings button beside it (the trip card is wide).
@@ -663,8 +689,80 @@ fun RouteOverlays(state: HomeUiState, actions: HomeActions, modifier: Modifier, 
         AnimatedVisibility(offer != null, enter = navEnter(), exit = navExit(), modifier = Modifier.align(bottom).padding(12.dp).padding(bottom = 4.dp)) {
             lastOffer[0]?.let { ResumeTripCard(state, it, actions) }
         }
+        // Low fuel (OBD): find a station; while navigating it sits above the trip card and picks a stop on the way.
+        val fuelPct = state.obd.data.fuelPct?.takeIf { com.ahu.tlauncher.obd.ObdDisplay.show(state.obd.status) }
+        val low = fuelPct != null && fuelPct < com.ahu.tlauncher.obd.FuelMath.LOW_FUEL_PCT
+        var fuelDismissed by remember { mutableStateOf(false) }
+        LaunchedEffect(low) { if (!low) fuelDismissed = false }
+        val idle = r == null && pin == null && offer == null && state.picking == null
+        val showFuel = low && !fuelDismissed && (idle || active != null) && state.search.query.isBlank()
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val above = if (active != null) with(density) { tripCardH.toDp() } else 0.dp
+        AnimatedVisibility(showFuel, enter = navEnter(), exit = navExit(), modifier = Modifier.align(bottom).padding(12.dp).padding(bottom = 4.dp + above)) {
+            LowFuelCard(state, fuelPct ?: 0, active != null, actions) { fuelDismissed = true }
+        }
+        // Service due: once per car start, when nothing else is shown at the bottom.
+        val service = state.serviceReminder?.takeIf { idle && !showFuel }
+        val lastService = remember { arrayOfNulls<com.ahu.tlauncher.system.ServiceDue>(1) }
+        if (service != null) lastService[0] = service
+        AnimatedVisibility(service != null, enter = navEnter(), exit = navExit(), modifier = Modifier.align(bottom).padding(12.dp).padding(bottom = 4.dp)) {
+            lastService[0]?.let { ServiceReminderCard(state, it, actions) }
+        }
     }
 }
+
+/** Fuel low (OBD): range left, Find fuel (stations ahead on the route while navigating) and ✕. */
+@Composable
+fun LowFuelCard(state: HomeUiState, pct: Int, navigating: Boolean, actions: HomeActions, onDismiss: () -> Unit) {
+    val c = navColors
+    Column(Modifier.width(NAV_CARD_W).navPanel().padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Badge(Icons.Rounded.LocalGasStation, FUEL_AMBER); Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Fuel low", style = TType.title, color = c.text, maxLines = 1)
+                val range = state.fuel.rangeKm?.let { " · about " + fmtDistance(it * 1000, state.mph) + " left" } ?: ""
+                Text("$pct%$range", style = TType.caption, color = c.faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            NavIconButton(Icons.Rounded.Close, "Not now", onClick = onDismiss)
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            Modifier.fillMaxWidth().height(46.dp).clip(TileShape).background(c.cta).pressable(onClick = actions::findFuel),
+            horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Rounded.LocalGasStation, null, tint = c.onCta, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
+            Text(if (navigating) "Find fuel on the way" else "Find fuel nearby", style = TType.button, color = c.onCta, maxLines = 1)
+        }
+    }
+}
+
+/** A service item due soon (or overdue), after the car starts: Done (at today's odometer) or Later. */
+@Composable
+fun ServiceReminderCard(state: HomeUiState, due: com.ahu.tlauncher.system.ServiceDue, actions: HomeActions) {
+    val c = navColors
+    Column(Modifier.width(NAV_CARD_W).navPanel().padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Badge(Icons.Rounded.Build, if (due.overdue) c.danger else FUEL_AMBER); Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(due.item.label, style = TType.title, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(com.ahu.tlauncher.system.MaintenanceMath.text(due), style = TType.caption, color = if (due.overdue) c.danger else c.faint, maxLines = 1)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.weight(1f).height(46.dp).clip(TileShape).background(c.tile).pressable(onClick = actions::snoozeService),
+                horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+            ) { Text("Later", style = TType.button, color = c.text, maxLines = 1) }
+            Row(
+                Modifier.weight(1f).height(46.dp).clip(TileShape).background(c.cta).pressable { actions.markServiceDone(due.item) },
+                horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+            ) { Text("Done today", style = TType.button, color = c.onCta, maxLines = 1) }
+        }
+    }
+}
+
+private val FUEL_AMBER = Color(0xFFF5A623)
 
 // ------------------------------------------------------------------------------------------------ turn cards
 

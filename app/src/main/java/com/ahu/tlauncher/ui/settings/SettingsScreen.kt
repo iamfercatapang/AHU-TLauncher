@@ -329,6 +329,8 @@ private fun NavigationSection(state: HomeUiState, a: HomeActions) {
         com.ahu.tlauncher.ui.components.TSwitch(s.offerTrip, a::setOfferTrip)
     }
     Divider()
+    CodingSettings(state, a)
+    Divider()
     OfflineMapsSettings(state, a)
     Text(
         "While Google Maps or Waze is navigating, the next turn appears on the dashboard map. Requires notification access.",

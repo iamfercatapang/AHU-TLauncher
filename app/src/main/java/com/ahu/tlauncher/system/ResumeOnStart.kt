@@ -34,6 +34,7 @@ class ResumeOnStart(private val app: LauncherApp, private val scope: CoroutineSc
     }
 
     private suspend fun onStart(start: Int) {
+        app.carCare.onCarStart()
         val s = app.prefs.settings.first()
         _offer.value = DriveStartRules.tripToOffer(s.offerTrip, app.prefs.savedTrip(), System.currentTimeMillis(), app.routes.route.value != null)
         val carStart = DriveStartRules.isCarStart(start, SystemClock.elapsedRealtime())
@@ -64,6 +65,9 @@ class ResumeOnStart(private val app: LauncherApp, private val scope: CoroutineSc
             app.startActivity(Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
         }.onFailure { Log.w("ResumeOnStart", "Couldn't bring the dashboard to the front", it) }
     }
+
+    /** Reached a fuel stop on the way: offer to carry on to where the trip was going. */
+    fun offerNow(p: com.ahu.tlauncher.route.Place) { _offer.value = SavedTrip(p, System.currentTimeMillis()) }
 
     /** "Continue" pressed: the caller previews and starts the route. */
     fun take(): SavedTrip? = _offer.value.also { _offer.value = null }

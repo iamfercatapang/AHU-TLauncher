@@ -96,6 +96,17 @@ class MainActivity : ComponentActivity(), HomeActions {
     private var brightnessIsNight = false
     private var brightSaveJob: kotlinx.coroutines.Job? = null
     private val roleRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { resumeTick++ }
+    /** Spoken command from the system speech recogniser. */
+    private val voiceRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        val heard = res.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (res.resultCode == RESULT_OK && !heard.isNullOrBlank()) runVoice(heard)
+    }
+    private val contactsPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        val who = pendingCall; pendingCall = null
+        if (ok && who != null) callByName(who)
+    }
+    private var pendingCall: String? = null
+    private var searchRequest by mutableStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -138,7 +149,8 @@ class MainActivity : ComponentActivity(), HomeActions {
     override fun onPause() {
         super.onPause()
         app.dashboardVisible = false
-        app.location.setFast(false)
+        // GPS stays at 1 s updates in the background too: the head unit runs on car power, and the trip log and
+        // reroutes need regular fixes while Google Maps or another app is in front.
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -186,6 +198,10 @@ class MainActivity : ComponentActivity(), HomeActions {
         val inbox by NotificationHub.inbox.collectAsStateWithLifecycle()
         val tripOffer by app.resumeOnStart.offer.collectAsStateWithLifecycle()
         val offlineAreas by app.offlineMaps.areas.collectAsStateWithLifecycle()
+        val trips by app.carCare.trips.collectAsStateWithLifecycle()
+        val loggedKm by app.carCare.loggedKm.collectAsStateWithLifecycle()
+        val maintenance by app.carCare.maintenance.collectAsStateWithLifecycle()
+        val serviceReminder by app.carCare.reminder.collectAsStateWithLifecycle()
         // "Continue" on the trip offer: start as soon as the route is found.
         LaunchedEffect(route, autoStartTrip) {
             val r = route
@@ -291,6 +307,12 @@ class MainActivity : ComponentActivity(), HomeActions {
             brightness = brightnessNow, brightnessNight = night, brightnessAllowed = brightAllowed, callSource = remember(notifCall) { NotificationHub.lastCallPackage },
             lowPerf = lowPerf, deviceSpec = spec,
             tripOffer = tripOffer, offlineAreas = offlineAreas,
+            trips = trips, loggedKm = loggedKm, currentTripKm = remember(trips, now) { app.carCare.currentKm() },
+            odometerKm = com.ahu.tlauncher.system.MaintenanceMath.odometer(maintenance, loggedKm), maintenance = maintenance,
+            serviceDue = remember(maintenance, loggedKm, now.toLocalDate()) {
+                com.ahu.tlauncher.system.MaintenanceMath.all(maintenance, loggedKm, now.toLocalDate())
+            },
+            serviceReminder = serviceReminder, searchRequest = searchRequest,
         )
         CompositionLocalProvider(LocalLowPerf provides lowPerf) {
             TLauncherTheme(dark = dark) { ScaledCanvas { HomeScreen(state, this@MainActivity) } }
@@ -494,6 +516,7 @@ class MainActivity : ComponentActivity(), HomeActions {
 
     /** Start: voice guidance in Google Maps / Waze, then bring the dashboard (with the route) back to the front. */
     override fun startRoute() {
+        warnCoding()
         // Android only lets an app return to the front from the background with "Display over other apps".
         // Ask once; if the user declines, the trip still starts and they press Home to come back.
         if (!app.freeMap && !canReturnToFront() && !overlayAsked) {
@@ -711,6 +734,104 @@ class MainActivity : ComponentActivity(), HomeActions {
     private fun isDefaultLauncher(): Boolean {
         val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
         return packageManager.resolveActivity(i, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName == packageName
+    }
+
+    // ---- number coding, trip log, maintenance, fuel
+    override fun setCoding(digit: Int, hours: String) { lifecycleScope.launch { app.prefs.setCoding(digit, hours) } }
+    override fun clearTrips() = app.carCare.clearTrips()
+    override fun setOdometer(km: Int) = app.carCare.setOdometer(km)
+    override fun markServiceDone(item: com.ahu.tlauncher.system.ServiceItem) = app.carCare.markDone(item)
+    override fun setServiceInterval(item: com.ahu.tlauncher.system.ServiceItem, km: Int) = app.carCare.setInterval(item, km)
+    override fun stopService(item: com.ahu.tlauncher.system.ServiceItem) = app.carCare.stopTracking(item)
+    override fun snoozeService() = app.carCare.snoozeReminder()
+    override fun findFuel() = app.routes.findFuel()
+
+    /** Starting a trip during the plate's coding hours: say so (holidays aren't known). */
+    private fun warnCoding() {
+        lifecycleScope.launch {
+            val s = app.prefs.settings.first()
+            val st = com.ahu.tlauncher.system.Coding.status(s.codingDigit, com.ahu.tlauncher.system.Coding.parseHours(s.codingHours), LocalDateTime.now())
+            if (st is com.ahu.tlauncher.system.Coding.Status.Now) {
+                val until = com.ahu.tlauncher.system.Coding.fmt(st.until, android.text.format.DateFormat.is24HourFormat(this@MainActivity))
+                android.widget.Toast.makeText(this@MainActivity, "Number coding is on for your plate until $until", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    // ---- voice commands
+    override fun voiceCommand() {
+        val i = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "en-US")
+            .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Say a command, like \"Navigate home\" or \"Next song\"")
+            .putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        try { voiceRequest.launch(i) } catch (_: ActivityNotFoundException) {
+            android.widget.Toast.makeText(this, "This head unit has no speech recognition (install the Google app)", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun runVoice(heard: String) {
+        val V = com.ahu.tlauncher.system.VoiceCommand
+        fun say(t: String) = android.widget.Toast.makeText(this, t, android.widget.Toast.LENGTH_SHORT).show()
+        when (val c = V.parse(heard)) {
+            is com.ahu.tlauncher.system.VoiceCommand.Navigate -> {
+                say("Finding ${c.query}…")
+                lifecycleScope.launch { if (!app.routes.searchAndPreview(c.query)) say("Couldn't find \"${c.query}\"") }
+            }
+            com.ahu.tlauncher.system.VoiceCommand.Home -> navigateHome()
+            com.ahu.tlauncher.system.VoiceCommand.Work -> navigateWork()
+            com.ahu.tlauncher.system.VoiceCommand.FindFuel -> { app.routes.findFuel(); searchRequest++ }
+            com.ahu.tlauncher.system.VoiceCommand.StopNavigation -> if (app.routes.route.value != null) endRoute() else say("Not navigating")
+            com.ahu.tlauncher.system.VoiceCommand.Play -> if (NotificationHub.media.value?.isPlaying != true) playPause()
+            com.ahu.tlauncher.system.VoiceCommand.Pause -> if (NotificationHub.media.value?.isPlaying == true) playPause()
+            com.ahu.tlauncher.system.VoiceCommand.Next -> next()
+            com.ahu.tlauncher.system.VoiceCommand.Previous -> previous()
+            com.ahu.tlauncher.system.VoiceCommand.VolumeUp -> repeat(2) { volumeStep(true) }
+            com.ahu.tlauncher.system.VoiceCommand.VolumeDown -> repeat(2) { volumeStep(false) }
+            com.ahu.tlauncher.system.VoiceCommand.Mute -> toggleMute()
+            is com.ahu.tlauncher.system.VoiceCommand.Call -> call(c.who)
+            is com.ahu.tlauncher.system.VoiceCommand.Open -> {
+                val want = c.app.lowercase()
+                val hit = app.apps.apps.value.let { all -> all.firstOrNull { it.label.lowercase() == want } ?: all.firstOrNull { it.label.lowercase().contains(want) } }
+                if (hit != null) launch(hit) else say("No app called \"${c.app}\"")
+            }
+            is com.ahu.tlauncher.system.VoiceCommand.Unknown -> say("Didn't catch that: \"$heard\"")
+        }
+    }
+
+    /** A number is dialled as is; a name is looked up in the contacts (the call itself is one tap in the phone app). */
+    private fun call(who: String) {
+        com.ahu.tlauncher.system.VoiceCommand.phoneNumber(who)?.let { dial(it); return }
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            pendingCall = who; contactsPermission.launch(Manifest.permission.READ_CONTACTS); return
+        }
+        callByName(who)
+    }
+
+    private fun callByName(who: String) {
+        val number = runCatching {
+            contentResolver.query(
+                android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER),
+                "${android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?", arrayOf("%$who%"), null,
+            )?.use { c ->
+                var best: String? = null
+                while (c.moveToNext()) {
+                    val name = c.getString(0).orEmpty(); val num = c.getString(1)
+                    if (name.equals(who, ignoreCase = true)) return@use num
+                    if (best == null) best = num
+                }
+                best
+            }
+        }.getOrNull()
+        if (number != null) dial(number)
+        else android.widget.Toast.makeText(this, "\"$who\" isn't in this head unit's contacts. Open the phone app to call.", android.widget.Toast.LENGTH_LONG).show()
+    }
+
+    private fun dial(number: String) {
+        if (!startSafely(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(number))))) {
+            android.widget.Toast.makeText(this, "No phone app to call $number", android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun startSafely(i: Intent): Boolean = try {
