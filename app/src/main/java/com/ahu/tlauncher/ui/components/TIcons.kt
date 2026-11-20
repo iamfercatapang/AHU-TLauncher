@@ -181,11 +181,6 @@ object TIcons {
             horizontalLineTo(8f); arcTo(1.5f, 1.5f, 0f, false, true, 6.5f, 19.5f); verticalLineTo(4.5f); arcTo(1.5f, 1.5f, 0f, false, true, 8f, 3f); close() }
         line { moveTo(10.5f, 18f); horizontalLineTo(13.5f) }
     } }
-    /** Equalizer bars (Sound). */
-    val EqBars by lazy { icon("EqBars") {
-        line { moveTo(5f, 20f); verticalLineTo(4f); moveTo(12f, 20f); verticalLineTo(4f); moveTo(19f, 20f); verticalLineTo(4f) }
-        line(2.6f) { moveTo(3.2f, 14f); horizontalLineTo(6.8f); moveTo(10.2f, 8f); horizontalLineTo(13.8f); moveTo(17.2f, 16f); horizontalLineTo(20.8f) }
-    } }
     val Shield by lazy { icon("Shield") {
         line { moveTo(12f, 3f); lineTo(19.5f, 6f); verticalLineTo(11.5f); curveTo(19.5f, 16f, 16.5f, 19.5f, 12f, 21f); curveTo(7.5f, 19.5f, 4.5f, 16f, 4.5f, 11.5f); verticalLineTo(6f); close() }
         line { moveTo(9f, 12f); lineTo(11.2f, 14.2f); lineTo(15.2f, 10f) }

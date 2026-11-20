@@ -32,7 +32,6 @@ class LauncherApp : Application() {
     @Volatile var dashboardVisible = false
     lateinit var lastMedia: com.ahu.tlauncher.notify.LastMedia; private set
     lateinit var brightness: com.ahu.tlauncher.system.BrightnessControl; private set
-    lateinit var soundEq: com.ahu.tlauncher.system.SoundEq; private set
     lateinit var updater: com.ahu.tlauncher.update.Updater; private set
     lateinit var resumeOnStart: com.ahu.tlauncher.system.ResumeOnStart; private set
     lateinit var offlineMaps: com.ahu.tlauncher.map.OfflineMaps; private set
@@ -48,7 +47,6 @@ class LauncherApp : Application() {
         lights = com.ahu.tlauncher.system.LightsMonitor(this)
         calls = com.ahu.tlauncher.system.CallControl(this)
         brightness = com.ahu.tlauncher.system.BrightnessControl(this)
-        soundEq = com.ahu.tlauncher.system.SoundEq(this)
         lastMedia = com.ahu.tlauncher.notify.LastMedia(this, appScope)
         voice = com.ahu.tlauncher.system.Voice(this)
         routes = com.ahu.tlauncher.route.RouteManager(
@@ -66,8 +64,6 @@ class LauncherApp : Application() {
         appScope.launch {
             prefs.settings.collect { s ->
                 fuelSettings = s
-                // Equalizer is restored from saved settings at start and follows every change.
-                soundEq.apply(com.ahu.tlauncher.system.EqMath.decode(s.eq))
                 lights.setSource(com.ahu.tlauncher.system.LightsSource.decode(s.lightsSource))
                 androidAuto.enabled = s.aaDetect
             }

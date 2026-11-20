@@ -186,7 +186,6 @@ class MainActivity : ComponentActivity(), HomeActions {
         val picking by app.routes.picking.collectAsStateWithLifecycle()
         val etaMin by app.routes.etaMin.collectAsStateWithLifecycle()
         val lastMedia by app.lastMedia.last.collectAsStateWithLifecycle()
-        val eqCaps by app.soundEq.caps.collectAsStateWithLifecycle()
         val resumingMedia by app.lastMedia.resuming.collectAsStateWithLifecycle()
         val inbox by NotificationHub.inbox.collectAsStateWithLifecycle()
         val tripOffer by app.resumeOnStart.offer.collectAsStateWithLifecycle()
@@ -294,7 +293,6 @@ class MainActivity : ComponentActivity(), HomeActions {
             route = route, search = search, freeNav = freeMap, cell = cell, inbox = inbox, recents = recents, favourites = favourites, pin = pin, picking = picking, etaMin = etaMin,
             lights = lights,
             call = call, callPermission = callPerm, returnPermission = returnPerm,
-            eqCaps = eqCaps,
             brightness = brightnessNow, brightnessNight = night, brightnessAllowed = brightAllowed, callSource = remember(notifCall) { NotificationHub.lastCallPackage },
             aa = aa, aaReceiver = aaReceiver,
             aaDismissed = (aa as? com.ahu.tlauncher.system.AaState.Ready)?.gateway?.let { it == aaDismissedOn } == true,
@@ -357,14 +355,6 @@ class MainActivity : ComponentActivity(), HomeActions {
         if (!this.app.apps.launch(app)) toastMissing(app.label)
     }
 
-    private var eqSaveJob: kotlinx.coroutines.Job? = null
-    /** Applied right away; saved once the slider settles. */
-    override fun setEq(s: com.ahu.tlauncher.system.EqSettings) {
-        app.soundEq.apply(s)
-        eqSaveJob?.cancel()
-        eqSaveJob = lifecycleScope.launch { delay(400); app.prefs.setEq(com.ahu.tlauncher.system.EqMath.encode(s)) }
-    }
-    override fun chooseUnitEq(pkg: String) { lifecycleScope.launch { app.prefs.setUnitEqApp(pkg) } }
 
     override fun setBrightness(percent: Int) {
         if (!app.brightness.canWrite()) { requestBrightnessPermission(); return }

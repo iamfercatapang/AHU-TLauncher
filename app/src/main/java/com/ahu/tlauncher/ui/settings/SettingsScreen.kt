@@ -83,7 +83,6 @@ enum class Section(val label: String, val icon: ImageVector) {
     HOME("Home screen", com.ahu.tlauncher.ui.components.TIcons.DockBar),
     NAVIGATION("Navigation", com.ahu.tlauncher.ui.components.TIcons.Navigate),
     CAR("Car", com.ahu.tlauncher.ui.components.TIcons.Wrench),
-    SOUND("Sound", com.ahu.tlauncher.ui.components.TIcons.EqBars),
     CONNECTIONS("Connections", com.ahu.tlauncher.ui.components.TIcons.PhoneLink),
     ABOUT("About", com.ahu.tlauncher.ui.components.TIcons.Info),
 }
@@ -124,7 +123,6 @@ fun SettingsScreen(state: HomeUiState, actions: HomeActions, onClose: () -> Unit
                     Section.HOME -> HomeScreenSection(state, actions)
                     Section.NAVIGATION -> NavigationSection(state, actions)
                     Section.CAR -> CarSection(state, actions)
-                    Section.SOUND -> SoundSection(state, actions)
                     Section.CONNECTIONS -> ConnectionsSection(state, actions)
                     Section.ABOUT -> AboutSection(state, actions)
                 }
@@ -388,14 +386,6 @@ private fun ConnectionsSection(state: HomeUiState, a: HomeActions) {
 private fun PermissionsSettings(state: HomeUiState, a: HomeActions) {
     SettingRow("Default home app", if (state.isDefaultLauncher) "This launcher opens when you press Home" else "Not set — press Home and choose TLauncher → Always") {
         if (!state.isDefaultLauncher) PillButton("Set", kind = com.ahu.tlauncher.ui.components.ButtonKind.PRIMARY, onClick = a::setDefaultLauncher) else Text("On", style = TType.button, color = T.colors.muted)
-    }
-    Divider()
-    SettingRow(
-        "Open when the car starts",
-        if (state.returnPermission) "Show the dashboard when the head unit turns on, even if it reopens the last app"
-        else "Also needs \"Return to dashboard\" below (Display over other apps)",
-    ) {
-        com.ahu.tlauncher.ui.components.TSwitch(state.settings.openOnStart, a::setOpenOnStart)
     }
     Divider()
     SettingRow("Notification access", "Needed for the music card and Maps/Waze turn-by-turn") {

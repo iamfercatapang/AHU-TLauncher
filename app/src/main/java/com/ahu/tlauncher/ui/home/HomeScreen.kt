@@ -89,8 +89,8 @@ import java.util.Locale
 /** Design canvas: everything is laid out for 1024×600 dp and scaled to the real screen. */
 const val CANVAS_W = 1024f
 const val CANVAS_H = 600f
-val DOCK_H = 64.dp
-val STATUS_H = 40.dp
+val DOCK_H = 72.dp
+val STATUS_H = 48.dp
 /** Car panel width in split view: the prototype's 580 of 1920 px. */
 private const val SPLIT_FRACTION = 0.30f
 /**
@@ -559,6 +559,9 @@ private fun Modifier.statusShadow(): Modifier {
     }
 }
 
+/** Status bar text: a bit larger than buttons, readable at arm's length on a 9–10" screen. */
+private val STATUS_TEXT = TType.button.copy(fontSize = androidx.compose.ui.unit.TextUnit(17f, androidx.compose.ui.unit.TextUnitType.Sp), lineHeight = androidx.compose.ui.unit.TextUnit(20f, androidx.compose.ui.unit.TextUnitType.Sp))
+
 /** Full-width status row floating over the stage and map: link status · date · time. */
 @Composable
 private fun StatusBar(
@@ -593,15 +596,15 @@ private fun StatusBar(
                             .pressable { onStatusClick(Overlay.WEATHER) }.padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(weatherIcon(w), w.kind.name.lowercase().replace('_', ' '), tint = T.colors.text, modifier = Modifier.size(18.dp))
+                        Icon(weatherIcon(w), w.kind.name.lowercase().replace('_', ' '), tint = T.colors.text, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("${Math.round(t)} °${if (f) "F" else "C"}", style = TType.button, color = T.colors.text)
+                        Text("${Math.round(t)} °${if (f) "F" else "C"}", style = STATUS_TEXT, color = T.colors.text)
                     }
                     Spacer(Modifier.width(20.dp))
                 }
-                Text(state.now.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())), style = TType.button, color = T.colors.muted)
+                Text(state.now.format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())), style = STATUS_TEXT, color = T.colors.muted)
                 Spacer(Modifier.width(12.dp))
-                Text(time, style = TType.button, color = T.colors.text)
+                Text(time, style = STATUS_TEXT, color = T.colors.text)
             }
         }
         if (mapSpan != null) {
@@ -624,15 +627,15 @@ private fun Connectivity(
     onStatusClick: (Overlay) -> Unit = {},
     onAnchor: (Overlay, androidx.compose.ui.geometry.Rect) -> Unit = { _, _ -> },
 ) {
-    // Each item sits in a 28 dp tap target; 6 dp between targets keeps the icons 14 dp apart as before.
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    // Each item sits in a 40 dp tap target (about 7.5 mm on a 9" screen); the icons end up 16 dp apart.
+    Row(verticalAlignment = Alignment.CenterVertically) {
         val (btIcon, btDesc) = when (state.bluetooth) {
             BtStatus.CONNECTED -> com.ahu.tlauncher.ui.components.TIcons.Bluetooth to "Bluetooth connected"
             BtStatus.ON -> com.ahu.tlauncher.ui.components.TIcons.Bluetooth to "Bluetooth on"
             BtStatus.OFF -> com.ahu.tlauncher.ui.components.TIcons.BluetoothOff to "Bluetooth off"
         }
-        Box(Modifier.size(28.dp).onGloballyPositioned { onAnchor(Overlay.BLUETOOTH, it.boundsInRoot()) }.pressable { onStatusClick(Overlay.BLUETOOTH) }, contentAlignment = Alignment.Center) {
-            Icon(btIcon, btDesc, tint = if (state.bluetooth == BtStatus.CONNECTED) T.colors.text else T.colors.muted, modifier = Modifier.size(20.dp))
+        Box(Modifier.size(40.dp).onGloballyPositioned { onAnchor(Overlay.BLUETOOTH, it.boundsInRoot()) }.pressable { onStatusClick(Overlay.BLUETOOTH) }, contentAlignment = Alignment.Center) {
+            Icon(btIcon, btDesc, tint = if (state.bluetooth == BtStatus.CONNECTED) T.colors.text else T.colors.muted, modifier = Modifier.size(24.dp))
         }
         val w = state.wifi
         val icon = when {
@@ -640,24 +643,24 @@ private fun Connectivity(
             !w.connected -> com.ahu.tlauncher.ui.components.TIcons.wifi(0)
             else -> com.ahu.tlauncher.ui.components.TIcons.wifi(w.level.coerceIn(1, 4).let { if (it >= 3) 3 else it })
         }
-        Box(Modifier.size(28.dp).onGloballyPositioned { onAnchor(Overlay.WIFI, it.boundsInRoot()) }.pressable { onStatusClick(Overlay.WIFI) }, contentAlignment = Alignment.Center) {
+        Box(Modifier.size(40.dp).onGloballyPositioned { onAnchor(Overlay.WIFI, it.boundsInRoot()) }.pressable { onStatusClick(Overlay.WIFI) }, contentAlignment = Alignment.Center) {
             Icon(icon, if (w.connected) "Wi-Fi connected" else if (w.enabled) "Wi-Fi not connected" else "Wi-Fi off",
-                tint = if (w.connected) T.colors.text else T.colors.muted, modifier = Modifier.size(20.dp))
+                tint = if (w.connected) T.colors.text else T.colors.muted, modifier = Modifier.size(24.dp))
         }
         // mobile signal (only with a SIM): type label + four bars
         state.cell?.let { c ->
-            Row(Modifier.height(28.dp).onGloballyPositioned { onAnchor(Overlay.CELL, it.boundsInRoot()) }.pressable { onStatusClick(Overlay.CELL) }.padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.Bottom) {
-                c.type?.let { Text(it, style = TType.caption, color = T.colors.text, modifier = Modifier.padding(end = 1.dp)) }
-                Box(Modifier.size(20.dp)) {
-                    Icon(com.ahu.tlauncher.ui.components.TIcons.signalBars(c.level, false), null, tint = T.colors.muted, modifier = Modifier.size(20.dp))
-                    Icon(com.ahu.tlauncher.ui.components.TIcons.signalBars(c.level, true), "Mobile signal ${c.level} of 4", tint = T.colors.text, modifier = Modifier.size(20.dp))
+            Row(Modifier.height(40.dp).onGloballyPositioned { onAnchor(Overlay.CELL, it.boundsInRoot()) }.pressable { onStatusClick(Overlay.CELL) }.padding(horizontal = 6.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
+                c.type?.let { Text(it, style = TType.label, color = T.colors.text, modifier = Modifier.padding(end = 1.dp)) }
+                Box(Modifier.size(24.dp)) {
+                    Icon(com.ahu.tlauncher.ui.components.TIcons.signalBars(c.level, false), null, tint = T.colors.muted, modifier = Modifier.size(24.dp))
+                    Icon(com.ahu.tlauncher.ui.components.TIcons.signalBars(c.level, true), "Mobile signal ${c.level} of 4", tint = T.colors.text, modifier = Modifier.size(24.dp))
                 }
             }
         }
         // notification bell, with a dot when there's something unread
-        Box(Modifier.size(28.dp).onGloballyPositioned { onAnchor(Overlay.NOTIFICATIONS, it.boundsInRoot()) }.pressable(onClick = onBellClick), contentAlignment = Alignment.Center) {
-            Icon(com.ahu.tlauncher.ui.components.TIcons.Bell, "Notifications", tint = if (state.inbox.isEmpty()) T.colors.muted else T.colors.text, modifier = Modifier.size(20.dp))
-            if (state.inbox.isNotEmpty()) Box(Modifier.align(Alignment.TopEnd).padding(top = 3.dp, end = 3.dp).size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(T.colors.accent))
+        Box(Modifier.size(40.dp).onGloballyPositioned { onAnchor(Overlay.NOTIFICATIONS, it.boundsInRoot()) }.pressable(onClick = onBellClick), contentAlignment = Alignment.Center) {
+            Icon(com.ahu.tlauncher.ui.components.TIcons.Bell, "Notifications", tint = if (state.inbox.isEmpty()) T.colors.muted else T.colors.text, modifier = Modifier.size(24.dp))
+            if (state.inbox.isNotEmpty()) Box(Modifier.align(Alignment.TopEnd).padding(top = 7.dp, end = 7.dp).size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(T.colors.accent))
         }
     }
 }

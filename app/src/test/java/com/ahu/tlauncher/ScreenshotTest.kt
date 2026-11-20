@@ -223,11 +223,6 @@ class ScreenshotTest {
             modifier = androidx.compose.ui.Modifier.size(760.dp, 430.dp),
         )
     }
-    @Test fun soundSettings() = shot("settings_sound") {
-        val eq = com.ahu.tlauncher.system.EqMath.encode(com.ahu.tlauncher.system.EqSettings(true, "Rock",
-            com.ahu.tlauncher.system.EqMath.curve(com.ahu.tlauncher.system.EqMath.PRESETS.getValue("Rock"), listOf(60, 230, 910, 3600, 14000)), 30, 0))
-        HomeScreen(state().copy(settings = state().settings.copy(eq = eq)), NoopActions, initialOverlay = Overlay.SETTINGS, initialSettings = com.ahu.tlauncher.ui.settings.Section.SOUND)
-    }
     private fun queued(): HomeUiState {
         val st = state()
         val q = listOf("Midnight Drive" to "The Night Lines", "Coastal Highway" to "Paper Lanterns", "Slow Burn" to "Mira Vale", "Afterglow" to "Sun Theory")
