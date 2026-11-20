@@ -140,4 +140,20 @@ class CarFramingTest {
         val moved = (after[0] - before[0]) * rightX + (after[2] - before[2]) * rightZ
         assertTrue("camera should move left, moved $moved along its right", moved < 0)
     }
+
+    @Test fun paintBlendsBetweenPaints() {
+        val red = com.ahu.tlauncher.ui.home.PaintLook.of(com.ahu.tlauncher.data.CarPaint.RED)
+        val white = com.ahu.tlauncher.ui.home.PaintLook.of(com.ahu.tlauncher.data.CarPaint.WHITE)
+        assertEquals(red, red.lerp(white, 0f))
+        assertEquals(white, red.lerp(white, 1f))
+        val half = red.lerp(white, 0.5f)
+        assertEquals((red.g + white.g) / 2, half.g, 1e-6f)
+        assertEquals((red.roughness + white.roughness) / 2, half.roughness, 1e-6f)
+    }
+
+    @Test fun flickSpeed() {
+        assertEquals(2 * Math.PI.toFloat(), CarFraming.flingRadPerSec(1000f, 1000f), 1e-4f)
+        assertEquals(-CarFraming.FLING_MAX_RAD_S, CarFraming.flingRadPerSec(-50_000f, 1000f), 1e-6f)
+        assertEquals(0f, CarFraming.flingRadPerSec(500f, 0f), 0f)
+    }
 }
