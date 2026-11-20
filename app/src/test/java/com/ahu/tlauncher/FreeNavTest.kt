@@ -51,6 +51,8 @@ class FreeNavTest {
         assertTrue(FreeNav.parseRoutes("""{"code":"NoRoute"}""").isEmpty())
         assertTrue(FreeNav.routeUrl(LatLon(14.5, 121.0), LatLon(14.6, 121.1), alternatives = true).endsWith("&alternatives=2"))
         assertTrue(!FreeNav.routeUrl(LatLon(14.5, 121.0), LatLon(14.6, 121.1)).contains("alternatives"))
+        assertTrue(FreeNav.routeUrl(LatLon(14.5, 121.0), LatLon(14.6, 121.1), heading = -90f).contains("&bearings=270,60;"))
+        assertTrue(!FreeNav.routeUrl(LatLon(14.5, 121.0), LatLon(14.6, 121.1)).contains("bearings"))
     }
 
     @Test fun instructions() {

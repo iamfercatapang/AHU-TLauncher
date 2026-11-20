@@ -29,10 +29,12 @@ object FreeNav {
         parseSearch(json, null).firstOrNull()?.let { Place(it.title, it.subtitle, lat, lon) }
 
     /** With [alternatives], OSRM adds up to two other routes after the recommended one. */
-    fun routeUrl(from: LatLon, to: LatLon, alternatives: Boolean = false): String = String.format(
+    /** [heading]: the car's course; the route then leaves the start that way (OSRM bearings, ±60°). */
+    fun routeUrl(from: LatLon, to: LatLon, alternatives: Boolean = false, heading: Float? = null): String = String.format(
         Locale.US, "https://routing.openstreetmap.de/routed-car/route/v1/driving/%.6f,%.6f;%.6f,%.6f?overview=full&geometries=polyline&steps=true",
         from.lon, from.lat, to.lon, to.lat,
-    ) + if (alternatives) "&alternatives=2" else ""
+    ) + (heading?.let { String.format(Locale.US, "&bearings=%d,60;", ((it.toInt() % 360) + 360) % 360) } ?: "") +
+        if (alternatives) "&alternatives=2" else ""
 
     suspend fun get(url: String): String = withContext(Dispatchers.IO) {
         val c = URL(url).openConnection() as HttpURLConnection

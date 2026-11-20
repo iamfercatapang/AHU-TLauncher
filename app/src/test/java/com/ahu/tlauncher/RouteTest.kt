@@ -125,4 +125,37 @@ class RouteTest {
         assertEquals(list, RouteMath.decodePlaces(RouteMath.encodePlaces(list)))
         assertEquals(emptyList<Place>(), RouteMath.decodePlaces("garbage"))
     }
+
+    @Test fun bearings() {
+        assertEquals(0.0, RouteMath.bearingDeg(LatLon(14.0, 121.0), LatLon(14.01, 121.0)), 0.5)
+        assertEquals(90.0, RouteMath.bearingDeg(LatLon(14.0, 121.0), LatLon(14.0, 121.01)), 0.5)
+        assertEquals(180.0, RouteMath.bearingDeg(LatLon(14.01, 121.0), LatLon(14.0, 121.0)), 0.5)
+        assertEquals(20.0, RouteMath.angleDiff(350.0, 10.0), 1e-9)
+        assertEquals(180.0, RouteMath.angleDiff(90.0, 270.0), 1e-9)
+    }
+
+    @Test fun offRoute() {
+        val ro = com.ahu.tlauncher.route.OffRoute
+        assertTrue(!ro.isOff(30.0, 5f, wrongWay = false))
+        assertTrue(ro.isOff(50.0, 5f, wrongWay = false))
+        // poor GPS: allow more before calling it off route, but never more than 100 m
+        assertTrue(!ro.isOff(50.0, 40f, wrongWay = false))
+        assertTrue(ro.isOff(101.0, 200f, wrongWay = false))
+        // on the line but driving against it
+        assertTrue(ro.isOff(5.0, 5f, wrongWay = true))
+        assertTrue(ro.wrongWay(180f, 40, 0.0, 100.0))
+        assertTrue(!ro.wrongWay(20f, 40, 0.0, 100.0))
+        assertTrue(!ro.wrongWay(180f, 5, 0.0, 100.0)) // crawling: GPS course is noise
+        assertTrue(!ro.wrongWay(null, 40, 0.0, 100.0))
+    }
+
+    @Test fun rerouteTiming() {
+        val ro = com.ahu.tlauncher.route.OffRoute
+        assertTrue(!ro.due(guided = true, offSince = 0, lastRequest = 0, now = 10_000)) // not off
+        assertTrue(!ro.due(guided = true, offSince = 10_000, lastRequest = 0, now = 12_000))
+        assertTrue(ro.due(guided = true, offSince = 10_000, lastRequest = 0, now = 13_000)) // right after starting too
+        assertTrue(!ro.due(guided = true, offSince = 10_000, lastRequest = 9_000, now = 13_000)) // just asked
+        assertTrue(!ro.due(guided = false, offSince = 10_000, lastRequest = 0, now = 13_000)) // Google Maps reroutes itself first
+        assertTrue(ro.due(guided = false, offSince = 10_000, lastRequest = 0, now = 18_000))
+    }
 }

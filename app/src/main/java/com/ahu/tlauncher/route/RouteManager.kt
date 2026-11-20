@@ -253,7 +253,7 @@ class RouteManager(
         val s = _route.value ?: return null
         if (s.route == null) return null
         _route.value = s.copy(phase = RoutePhase.ACTIVE, alternatives = emptyList(), selected = 0)
-        offRouteSince = 0; lastReroute = System.currentTimeMillis(); arriving = false
+        offRouteSince = 0; lastReroute = 0; arriving = false
         spoken.clear()
         if (s.guided) {
             val first = s.route.steps.firstOrNull { it.type != "depart" }
@@ -293,15 +293,23 @@ class RouteManager(
         val r = s.route ?: return
         if (s.phase != RoutePhase.ACTIVE) return
         val p = LatLon(loc.latitude, loc.longitude)
-        val (seg, off) = RouteMath.progress(r.points, p, s.progressSeg)
+        val kmh = if (loc.hasSpeed()) (loc.speed * 3.6f).toInt() else 0
+        val (found, off) = RouteMath.progress(r.points, p, s.progressSeg)
+        val segLen = if (found + 1 < r.points.size) RouteMath.distanceM(r.points[found], r.points[found + 1]) else 0.0
+        val segBearing = if (found + 1 < r.points.size) RouteMath.bearingDeg(r.points[found], r.points[found + 1]) else null
+        val wrongWay = OffRoute.wrongWay(loc.takeIf { it.hasBearing() }?.bearing, kmh, segBearing, segLen)
+        val isOff = OffRoute.isOff(off, loc.takeIf { it.hasAccuracy() }?.accuracy, wrongWay)
+        // Off the route, progress stays where the car left it: a later part of the route that happens to pass nearby
+        // mustn't count as driven (it would trim the line and hide that the car is off route).
+        val seg = if (isOff) s.progressSeg else found
         val left = RouteMath.remainingM(r.points, seg, p)
         val leftS = if (r.distanceM > 0) (r.durationS * left / r.distanceM).toInt() else r.durationS
-        val turn = if (s.guided) FreeNav.nextTurn(r, seg, p) else null
+        // No turn instructions from a route the car has left.
+        val turn = if (s.guided && !isOff) FreeNav.nextTurn(r, seg, p) else null
         _route.value = s.copy(progressSeg = seg, car = p, remainingM = left.toInt(), remainingS = leftS, turn = turn)
         val now = System.currentTimeMillis()
         // Free map: speak the next turn ahead of time, again when close, and at the turn.
         if (turn != null) {
-            val kmh = if (loc.hasSpeed()) (loc.speed * 3.6f).toInt() else 0
             val done = spoken[turn.step.pointIndex] ?: 0
             val stage = FreeNav.dueStage(turn.distanceM, kmh, done)
             if (stage > 0) {
@@ -315,29 +323,31 @@ class RouteManager(
             if (!arriving) { arriving = true; scope.launch { delay(8_000); if (_route.value?.destination == s.destination) end() } }
             return
         }
-        // Off the line for 15 s (e.g. Google Maps chose another road): recalculate, at most every 30 s.
-        // Off the line (e.g. a missed turn): recalculate. TLauncher guides free routes, so it reacts faster there.
-        val wait = if (s.guided) 8_000 else 15_000
-        val gap = if (s.guided) 15_000 else 30_000
-        if (off > 60) {
+        // Off the line (a missed turn, the wrong way, or Google Maps chose another road): recalculate after a few
+        // seconds. TLauncher guides free routes itself, so it reacts faster there.
+        if (isOff) {
             if (offRouteSince == 0L) offRouteSince = now
-            if (now - offRouteSince > wait && now - lastReroute > gap) {
+            if (OffRoute.due(s.guided, offRouteSince, lastReroute, now) && routeJob?.isActive != true) {
                 lastReroute = now; offRouteSince = 0
-                reroute(loc)
+                reroute(loc, kmh)
             }
         } else offRouteSince = 0
     }
 
-    private fun reroute(loc: Location) {
+    private fun reroute(loc: Location, kmh: Int) {
         val s = _route.value ?: return
         routeJob?.cancel()
+        // The heading makes the new route start the way the car is going (no "make a U-turn" when moving).
+        val heading = loc.takeIf { it.hasBearing() && kmh >= 10 }?.bearing
         routeJob = scope.launch {
-            runCancellable { computeRoute(LatLon(loc.latitude, loc.longitude), s.destination, loc.takeIf { it.hasBearing() }?.bearing) }
+            runCancellable { computeRoute(LatLon(loc.latitude, loc.longitude), s.destination, heading) }
                 .onSuccess { r ->
                     spoken.clear()
                     if (s.guided) speak("Route recalculated.")
                     _route.value = _route.value?.copy(route = r, progressSeg = 0, remainingM = r.distanceM, remainingS = r.durationS, error = null)
                 }
+                // Couldn't get one (no signal, service busy): try again soon instead of after the full wait.
+                .onFailure { lastReroute = System.currentTimeMillis() - OffRoute.gapMs(s.guided) + OffRoute.RETRY_MS }
         }
     }
 
@@ -361,7 +371,7 @@ class RouteManager(
     private suspend fun computeRoutes(origin: LatLon, dest: Place, heading: Float?, alternatives: Boolean): List<RouteData> {
         if (freeMode()) {
             val d = freePlace(dest).latLon!!
-            return FreeNav.parseRoutes(FreeNav.get(FreeNav.routeUrl(origin, d, alternatives))).take(3).ifEmpty { throw ApiException("No route found") }
+            return FreeNav.parseRoutes(FreeNav.get(FreeNav.routeUrl(origin, d, alternatives, heading))).take(3).ifEmpty { throw ApiException("No route found") }
         }
         fun ll(p: LatLon) = JSONObject().put("latLng", JSONObject().put("latitude", p.lat).put("longitude", p.lon))
         val o = ll(origin).apply { heading?.let { put("heading", it.toInt()) } }
