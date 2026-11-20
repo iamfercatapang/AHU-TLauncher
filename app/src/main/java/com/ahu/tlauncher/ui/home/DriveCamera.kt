@@ -56,8 +56,8 @@ object DriveCamera {
     }
 
     /**
-     * Close in town, easing out on the highway: ≤40 km/h → 18.25, ≥90 → 17.25 (about 100 m of road ahead in town
-     * and 200 m on the highway on a 9" head unit; a bit closer than Google Maps' navigation view).
+     * Close in town, easing out on the highway: ≤40 km/h → 18.25, ≥90 → 17.25 (roughly 130 m of road ahead in town
+     * and 260 m on the highway on a 9" head unit; a bit closer than Google Maps' navigation view).
      */
     const val DRIVE_ZOOM_TOWN = 18.25
     const val DRIVE_ZOOM_HIGHWAY = 17.25
