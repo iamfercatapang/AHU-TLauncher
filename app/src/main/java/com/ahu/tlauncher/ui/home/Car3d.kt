@@ -136,8 +136,12 @@ internal class Car3dState {
     /** Bumped on every touch, restarting the wait before the car turns back. */
     var touches by mutableIntStateOf(0)
 
+    /**
+     * The car follows the finger: dragging right turns its near side to the right (the camera circles to its left,
+     * which is +yaw in [CarFraming.eye]); dragging down tips its roof toward you.
+     */
     fun drag(dx: Float, dy: Float, viewW: Float, viewH: Float) {
-        yaw -= dx / viewW * 2 * PI.toFloat()
+        yaw += dx / viewW * 2 * PI.toFloat()
         elevation = (elevation + dy / viewH * PI.toFloat() / 2)
             .coerceIn(CarFraming.ORBIT_EL_MIN.toFloat(), CarFraming.ORBIT_EL_MAX.toFloat())
     }

@@ -126,4 +126,18 @@ class CarFramingTest {
     private fun dot(a: DoubleArray, b: DoubleArray) = a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
     private fun cross(a: DoubleArray, b: DoubleArray) = doubleArrayOf(a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
     private fun norm(a: DoubleArray) = sqrt(dot(a, a)).let { l -> doubleArrayOf(a[0] / l, a[1] / l, a[2] / l) }
+
+    /** Swiping right must turn the car with the finger: the camera circles to its own left. */
+    @Test fun swipeRightTurnsCarWithFinger() {
+        val car = com.ahu.tlauncher.ui.home.Car3dState()
+        val before = CarFraming.eye(1f)
+        car.drag(dx = 100f, dy = 0f, viewW = 1000f, viewH = 500f)
+        val after = CarFraming.eye(1f, car.yaw.toDouble(), 0.0)
+        val t = CarFraming.target()
+        // Camera's right on screen = forward × up (looking from the eye at the target, y up).
+        val fx = t[0] - before[0]; val fz = t[2] - before[2]
+        val rightX = -fz; val rightZ = fx
+        val moved = (after[0] - before[0]) * rightX + (after[2] - before[2]) * rightZ
+        assertTrue("camera should move left, moved $moved along its right", moved < 0)
+    }
 }
