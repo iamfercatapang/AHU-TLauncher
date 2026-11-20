@@ -24,6 +24,10 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapStyleOptions
 import androidx.compose.ui.graphics.toArgb
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.withFrameMillis
+import com.google.android.gms.maps.model.Polyline
 
 /**
  * Night look for the Google map, after the dashboard prototype's map: deep blue-grey ground,
@@ -85,6 +89,8 @@ private class GoogleHandle(val view: MapView) : MapControls {
     var lat: Double? = null
     var lon: Double? = null
     var gpsBearing: Float? = null
+    /** Course of the latest fix (as reported, even when crawling). */
+    var fixBearing: Float? = null
     /** Map rotation for the compass. */
     val bearingState = androidx.compose.runtime.mutableFloatStateOf(0f)
     override val bearing: Float get() = bearingState.floatValue
@@ -112,23 +118,87 @@ private class GoogleHandle(val view: MapView) : MapControls {
     override fun zoomOut() { map?.animateCamera(CameraUpdateFactory.zoomOut(), 300, null) }
     override fun recenter() { following = true; follow(animateMs = 600) }
 
+    /** Smooth following: the car glides between fixes, zoom and turns ease. Off in low-performance mode. */
+    val smooth: Boolean get() = !lowPerf
+    val glide = MapGlide()
+    private var zoomShown: Double? = null
+    private var bearingShown: Float? = null
+    /** An animated camera move (recenter) plays until then; the frame loop leaves the camera alone meanwhile. */
+    private var holdUntil = 0L
+    /** Bumped when the frame loop has something to do (a new fix, the view changed). */
+    val ticks = MutableStateFlow(0)
+    fun wake() { ticks.value++ }
+    /** The route line from the car on (casing and line), and the route after the car, for moving its start with the car. */
+    var routeLines: List<Polyline> = emptyList()
+    var routeTail: List<LatLng> = emptyList()
+    private var headAt = 0L
+
+    /** Where the car is drawn: gliding (smooth), or the latest fix. */
+    fun carPos(): LatLng? =
+        if (smooth && glide.hasFix) SystemClock.elapsedRealtime().let { LatLng(glide.lat(it), glide.lon(it)) }
+        else LatLng(lat ?: return null, lon ?: return null)
+
+    private fun applyPadding(m: GoogleMap, drive: Boolean) {
+        val pad = if (drive && view.width > 0) DriveCamera.padding(view.width, view.height, DriveCamera.carAnchor(navigating, cardsRight)) else IntArray(4)
+        if (!pad.contentEquals(appliedPad)) { m.setPadding(pad[0], pad[1], pad[2], pad[3]); appliedPad = pad }
+    }
+
     /**
      * Drive (or navigating): flat, heading-up, close zoom by speed, the car low on the map (and away from the
      * route cards while navigating). Park: flat, north-up overview with the car in the middle.
+     * Smooth mode: without [animateMs] this only wakes the frame loop, which eases the camera there.
      */
-    fun follow(animateMs: Int = 900) {
+    fun follow(animateMs: Int? = null) {
         val m = map ?: return
         if (!following) return
-        val target = LatLng(lat ?: return, lon ?: return)
+        if (smooth && animateMs == null) { wake(); return }
+        val target = carPos() ?: return
         val drive = DriveCamera.driveView(mode, navigating)
-        val pad = if (drive && view.width > 0) DriveCamera.padding(view.width, view.height, DriveCamera.carAnchor(navigating, cardsRight)) else IntArray(4)
-        if (!pad.contentEquals(appliedPad)) { m.setPadding(pad[0], pad[1], pad[2], pad[3]); appliedPad = pad }
+        applyPadding(m, drive)
         val pos = if (drive) {
             CameraPosition(target, (DriveCamera.zoomFor(speedKmh ?: 30) + DriveCamera.TILE_256_OFFSET).toFloat(), DriveCamera.driveTilt(lowPerf).toFloat(), gpsBearing ?: m.cameraPosition.bearing)
         } else {
             CameraPosition(target, (DriveCamera.PARK_ZOOM + DriveCamera.TILE_256_OFFSET).toFloat(), DriveCamera.PARK_TILT.toFloat(), 0f)
         }
-        m.animateCamera(CameraUpdateFactory.newCameraPosition(pos), animateMs, null)
+        val ms = animateMs ?: 900
+        m.animateCamera(CameraUpdateFactory.newCameraPosition(pos), ms, null)
+        if (smooth) { holdUntil = SystemClock.elapsedRealtime() + ms + 50; zoomShown = null; bearingShown = null; wake() }
+    }
+
+    /**
+     * One frame of smooth following: moves the car arrow (and the start of the route line) along its glide, and
+     * eases the camera after it. Returns true while anything is still moving.
+     */
+    fun frame(marker: com.google.android.gms.maps.model.Marker?, dtMs: Long): Boolean {
+        val m = map ?: return false
+        if (!glide.hasFix) return false
+        val now = SystemClock.elapsedRealtime()
+        val moving = glide.moving(now)
+        val pos = LatLng(glide.lat(now), glide.lon(now))
+        marker?.position = pos
+        marker?.rotation = glide.bearing(now)
+        // The line starts at the car: moved about 10 times a second (it can be thousands of points long).
+        if (routeLines.isNotEmpty() && (now - headAt >= 100 || !moving)) {
+            headAt = now
+            val pts = ArrayList<LatLng>(routeTail.size + 1).apply { add(pos); addAll(routeTail) }
+            routeLines.forEach { it.points = pts }
+        }
+        if (!following) { zoomShown = null; bearingShown = null; return moving }
+        if (now < holdUntil) return true
+        val drive = DriveCamera.driveView(mode, navigating)
+        applyPadding(m, drive)
+        val cp = m.cameraPosition
+        val zoomTo = (if (drive) DriveCamera.zoomFor(speedKmh ?: 30) else DriveCamera.PARK_ZOOM) + DriveCamera.TILE_256_OFFSET
+        val turnTo = if (drive) (gpsBearing ?: bearingShown ?: cp.bearing) else 0f
+        val tilt = (if (drive) DriveCamera.driveTilt(lowPerf) else DriveCamera.PARK_TILT).toFloat()
+        val z = approach(zoomShown ?: cp.zoom.toDouble(), zoomTo, dtMs, DriveCamera.ZOOM_EASE_MS)
+        val b = approachAngle(bearingShown ?: cp.bearing, turnTo, dtMs, DriveCamera.TURN_EASE_MS)
+        val settled = kotlin.math.abs(z - zoomTo) < 0.005 && anglesClose(b, turnTo, 0.3f)
+        val zs = if (settled) zoomTo else z
+        val bs = if (settled) turnTo else b
+        zoomShown = zs; bearingShown = bs
+        m.moveCamera(CameraUpdateFactory.newCameraPosition(CameraPosition(pos, zs.toFloat(), tilt, bs)))
+        return moving || !settled
     }
 }
 
@@ -193,10 +263,12 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
                 val marker = car.value ?: gm.addMarker(
                     com.google.android.gms.maps.model.MarkerOptions().position(pos).icon(carArrow(carDensity)).anchor(0.5f, 0.55f).flat(true).zIndex(10f),
                 )?.also { car.value = it }
-                marker?.position = pos
-                fix.bearing?.let { marker?.rotation = it }
+                // Only a new position or course starts a new glide (a speed change alone doesn't).
+                val moved = fix.lat != handle.lat || fix.lon != handle.lon || fix.bearing != handle.fixBearing || !handle.glide.hasFix
+                if (handle.smooth) { if (moved) handle.glide.fix(fix.lat, fix.lon, fix.bearing, SystemClock.elapsedRealtime()) }
+                else { marker?.position = pos; fix.bearing?.let { marker?.rotation = it } }
             }
-            handle.lat = fix.lat; handle.lon = fix.lon
+            handle.lat = fix.lat; handle.lon = fix.lon; handle.fixBearing = fix.bearing
             if ((fix.speed ?: 0) >= 5) fix.bearing?.let { handle.gpsBearing = it } // GPS course is noise when crawling
             handle.speedKmh = fix.speed
             val next = DriveCamera.nextMode(handle.mode, fix.speed)
@@ -205,6 +277,19 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
                 if (next == DriveCamera.Mode.DRIVE) handle.following = true
             }
             handle.follow()
+        }
+    }
+    // Smooth mode: every frame while the car glides or the camera eases; idle until the next fix otherwise.
+    LaunchedEffect(m) {
+        if (m == null) return@LaunchedEffect
+        var last = 0L
+        while (true) {
+            val seen = handle.ticks.value
+            val now = withFrameMillis { it }
+            val dt = if (last == 0L) 16L else (now - last).coerceIn(1L, 100L)
+            last = now
+            val busy = handle.smooth && handle.frame(car.value, dt)
+            if (!busy) { last = 0L; handle.ticks.first { it != seen } }
         }
     }
     // Navigating (own route guidance, or Google Maps / Waze): keep the drive view, car away from the route cards.
@@ -223,59 +308,86 @@ internal fun googleMap(dark: Boolean, traffic: Boolean, state: HomeUiState, modi
             ) handle.recenter()
         }
     }
-    // Route line: driven part trimmed, slow / jammed sections coloured from live traffic.
+    // Route line: driven part trimmed, slow / jammed sections coloured from live traffic. Drawn once per route;
+    // as the car moves the lines are updated in place (not removed and drawn again, which flickered).
     val density = LocalContext.current.resources.displayMetrics.density
-    LaunchedEffect(m, state.route) {
+    val r = state.route
+    val active = r?.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE
+    fun ll(p: com.ahu.tlauncher.route.LatLon) = LatLng(p.lat, p.lon)
+    fun line(gm: GoogleMap, points: List<LatLng>, color: androidx.compose.ui.graphics.Color, widthDp: Float, z: Float) =
+        gm.addPolyline(
+            com.google.android.gms.maps.model.PolylineOptions().addAll(points).color(color.toArgb()).width(widthDp * density).zIndex(z)
+                .startCap(com.google.android.gms.maps.model.RoundCap()).endCap(com.google.android.gms.maps.model.RoundCap())
+                .jointType(com.google.android.gms.maps.model.JointType.ROUND),
+        )
+    val trafficLines = remember { ArrayList<Polyline>() }
+    LaunchedEffect(m, r?.route, r?.phase, r?.alternatives, r?.selected, r?.destination) {
         val gm = m ?: return@LaunchedEffect
-        handle.routeShapes.forEach { (it as? com.google.android.gms.maps.model.Polyline)?.remove(); (it as? com.google.android.gms.maps.model.Marker)?.remove() }
+        handle.routeShapes.forEach { (it as? Polyline)?.remove(); (it as? com.google.android.gms.maps.model.Marker)?.remove() }
         handle.routeShapes.clear()
-        val r = state.route
-        val data = r?.route
-        if (r == null || data == null) { handle.fittedRoute = null; handle.resetPadding(); handle.follow(); return@LaunchedEffect }
-        val active = r.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE
-        val start = if (active) (r.progressSeg + 1).coerceAtMost(data.points.size - 1) else 0
-        fun ll(p: com.ahu.tlauncher.route.LatLon) = LatLng(p.lat, p.lon)
-        val pts = buildList { if (active) r.car?.let { add(ll(it)) }; data.points.drop(start).forEach { add(ll(it)) } }
-        if (pts.size >= 2) {
-            fun line(points: List<LatLng>, color: androidx.compose.ui.graphics.Color, widthDp: Float, z: Float) =
-                gm.addPolyline(
-                    com.google.android.gms.maps.model.PolylineOptions().addAll(points).color(color.toArgb()).width(widthDp * density).zIndex(z)
-                        .startCap(com.google.android.gms.maps.model.RoundCap()).endCap(com.google.android.gms.maps.model.RoundCap())
-                        .jointType(com.google.android.gms.maps.model.JointType.ROUND),
-                )
+        trafficLines.forEach { it.remove() }; trafficLines.clear()
+        handle.routeLines = emptyList(); handle.routeTail = emptyList()
+        val rs = current.value.route
+        val data = rs?.route
+        if (rs == null || data == null) { handle.fittedRoute = null; handle.resetPadding(); handle.follow(); return@LaunchedEffect }
+        val isActive = rs.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE
+        if (data.points.size >= 2) {
             // other route choices (preview only), grey and under the chosen one
-            if (!active) r.alternatives.forEachIndexed { i, alt ->
-                if (i == r.selected || alt.points.size < 2) return@forEachIndexed
+            if (!isActive) rs.alternatives.forEachIndexed { i, alt ->
+                if (i == rs.selected || alt.points.size < 2) return@forEachIndexed
                 val ap = alt.points.map(::ll)
-                handle.routeShapes += line(ap, ROUTE_ALT_CASING, 9f, 0.5f)
-                handle.routeShapes += line(ap, ROUTE_ALT, 5.5f, 0.6f)
+                handle.routeShapes += line(gm, ap, ROUTE_ALT_CASING, 9f, 0.5f)
+                handle.routeShapes += line(gm, ap, ROUTE_ALT, 5.5f, 0.6f)
             }
-            handle.routeShapes += line(pts, ROUTE_LINE_CASING, 10f, 1f)
-            handle.routeShapes += line(pts, ROUTE_LINE, 6.5f, 2f)
-            data.traffic.filter { it.speed != com.ahu.tlauncher.route.Traffic.NORMAL }.forEach { t ->
-                val from = maxOf(t.from, start); val to = minOf(t.to, data.points.size - 1)
-                if (to > from) handle.routeShapes += line(data.points.subList(from, to + 1).map(::ll),
+            val all = data.points.map(::ll)
+            val lines = listOf(line(gm, all, ROUTE_LINE_CASING, 10f, 1f), line(gm, all, ROUTE_LINE, 6.5f, 2f))
+            handle.routeShapes += lines
+            // While driving, the progress effect below trims the lines and moves their start with the car.
+            if (isActive) handle.routeLines = lines
+            else data.traffic.filter { it.speed != com.ahu.tlauncher.route.Traffic.NORMAL }.forEach { t ->
+                val to = minOf(t.to, data.points.size - 1)
+                if (to > t.from) trafficLines += line(gm, data.points.subList(t.from, to + 1).map(::ll),
                     if (t.speed == com.ahu.tlauncher.route.Traffic.JAM) TRAFFIC_JAM else TRAFFIC_SLOW, 6f, 3f)
             }
         }
         gm.addMarker(
-            com.google.android.gms.maps.model.MarkerOptions().position(ll(data.points.last())).title(r.destination.name).anchor(0.5f, 0.5f).zIndex(4f)
+            com.google.android.gms.maps.model.MarkerOptions().position(ll(data.points.last())).title(rs.destination.name).anchor(0.5f, 0.5f).zIndex(4f)
                 .icon(com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(destinationBitmap(density))),
         )?.let { handle.routeShapes += it }
         // Leave room for the cards over the map: the route card (top, away from the map buttons) while previewing,
         // the turn card (top) and trip card (bottom) while driving.
         val card = ((NAV_CARD_W.value + 36) * density).toInt(); val edge = (70 * density).toInt()
-        val cardsRight = state.settings.carSide == com.ahu.tlauncher.data.CarSide.RIGHT
+        val cardsRight = current.value.settings.carSide == com.ahu.tlauncher.data.CarSide.RIGHT
         // (While driving the route, the drive view places the car instead: low, away from the cards.)
-        if (!active) { gm.setPadding(if (cardsRight) edge else card, (60 * density).toInt(), if (cardsRight) card else edge, (30 * density).toInt()); handle.resetPadding(dirty = true) }
-        if (!active && handle.fittedRoute !== data) {
+        if (!isActive) { gm.setPadding(if (cardsRight) edge else card, (60 * density).toInt(), if (cardsRight) card else edge, (30 * density).toInt()); handle.resetPadding(dirty = true) }
+        if (!isActive && handle.fittedRoute !== data) {
             // Preview: show the whole route, stop following the car.
             handle.fittedRoute = data
             handle.following = false
-            val b = com.google.android.gms.maps.model.LatLngBounds.builder().apply { r.alternatives.ifEmpty { listOf(data) }.forEach { a -> a.points.forEach { include(ll(it)) } } }.build()
+            val b = com.google.android.gms.maps.model.LatLngBounds.builder().apply { rs.alternatives.ifEmpty { listOf(data) }.forEach { a -> a.points.forEach { include(ll(it)) } } }.build()
             runCatching { gm.animateCamera(CameraUpdateFactory.newLatLngBounds(b, (40 * density).toInt()), 700, null) }
         }
-        if (active && handle.fittedRoute != null) { handle.fittedRoute = null; handle.recenter() }
+        if (isActive && handle.fittedRoute != null) { handle.fittedRoute = null; handle.recenter() }
+        handle.wake()
+    }
+    // Driving the route: trim the driven part (and its traffic colours) as progress moves on. In smooth mode the frame
+    // loop moves the line's start with the gliding car; otherwise it starts at the latest fix.
+    LaunchedEffect(m, r?.route, active, r?.progressSeg, if (handle.smooth) null else r?.car) {
+        val gm = m ?: return@LaunchedEffect
+        val rs = current.value.route ?: return@LaunchedEffect
+        val data = rs.route ?: return@LaunchedEffect
+        if (!active || handle.routeLines.isEmpty()) return@LaunchedEffect
+        val start = (rs.progressSeg + 1).coerceAtMost(data.points.size - 1)
+        handle.routeTail = data.points.drop(start).map(::ll)
+        val head = handle.carPos() ?: rs.car?.let(::ll)
+        val pts = buildList { head?.let { add(it) }; addAll(handle.routeTail) }
+        if (pts.size >= 2) handle.routeLines.forEach { it.points = pts }
+        trafficLines.forEach { it.remove() }; trafficLines.clear()
+        data.traffic.filter { it.speed != com.ahu.tlauncher.route.Traffic.NORMAL }.forEach { t ->
+            val from = maxOf(t.from, start); val to = minOf(t.to, data.points.size - 1)
+            if (to > from) trafficLines += line(gm, data.points.subList(from, to + 1).map(::ll),
+                if (t.speed == com.ahu.tlauncher.route.Traffic.JAM) TRAFFIC_JAM else TRAFFIC_SLOW, 6f, 3f)
+        }
     }
     // Dropped pin.
     LaunchedEffect(m, state.pin) {

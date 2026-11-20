@@ -11,6 +11,9 @@ object DriveCamera {
     const val PARK_TILT = 0.0
     const val PARK_ZOOM = 17.0
     const val REFOLLOW_MS = 10_000L
+    /** Smooth following: zoom changes ease in over about this long, turns of the map over this long. */
+    const val ZOOM_EASE_MS = 1_200L
+    const val TURN_EASE_MS = 450L
 
     /**
      * Zoom levels here are OpenFreeMap's (MapLibre: 512 dp tiles). Google Maps and the osmdroid fallback use
