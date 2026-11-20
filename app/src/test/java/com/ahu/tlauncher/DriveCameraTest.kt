@@ -16,12 +16,12 @@ class DriveCameraTest {
     }
 
     @Test fun zoomBySpeed() {
-        assertEquals(17.5, DriveCamera.zoomFor(20), 0.001)
-        assertEquals(17.5, DriveCamera.zoomFor(40), 0.001)
-        assertEquals(17.0, DriveCamera.zoomFor(65), 0.001)
-        assertEquals(16.5, DriveCamera.zoomFor(90), 0.001)
-        assertEquals(16.5, DriveCamera.zoomFor(120), 0.001)
-        assertEquals(16.5, DriveCamera.PARK_ZOOM, 0.001)
+        assertEquals(18.25, DriveCamera.zoomFor(20), 0.001)
+        assertEquals(18.25, DriveCamera.zoomFor(40), 0.001)
+        assertEquals(17.75, DriveCamera.zoomFor(65), 0.001)
+        assertEquals(17.25, DriveCamera.zoomFor(90), 0.001)
+        assertEquals(17.25, DriveCamera.zoomFor(120), 0.001)
+        assertEquals(17.0, DriveCamera.PARK_ZOOM, 0.001)
         assertEquals(0.0, DriveCamera.driveTilt(false), 0.001)
     }
 

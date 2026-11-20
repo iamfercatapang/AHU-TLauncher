@@ -9,7 +9,7 @@ object DriveCamera {
     /** Flat while driving and navigating, like Google Maps' 2D heading-up view (also light on head units). */
     const val DRIVE_TILT = 0.0
     const val PARK_TILT = 0.0
-    const val PARK_ZOOM = 16.5
+    const val PARK_ZOOM = 17.0
     const val REFOLLOW_MS = 10_000L
 
     /**
@@ -55,9 +55,15 @@ object DriveCamera {
         else -> current
     }
 
-    /** Close in town (Google Maps' navigation zoom), easing out on the highway: ≤40 km/h → 17.5, ≥90 → 16.5. */
+    /**
+     * Close in town, easing out on the highway: ≤40 km/h → 18.25, ≥90 → 17.25 (about 100 m of road ahead in town
+     * and 200 m on the highway on a 9" head unit; a bit closer than Google Maps' navigation view).
+     */
+    const val DRIVE_ZOOM_TOWN = 18.25
+    const val DRIVE_ZOOM_HIGHWAY = 17.25
+
     fun zoomFor(speedKmh: Int): Double {
         val s = speedKmh.coerceIn(40, 90)
-        return 17.5 - (s - 40) / 50.0
+        return DRIVE_ZOOM_TOWN - (DRIVE_ZOOM_TOWN - DRIVE_ZOOM_HIGHWAY) * (s - 40) / 50.0
     }
 }
