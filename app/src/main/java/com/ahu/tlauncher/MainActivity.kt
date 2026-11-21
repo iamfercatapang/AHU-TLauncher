@@ -202,6 +202,11 @@ class MainActivity : ComponentActivity(), HomeActions {
         val loggedKm by app.carCare.loggedKm.collectAsStateWithLifecycle()
         val maintenance by app.carCare.maintenance.collectAsStateWithLifecycle()
         val serviceReminder by app.carCare.reminder.collectAsStateWithLifecycle()
+        val destWeather by app.weather.destination.collectAsStateWithLifecycle()
+        // Weather at the destination while TLauncher's own trip is running (its end point when the place has no position).
+        val destPos = route?.takeIf { it.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE }
+            ?.let { r -> r.destination.latLon ?: r.route?.points?.lastOrNull() }
+        LaunchedEffect(destPos?.lat, destPos?.lon) { app.weather.setDestination(destPos?.lat, destPos?.lon) }
         // "Continue" on the trip offer: start as soon as the route is found.
         LaunchedEffect(route, autoStartTrip) {
             val r = route
@@ -313,6 +318,7 @@ class MainActivity : ComponentActivity(), HomeActions {
                 com.ahu.tlauncher.system.MaintenanceMath.all(maintenance, loggedKm, now.toLocalDate())
             },
             serviceReminder = serviceReminder, searchRequest = searchRequest,
+            destWeather = destWeather?.takeIf { System.currentTimeMillis() - it.fetchedAtMs < com.ahu.tlauncher.system.WeatherParser.MAX_AGE_MS },
         )
         CompositionLocalProvider(LocalLowPerf provides lowPerf) {
             TLauncherTheme(dark = dark) { ScaledCanvas { HomeScreen(state, this@MainActivity) } }
@@ -367,7 +373,13 @@ class MainActivity : ComponentActivity(), HomeActions {
     // ---------------- HomeActions ----------------
 
     override fun launch(app: AppEntry) {
-        if (!this.app.apps.launch(app)) toastMissing(app.label)
+        if (!this.app.apps.launch(app)) { toastMissing(app.label); return }
+        // The dock shows recently used apps next to the pinned ones, like Tesla's.
+        lifecycleScope.launch { this@MainActivity.app.prefs.addRecentApp(app.key) }
+    }
+
+    override fun toggleFuelDisplay() {
+        lifecycleScope.launch { app.prefs.setFuelAsRange(!app.prefs.settings.first().fuelAsRange) }
     }
 
 

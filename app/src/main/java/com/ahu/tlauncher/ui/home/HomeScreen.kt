@@ -28,6 +28,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AcUnit
 import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.LocalGasStation
 import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Dehaze
@@ -157,7 +159,7 @@ private fun Modifier.panelSwipe(swipe: PanelSwipe): Modifier = pointerInput(swip
 /** Width of the status bar popups (notifications, Bluetooth, Wi-Fi, mobile, weather). */
 internal val STATUS_POPUP_W = 380.dp
 
-enum class Overlay { NONE, APPS, SETTINGS, MUSIC, SEARCH, BRIGHTNESS, VOLUME, CARD_MUSIC, NOTIFICATIONS, BLUETOOTH, WIFI, CELL, WEATHER }
+enum class Overlay { NONE, APPS, SETTINGS, MUSIC, SEARCH, BRIGHTNESS, CARD_MUSIC, NOTIFICATIONS, BLUETOOTH, WIFI, CELL, WEATHER }
 
 /** Small popups under the status bar: no dimmed backdrop, like the notifications list. */
 private val STATUS_POPUPS = setOf(Overlay.NOTIFICATIONS, Overlay.BLUETOOTH, Overlay.WIFI, Overlay.CELL, Overlay.WEATHER)
@@ -311,6 +313,7 @@ fun HomeScreen(
                 state, Modifier.fillMaxWidth().height(STATUS_H),
                 mapSpan = if (!mapVisible) null else if (carRight) (0.dp to maxWidth - stageW) else (stageW to maxWidth),
                 onObdClick = { settingsStart = com.ahu.tlauncher.ui.settings.Section.CAR; overlay = Overlay.SETTINGS },
+                onFuelClick = actions::toggleFuelDisplay,
                 onBellClick = { toggle(Overlay.NOTIFICATIONS) },
                 onStatusClick = toggle,
                 onAnchor = { o, r -> if (anchors[o] != r) anchors[o] = r },
@@ -321,7 +324,7 @@ fun HomeScreen(
             val panelIn = fadeIn(TMotion.panel()) + androidx.compose.animation.slideInVertically(TMotion.panel()) { rise }
             val panelOut = fadeOut(androidx.compose.animation.core.tween(150))
             androidx.compose.animation.AnimatedVisibility(
-                visible = overlay !in setOf(Overlay.NONE, Overlay.BRIGHTNESS, Overlay.VOLUME, Overlay.CARD_MUSIC) + STATUS_POPUPS,
+                visible = overlay !in setOf(Overlay.NONE, Overlay.BRIGHTNESS, Overlay.CARD_MUSIC) + STATUS_POPUPS,
                 enter = fadeIn(TMotion.panel()), exit = panelOut,
             ) { Box(Modifier.fillMaxSize().background(T.colors.scrim)) }
             // Tap anywhere outside an open panel to close it (that tap does nothing else).
@@ -373,14 +376,6 @@ fun HomeScreen(
             ) {
                 WeatherPopup(state, onClose = closeStatus)
             }
-            // volume slider, above the dock's speaker
-            androidx.compose.animation.AnimatedVisibility(
-                visible = overlay == Overlay.VOLUME,
-                enter = panelIn, exit = panelOut,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 10.dp),
-            ) {
-                VolumePopup(state, actions)
-            }
             // "Now playing" over the car panel (split view), or over the car area when it's full screen
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.CARD_MUSIC,
@@ -395,11 +390,11 @@ fun HomeScreen(
                     else Modifier.width(stageW).height(maxHeight - STATUS_H - 80.dp).padding(horizontal = 12.dp).padding(bottom = 10.dp),
                 )
             }
-            // brightness slider, above the dock's sun button
+            // brightness slider, above the dock's sun (left of the dock, like Tesla's driver temperature)
             androidx.compose.animation.AnimatedVisibility(
                 visible = overlay == Overlay.BRIGHTNESS,
                 enter = panelIn, exit = panelOut,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 10.dp),
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 10.dp),
             ) {
                 BrightnessPopup(state, actions)
             }
@@ -494,10 +489,13 @@ fun HomeScreen(
                 if (!mapVisible) { mapVisible = true; overlay = Overlay.SETTINGS } else toggle(Overlay.SETTINGS)
             },
             onToggleApps = { toggle(Overlay.APPS) },
-            onToggleMusic = { if (!mapVisible) { mapVisible = true; overlay = Overlay.MUSIC } else toggle(Overlay.MUSIC) },
-            onToggleVolume = { toggle(Overlay.VOLUME) },
-            onToggleBrightness = { toggle(Overlay.BRIGHTNESS) },
+            onOpenBrightness = { toggle(Overlay.BRIGHTNESS) },
             onLaunch = { app: AppEntry -> overlay = Overlay.NONE; actions.launch(app) },
+            onTogglePin = { app ->
+                val wasPinned = app.key in state.settings.pinnedApps
+                actions.togglePin(app)
+                toast = if (wasPinned) "${app.label} removed from dock" else "${app.label} pinned to dock"
+            },
             modifier = Modifier.fillMaxWidth().height(DOCK_H),
         )
     }
@@ -562,6 +560,7 @@ private fun StatusBar(
     state: HomeUiState,
     modifier: Modifier,
     onObdClick: () -> Unit = {},
+    onFuelClick: () -> Unit = {},
     onBellClick: () -> Unit = {},
     onStatusClick: (Overlay) -> Unit = {},
     /** Reports where each tappable status item is drawn (window coordinates). */
@@ -573,10 +572,19 @@ private fun StatusBar(
     // Only the connection status, so engine readings don't redraw the status bar.
     val obdStatus by remember(state.live) { androidx.compose.runtime.derivedStateOf { state.obd.status } }
     BoxWithConstraints(modifier.statusShadow()) {
-        // car panel, top-left: OBD badge
-        if (com.ahu.tlauncher.obd.ObdDisplay.show(obdStatus)) {
+        // car panel, top-left (where Tesla shows gear and battery): OBD badge, then fuel left
+        val obdShown = com.ahu.tlauncher.obd.ObdDisplay.show(obdStatus)
+        val fuelPct by remember(state.live) { androidx.compose.runtime.derivedStateOf { if (com.ahu.tlauncher.obd.ObdDisplay.show(state.obd.status)) state.obd.data.fuelPct else null } }
+        val rangeKm by remember(state.live) { androidx.compose.runtime.derivedStateOf { state.fuel.rangeKm } }
+        if (obdShown || fuelPct != null) {
             val obdX = if (mapSpan != null && mapSpan.first.value == 0f) mapSpan.second + 20.dp else 20.dp
-            ObdBadge(obdStatus, Modifier.align(Alignment.CenterStart).padding(start = obdX).pressable(onClick = onObdClick))
+            Row(Modifier.align(Alignment.CenterStart).padding(start = obdX), verticalAlignment = Alignment.CenterVertically) {
+                if (obdShown) ObdBadge(obdStatus, Modifier.pressable(onClick = onObdClick))
+                fuelPct?.let { pct ->
+                    if (obdShown) Spacer(Modifier.width(16.dp))
+                    FuelStatus(pct, rangeKm, state.settings.fuelAsRange, state.settings.speedUnit == com.ahu.tlauncher.data.SpeedUnit.MPH, onFuelClick)
+                }
+            }
         }
         val links = @Composable { Connectivity(state, onBellClick, onStatusClick, onAnchor) }
         val clock = @Composable {
@@ -594,6 +602,16 @@ private fun StatusBar(
                         Icon(weatherIcon(w), w.kind.name.lowercase().replace('_', ' '), tint = T.colors.text, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("${Math.round(t)} °${if (f) "F" else "C"}", style = STATUS_TEXT, color = T.colors.text)
+                        // While navigating, the weather where the trip ends follows it (Tesla does the same).
+                        state.destWeather?.let { d ->
+                            val dt = if (f) d.tempC * 9 / 5 + 32 else d.tempC
+                            Spacer(Modifier.width(10.dp))
+                            Icon(Icons.Rounded.Flag, "At the destination", tint = T.colors.muted, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Icon(weatherIcon(d), d.kind.name.lowercase().replace('_', ' '), tint = T.colors.text, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("${Math.round(dt)}°", style = STATUS_TEXT, color = T.colors.text)
+                        }
                     }
                     Spacer(Modifier.width(20.dp))
                 }
@@ -611,6 +629,28 @@ private fun StatusBar(
                 links(); Spacer(Modifier.width(24.dp)); clock()
             }
         }
+    }
+}
+
+/**
+ * Fuel left, where Tesla shows its battery: pump, slim level bar and "62%" or "335 km" (tap to switch,
+ * like Tesla's range / percent choice). Amber when low. Range needs a few minutes of driving first.
+ */
+@Composable
+private fun FuelStatus(pct: Int, rangeKm: Int?, asRange: Boolean, mph: Boolean, onClick: () -> Unit) {
+    val level by androidx.compose.animation.core.animateFloatAsState(pct.coerceIn(0, 100) / 100f, TMotion.live(), label = "fuel")
+    val low = pct < com.ahu.tlauncher.obd.FuelMath.LOW_FUEL_PCT
+    val amber = androidx.compose.ui.graphics.Color(0xFFF5A623)
+    val tint = if (low) amber else T.colors.text
+    val text = if (asRange && rangeKm != null) (if (mph) "${Math.round(rangeKm * 0.621371)} mi" else "$rangeKm km") else "$pct%"
+    Row(Modifier.height(40.dp).pressable(onClick = onClick).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Rounded.LocalGasStation, "Fuel", tint = if (low) amber else T.colors.muted, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(6.dp))
+        Box(Modifier.width(34.dp).height(14.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(3.dp)).background(T.colors.secondary.copy(alpha = 0.3f)).padding(2.dp)) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(level).clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp)).background(tint))
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(text, style = STATUS_TEXT, color = tint, maxLines = 1)
     }
 }
 
@@ -692,32 +732,6 @@ internal fun weatherIcon(kind: com.ahu.tlauncher.system.WeatherKind, isDay: Bool
     com.ahu.tlauncher.system.WeatherKind.DRIZZLE, com.ahu.tlauncher.system.WeatherKind.RAIN -> Icons.Rounded.Umbrella
     com.ahu.tlauncher.system.WeatherKind.SNOW -> Icons.Rounded.AcUnit
     com.ahu.tlauncher.system.WeatherKind.STORM -> Icons.Rounded.Thunderstorm
-}
-
-/** Volume slider (prototype popup): "Volume 70%", tap the speaker to mute. */
-@Composable
-private fun VolumePopup(state: HomeUiState, actions: HomeActions) {
-    val v = state.volume
-    val white = androidx.compose.ui.graphics.Color.White
-    var value by remember(v.level, v.muted) { mutableStateOf(if (v.muted) 0f else v.level.toFloat()) }
-    val pct = if (v.max == 0) 0 else (value * 100 / v.max).toInt()
-    Column(Modifier.width(300.dp).clip(TShapes.surface).background(androidx.compose.ui.graphics.Color(0xFF22252B)).padding(horizontal = 18.dp, vertical = 14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Volume", style = TType.button, color = white)
-            Spacer(Modifier.weight(1f))
-            Text("$pct%", style = TType.label, color = white.copy(alpha = 0.6f))
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(36.dp).pressable(onClick = actions::toggleMute), contentAlignment = Alignment.Center) {
-                Icon(if (v.muted || v.level == 0) com.ahu.tlauncher.ui.components.TIcons.SpeakerOff else com.ahu.tlauncher.ui.components.TIcons.Speaker,
-                    if (v.muted) "Unmute" else "Mute", tint = white, modifier = Modifier.size(20.dp))
-            }
-            com.ahu.tlauncher.ui.components.ThinSlider(
-                value, { value = it; actions.setVolume(Math.round(it)) }, range = 0f..v.max.toFloat().coerceAtLeast(1f),
-                modifier = Modifier.weight(1f).padding(start = 6.dp),
-            )
-        }
-    }
 }
 
 /** Screen brightness for the current time of day (day level / night level). */

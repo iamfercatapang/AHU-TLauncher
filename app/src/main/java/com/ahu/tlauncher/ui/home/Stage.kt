@@ -250,7 +250,7 @@ private fun SpeedBlock(state: HomeUiState, modifier: Modifier) {
     // Count to the new value instead of jumping (tabular figures keep the width steady).
     val speed by animateIntAsState(target, TMotion.live(), label = "speed")
     // Laid out like the prototype's speed card: number, then a row with the source where gears would be,
-    // the unit in the middle and a battery-style fuel gauge on the right, then a thin RPM line.
+    // the unit in the middle, then a thin RPM line.
     Column(modifier.padding(top = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(speed.toString(), style = TType.speed, color = T.colors.text, textAlign = TextAlign.Center)
         Text(if (mph) "mph" else "km/h", style = TType.label, color = T.colors.muted, modifier = Modifier.offset(y = (-8).dp))
@@ -261,29 +261,11 @@ private fun SpeedBlock(state: HomeUiState, modifier: Modifier) {
                         Text(label, style = TType.label, color = if (on) T.colors.text else T.colors.muted)
                     }
                 }
-                val fuel = if (obd) state.obd.data.fuelPct else null
-                if (fuel != null) FuelGauge(fuel, state.fuel.rangeKm, mph, Modifier.align(Alignment.CenterEnd))
+                // Fuel left now sits in the status bar, where Tesla shows its battery.
             }
             Spacer(Modifier.height(8.dp))
             RpmLine(if (obd) state.obd.data.rpm else null, Modifier.fillMaxWidth())
         }
-    }
-}
-
-/** TLauncher's fuel gauge: pump icon, slim level bar and "62% · 335 km". Amber when low. */
-@Composable
-private fun FuelGauge(pct: Int, rangeKm: Int?, mph: Boolean, modifier: Modifier) {
-    val level by animateFloatAsState(pct.coerceIn(0, 100) / 100f, TMotion.live(), label = "fuel")
-    val low = pct < com.ahu.tlauncher.obd.FuelMath.LOW_FUEL_PCT
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Rounded.LocalGasStation, "Fuel", tint = if (low) TELL_AMBER else T.colors.muted, modifier = Modifier.size(14.dp))
-        Spacer(Modifier.width(6.dp))
-        Box(Modifier.width(56.dp).height(6.dp).clip(CircleShape).background(T.colors.secondary.copy(alpha = 0.3f))) {
-            Box(Modifier.fillMaxHeight().fillMaxWidth(level).clip(CircleShape).background(if (low) TELL_AMBER else T.colors.text))
-        }
-        Spacer(Modifier.width(8.dp))
-        val range = rangeKm?.let { if (mph) " · ${(it * 0.621371).roundToInt()} mi" else " · $it km" } ?: ""
-        Text("$pct%$range", style = TType.caption, color = if (low) TELL_AMBER else T.colors.muted, maxLines = 1)
     }
 }
 

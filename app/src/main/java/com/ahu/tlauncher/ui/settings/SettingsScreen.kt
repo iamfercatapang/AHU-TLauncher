@@ -278,7 +278,11 @@ private fun HomeScreenSection(state: HomeUiState, a: HomeActions) {
     Divider()
     SmallTitle("Dock apps")
     val pinned = state.settings.pinnedApps.mapNotNull { k -> state.apps.firstOrNull { it.key == k } }
-    Text("Long-press any app in the app drawer to pin or unpin it. Up to ${com.ahu.tlauncher.ui.home.MAX_DOCK_APPS} apps are shown.", style = TType.label, color = T.colors.muted)
+    Text(
+        "Long-press an app in the dock or the app drawer to pin or unpin it. Up to ${com.ahu.tlauncher.ui.home.MAX_DOCK_APPS} pinned apps are shown, " +
+            "then the ${com.ahu.tlauncher.ui.home.MAX_RECENT_APPS} you used last when there's room.",
+        style = TType.label, color = T.colors.muted,
+    )
     Spacer(Modifier.height(8.dp))
     if (pinned.isEmpty()) Text("No apps pinned yet.", style = TType.body, color = T.colors.secondary)
     pinned.forEachIndexed { i, app ->

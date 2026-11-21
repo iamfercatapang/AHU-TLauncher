@@ -44,6 +44,10 @@ data class Settings(
     val speedUnit: SpeedUnit = SpeedUnit.KMH,
     val tempUnit: TempUnit = TempUnit.C,
     val pinnedApps: List<String> = emptyList(),
+    /** Apps opened from TLauncher, most recent first (the dock shows the ones that aren't pinned). */
+    val recentApps: List<String> = emptyList(),
+    /** Status bar shows the fuel left as range instead of percent. Tap it to switch. */
+    val fuelAsRange: Boolean = false,
     val homeAddress: String = "",
     val workAddress: String = "",
     /** Exact spot pinned on the map for Home / Work; null = find the typed address. */
@@ -88,6 +92,9 @@ data class Settings(
     val codingHours: String = com.ahu.tlauncher.system.Coding.DEFAULT_HOURS,
 )
 
+/** Recent apps remembered (more than the dock shows, so pinned ones can be skipped). */
+const val RECENT_APPS_KEPT = 10
+
 class Prefs(private val context: Context) {
     private object K {
         val theme = stringPreferencesKey("theme")
@@ -126,6 +133,8 @@ class Prefs(private val context: Context) {
         val openOnStart = booleanPreferencesKey("open_on_start")
         val codingDigit = androidx.datastore.preferences.core.intPreferencesKey("coding_digit")
         val codingHours = stringPreferencesKey("coding_hours")
+        val recentApps = stringPreferencesKey("recent_apps")
+        val fuelAsRange = booleanPreferencesKey("fuel_as_range")
         val trips = stringPreferencesKey("trip_log")
         val loggedKm = androidx.datastore.preferences.core.doublePreferencesKey("trip_log_km")
         val maintenance = stringPreferencesKey("maintenance")
@@ -169,6 +178,8 @@ class Prefs(private val context: Context) {
         openOnStart = this[K.openOnStart] ?: true,
         codingDigit = this[K.codingDigit] ?: -1,
         codingHours = this[K.codingHours] ?: com.ahu.tlauncher.system.Coding.DEFAULT_HOURS,
+        recentApps = this[K.recentApps]?.split('\n')?.filter { it.isNotBlank() } ?: emptyList(),
+        fuelAsRange = this[K.fuelAsRange] ?: false,
     )
 
     suspend fun setTheme(m: ThemeMode) = context.store.edit { it[K.theme] = m.name }
@@ -220,6 +231,12 @@ class Prefs(private val context: Context) {
     suspend fun setResumeMusic(on: Boolean) = context.store.edit { it[K.resumeMusic] = on }
     suspend fun setOfferTrip(on: Boolean) = context.store.edit { it[K.offerTrip] = on }
     suspend fun setOpenOnStart(on: Boolean) = context.store.edit { it[K.openOnStart] = on }
+    /** Puts [key] first in the recent apps (the last [RECENT_APPS_KEPT] are kept). */
+    suspend fun addRecentApp(key: String) = context.store.edit {
+        val cur = it[K.recentApps]?.split('\n')?.filter { k -> k.isNotBlank() } ?: emptyList()
+        it[K.recentApps] = (listOf(key) + (cur - key)).take(RECENT_APPS_KEPT).joinToString("\n")
+    }
+    suspend fun setFuelAsRange(on: Boolean) = context.store.edit { it[K.fuelAsRange] = on }
     suspend fun setCoding(digit: Int, hours: String) = context.store.edit { it[K.codingDigit] = digit; it[K.codingHours] = hours }
 
     /** Trip log and maintenance: kept outside [Settings] (they change during drives). */

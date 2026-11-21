@@ -65,7 +65,7 @@ class ScreenshotTest {
     }
 
     private fun state(nav: Boolean = false, access: Boolean = true) = HomeUiState(
-        settings = Settings(pinnedApps = apps.take(5).map { it.key }),
+        settings = Settings(pinnedApps = apps.take(5).map { it.key }, recentApps = listOf(apps[0], apps[7], apps[9], apps[10]).map { it.key }),
         live = com.ahu.tlauncher.ui.home.LiveState(
             obd = ObdState(ObdStatus.DEMO, ObdData(speedKmh = 62, rpm = 2340, coolantC = 86, batteryV = 14.1, fuelPct = 62)),
             fuel = com.ahu.tlauncher.obd.FuelStats(tripKm = 23.4, tripLitres = 1.9, avgKmPerL = 12.6, rangeKm = 335),
@@ -98,6 +98,14 @@ class ScreenshotTest {
     }
     @Test fun carOnRight() = shot("car_panel_right") { HomeScreen(state().copy(settings = state().settings.copy(carSide = com.ahu.tlauncher.data.CarSide.RIGHT)), NoopActions) }
     @Test fun homeDark() = shot("home_dark") { HomeScreen(state(), NoopActions) }
+    @Test fun destinationWeather() = shot("status_destination_weather") {
+        val now = System.currentTimeMillis()
+        HomeScreen(state().copy(
+            weather = com.ahu.tlauncher.system.Weather(31.0, com.ahu.tlauncher.system.WeatherKind.PARTLY_CLOUDY, true, now),
+            destWeather = com.ahu.tlauncher.system.Weather(24.0, com.ahu.tlauncher.system.WeatherKind.RAIN, true, now),
+            settings = state().settings.copy(fuelAsRange = true),
+        ), NoopActions)
+    }
     @Test fun homeLight() = shot("home_light", dark = false) { HomeScreen(state(), NoopActions) }
     @Test fun homeNavigatingDark() = shot("home_navigating_dark") { HomeScreen(state(nav = true), NoopActions) }
     @Test fun homeNoAccess() = shot("home_first_run") { HomeScreen(state(access = false).copy(media = null), NoopActions) }
@@ -230,7 +238,6 @@ class ScreenshotTest {
     }
     @Test fun cardPlayerSplit() = shot("music_card_player") { HomeScreen(queued(), NoopActions, initialOverlay = Overlay.CARD_MUSIC) }
     @Test fun cardPlayerFull() = shot("music_card_player_full", dark = false) { HomeScreen(queued(), NoopActions, initialOverlay = Overlay.CARD_MUSIC, initialMapVisible = false) }
-    @Test fun volumePopup() = shot("volume_popup") { HomeScreen(state(), NoopActions, initialOverlay = Overlay.VOLUME) }
     @Test fun freeGuidance() = shot("free_nav_turn") {
         val pts = listOf(com.ahu.tlauncher.route.LatLon(14.55, 121.02), com.ahu.tlauncher.route.LatLon(14.56, 121.03), com.ahu.tlauncher.route.LatLon(14.585, 121.056))
         val step = com.ahu.tlauncher.route.Step("turn", "right", "EDSA", 1)
