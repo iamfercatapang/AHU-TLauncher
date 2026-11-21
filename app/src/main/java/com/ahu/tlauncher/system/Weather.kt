@@ -105,31 +105,53 @@ object WeatherParser {
 }
 
 /** Current weather from Open-Meteo (free, no API key), refreshed every 30 minutes. */
-class WeatherRepository(scope: CoroutineScope, location: StateFlow<Location?>) {
+class WeatherRepository(private val scope: CoroutineScope, location: StateFlow<Location?>) {
     private val _weather = MutableStateFlow<Weather?>(null)
     val weather: StateFlow<Weather?> = _weather.asStateFlow()
+
+    /** Weather at the destination while a trip is going (like Tesla's status bar), else null. */
+    private val _destination = MutableStateFlow<Weather?>(null)
+    val destination: StateFlow<Weather?> = _destination.asStateFlow()
+    private var destJob: kotlinx.coroutines.Job? = null
+    private var destKey: String? = null
 
     init {
         scope.launch {
             location.filterNotNull().first()
             while (true) {
                 val loc = location.value
-                val ok = loc != null && fetch(loc.latitude, loc.longitude)
-                delay(if (ok) 30 * 60_000L else 5 * 60_000L)
+                val w = loc?.let { fetch(it.latitude, it.longitude) }
+                if (w != null) _weather.value = w
+                delay(if (w != null) 30 * 60_000L else 5 * 60_000L)
             }
         }
     }
 
-    private suspend fun fetch(lat: Double, lon: Double): Boolean = withContext(Dispatchers.IO) {
+    /** Follow the weather at [lat], [lon] (null = no trip). Same spot as before: nothing changes. */
+    fun setDestination(lat: Double?, lon: Double?) {
+        val key = if (lat == null || lon == null) null else String.format(Locale.US, "%.2f,%.2f", lat, lon)
+        if (key == destKey) return
+        destKey = key
+        destJob?.cancel()
+        _destination.value = null
+        if (lat == null || lon == null) return
+        destJob = scope.launch {
+            while (true) {
+                val w = fetch(lat, lon)
+                if (w != null) _destination.value = w
+                delay(if (w != null) 30 * 60_000L else 5 * 60_000L)
+            }
+        }
+    }
+
+    private suspend fun fetch(lat: Double, lon: Double): Weather? = withContext(Dispatchers.IO) {
         runCatching {
             val c = URL(WeatherParser.url(lat, lon)).openConnection() as HttpURLConnection
             c.connectTimeout = 10_000; c.readTimeout = 10_000
             try {
-                if (c.responseCode != 200) return@runCatching false
-                val w = WeatherParser.parse(c.inputStream.bufferedReader().readText(), System.currentTimeMillis()) ?: return@runCatching false
-                _weather.value = w
-                true
+                if (c.responseCode != 200) return@runCatching null
+                WeatherParser.parse(c.inputStream.bufferedReader().readText(), System.currentTimeMillis())
             } finally { c.disconnect() }
-        }.getOrDefault(false)
+        }.getOrNull()
     }
 }

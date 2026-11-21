@@ -119,6 +119,8 @@ data class HomeUiState(
     val serviceReminder: com.ahu.tlauncher.system.ServiceDue? = null,
     /** Bumped to open the destination search (e.g. "find a gas station" said by voice). */
     val searchRequest: Int = 0,
+    /** Weather at the destination of TLauncher's own trip (status bar shows it while navigating). */
+    val destWeather: com.ahu.tlauncher.system.Weather? = null,
 ) {
     // Reading these in a composable redraws only that composable when they change.
     val obd: ObdState get() = live.obd
@@ -294,6 +296,8 @@ interface HomeActions {
     fun findFuel() {}
     /** Mic in the dock: listen for a spoken command. */
     fun voiceCommand() {}
+    /** Tap on the status bar's fuel: switch between percent and range. */
+    fun toggleFuelDisplay() {}
 }
 
 object NoopActions : HomeActions
