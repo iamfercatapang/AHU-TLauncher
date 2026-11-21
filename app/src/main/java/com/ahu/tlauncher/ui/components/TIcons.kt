@@ -32,11 +32,6 @@ object TIcons {
         line { circle(16.8f, 16f, 2.3f) }
     } }
 
-    /** Tesla's "•••" button in the dock: three dots in a row, opens all apps. */
-    val MoreDots by lazy { icon("MoreDots") {
-        fill { for (x in listOf(5f, 12f, 19f)) circle(x, 12f, 2f) }
-    } }
-
     /** App drawer: a 3 × 3 grid of dots, the usual sign for "all apps", drawn as plainly as the other icons. */
     val AppGrid by lazy { icon("AppGrid") {
         fill { for (y in listOf(5.5f, 12f, 18.5f)) for (x in listOf(5.5f, 12f, 18.5f)) circle(x, y, 1.9f) }

@@ -107,6 +107,35 @@ class CarFramingTest {
         assertTrue("left ${b[0]}", b[0] > 128f)  // engine readings column
     }
 
+    /** Driving: the camera is behind and above the car, in both panel widths, and the drive blend starts where parked ends. */
+    @Test fun chaseViewIsBehindTheCar() {
+        for (e in listOf(0f, 1f)) {
+            assertTrue(CarFraming.eye(e, drive = 0f).contentEquals(CarFraming.eye(e)))
+            val c = CarFraming.eye(e, drive = 1f)
+            assertTrue("behind at $e: ${c.toList()}", c[2] < -5)
+            assertEquals("centred at $e", 0.0, c[0], 1e-6)
+            assertTrue("above at $e", c[1] > 3)
+        }
+    }
+
+    /** Driving: the car stands low in the panel, below the speed readout and above the cards, with road above it. */
+    @Test fun chaseViewFramesCarLow() {
+        val h = 643
+        for ((e, visible) in listOf(0f to 340f, 1f to 1280f)) {
+            val b = CarFraming.driveBounds(e, 1f, h, visible)
+            println("chase $e: ${b.toList()}")
+            assertTrue("roof $e ${b[1]}", b[1] > 0.4f * h)
+            assertTrue("wheels $e ${b[3]}", b[3] < 0.765f * h)
+            assertTrue("sides $e", b[0] > 0 && b[2] < visible)
+            assertEquals("centre $e", visible / 2, (b[0] + b[2]) / 2, visible * 0.03f)
+        }
+        // Mid-way through the glide the car stays on screen.
+        for (d in listOf(0.25f, 0.5f, 0.75f)) {
+            val b = CarFraming.driveBounds(1f, d, h, 1280f)
+            assertTrue("on screen at $d: ${b.toList()}", b[1] > 0 && b[3] < h && b[0] > 0 && b[2] < 1280)
+        }
+    }
+
     @Test fun studioHasBrightPanelAboveAndDarkFloor() {
         val out = FloatArray(3)
         studioRadiance(0.0, -1.0, 0.0, out)

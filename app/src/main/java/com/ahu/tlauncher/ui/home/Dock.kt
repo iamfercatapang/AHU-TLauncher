@@ -67,7 +67,6 @@ const val MAX_RECENT_APPS = 3
 
 private val APP_SLOT = 58.dp
 private val BUTTON_SLOT = 60.dp
-private val DIVIDER_SLOT = 17.dp
 /** Finger travel for one step when dragging across the brightness or volume control. */
 private val DRAG_STEP = 16.dp
 /** Brightness changes 5 % per step. */
@@ -89,8 +88,8 @@ internal fun dockRecents(state: HomeUiState, max: Int): List<AppEntry> {
 
 /**
  * Laid out like Tesla's control bar: the car (settings) on the far left, then where Tesla has the
- * driver's temperature, brightness `‹ ☀ ›`. In the middle your pinned apps, a thin divider and the
- * recently used ones, the voice mic and "•••" for all apps. Volume `‹ 🔊 ›` sits on the far right.
+ * driver's temperature, brightness `‹ ☀ ›`. In the middle your pinned apps, the app drawer button and the
+ * recently used apps, then the voice mic. Volume `‹ 🔊 ›` sits on the far right.
  * Brightness and volume step with the chevrons, or follow a finger dragged sideways across them.
  */
 @Composable
@@ -113,20 +112,16 @@ fun Dock(
         BrightnessControl(state, actions, overlay == Overlay.BRIGHTNESS, onOpenBrightness)
         BoxWithConstraints(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
             val pinned = dockPinned(state)
-            // Room left for apps once the mic and "•••" are placed; recents fill what the pinned apps leave.
-            val slots = ((maxWidth - BUTTON_SLOT * 2 - DIVIDER_SLOT) / APP_SLOT).toInt().coerceAtLeast(0)
+            // Room left for apps once the app drawer button and the mic are placed; recents fill what the pinned apps leave.
+            val slots = ((maxWidth - BUTTON_SLOT * 2) / APP_SLOT).toInt().coerceAtLeast(0)
             val shownPinned = pinned.take(slots)
             val recents = dockRecents(state, minOf(MAX_RECENT_APPS, slots - shownPinned.size))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 shownPinned.forEach { app -> DockApp(app, onLaunch, onTogglePin) }
-                if (recents.isNotEmpty()) {
-                    if (shownPinned.isNotEmpty()) Box(Modifier.width(DIVIDER_SLOT), contentAlignment = Alignment.Center) {
-                        Box(Modifier.width(1.dp).height(30.dp).background(Color.White.copy(alpha = 0.2f)))
-                    }
-                    recents.forEach { app -> DockApp(app, onLaunch, onTogglePin) }
-                }
+                // The app drawer button also separates pinned apps from recent ones.
+                DockButton(TIcons.AppGrid, "All apps", overlay == Overlay.APPS, onToggleApps)
+                recents.forEach { app -> DockApp(app, onLaunch, onTogglePin) }
                 DockButton(Icons.Rounded.Mic, "Voice command", false, actions::voiceCommand)
-                DockButton(TIcons.MoreDots, "All apps", overlay == Overlay.APPS, onToggleApps)
             }
         }
         VolumeControl(state, actions)

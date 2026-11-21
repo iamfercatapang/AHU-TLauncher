@@ -296,6 +296,8 @@ interface HomeActions {
     fun findFuel() {}
     /** Mic in the dock: listen for a spoken command. */
     fun voiceCommand() {}
+    /** Engine card: Settings → Car (handled by the home screen). */
+    fun openCarSettings() {}
     /** Tap on the status bar's fuel: switch between percent and range. */
     fun toggleFuelDisplay() {}
 }

@@ -68,9 +68,13 @@ points for `CarFraming.kt`. `process.mjs`, in order:
 8. **Floors.** Three unlit, blended floor squares with generated textures (`floor.mjs`): `floor_dark` (night
    satin floor with soft shadow), `floor_light` (day) and `floor_beams` (headlight beams, shown only with the
    lights on).
+9. **Lane lines.** Two soft blue strips either side of the car (a 3.5 m lane), from 5 m behind it to 45 m
+   ahead, fading at both ends (`lanes`, texture from `floor.mjs`). The app shows them in the driving view while
+   navigating.
 
 The app looks these parts up by name (`paint`, `headlight`, `foglight`, `taillight`, `mirror`, `floor_dark`,
-`floor_light`, `floor_beams`; see `ui/home/Car3d.kt`), so keep the names when changing the script.
+`floor_light`, `floor_beams`, `lanes`, and the `rim` / `tyre` nodes it turns while driving; see
+`ui/home/Car3d.kt`), so keep the names when changing the script.
 
 ## After changing the model
 

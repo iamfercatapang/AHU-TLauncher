@@ -122,16 +122,43 @@ internal object CarFraming {
     private const val FRAME_MID_Y = 0.56
     private val TAN_HALF_FOV = tan(rad(35.0) / 2)
 
-    /** Camera position for panel progress [e] and orbit offsets (radians; they count only in full screen). */
-    fun eye(e: Float, yaw: Double = 0.0, elevation: Double = 0.0): DoubleArray {
+    /**
+     * Driving (Tesla's chase view): the camera sits high behind the car looking down the road ahead, so the
+     * car stands low in the panel with the road (and the route's lane lines) running away above it.
+     */
+    private val CHASE_TARGET = doubleArrayOf(0.0, 0.6, 2.0)
+    private val CHASE_EL = rad(21.0)
+    private const val CHASE_DIST = 13.0
+
+    /** Tyre radius (m), for turning the wheels at the car's speed. */
+    const val WHEEL_RADIUS = 0.33
+    /** Fastest the wheels are drawn turning (rad/s): faster would strobe at the screen's frame rate. */
+    const val WHEEL_MAX_RAD_S = 2 * PI * 2.5
+
+    /**
+     * Camera position for panel progress [e] and orbit offsets (radians; they count only in full screen), blended
+     * toward the chase view by [drive] (0 = parked views, 1 = driving).
+     */
+    fun eye(e: Float, yaw: Double = 0.0, elevation: Double = 0.0, drive: Float = 0f): DoubleArray {
         val t = e.coerceIn(0f, 1f).toDouble()
         val p = lerp(YAW_SPLIT, YAW_FULL, t) + yaw * t
         val m = lerp(EL_SPLIT, EL_FULL, t) + elevation * t
         val h = lerp(12.9, lerp(4.8, 8.8, max(0.0, elevation / ORBIT_EL_MAX)), t)
-        return doubleArrayOf(-sin(p) * cos(m) * h, TARGET[1] + sin(m) * h, cos(p) * cos(m) * h)
+        val parked = doubleArrayOf(-sin(p) * cos(m) * h, TARGET[1] + sin(m) * h, cos(p) * cos(m) * h)
+        val d = drive.coerceIn(0f, 1f).toDouble()
+        if (d == 0.0) return parked
+        // Round the side (not through the car): blend the angles, then place the camera.
+        val chaseYaw = if (kotlin.math.abs(p - 3 * PI) < kotlin.math.abs(p - PI)) 3 * PI else PI // the nearer "behind"
+        val bp = lerp(p, chaseYaw, d); val bm = lerp(m, CHASE_EL, d); val bh = lerp(h, CHASE_DIST, d)
+        val tg = target(drive)
+        return doubleArrayOf(tg[0] - sin(bp) * cos(bm) * bh, tg[1] + sin(bm) * bh, tg[2] + cos(bp) * cos(bm) * bh)
     }
 
-    fun target(): DoubleArray = TARGET.copyOf()
+    /** What the camera looks at: the car's middle, moving ahead of the car while driving. */
+    fun target(drive: Float = 0f): DoubleArray {
+        val d = drive.coerceIn(0f, 1f).toDouble()
+        return doubleArrayOf(lerp(TARGET[0], CHASE_TARGET[0], d), lerp(TARGET[1], CHASE_TARGET[1], d), lerp(TARGET[2], CHASE_TARGET[2], d))
+    }
 
     /** Focal length in pixels for a panel [viewH] px tall. */
     fun focalPx(viewH: Int): Double = FRAME_H * viewH / 2 / TAN_HALF_FOV
@@ -196,10 +223,14 @@ internal object CarFraming {
         )
     }
 
+    /** The car's box on screen in the (unfitted) view blended toward the chase view by [drive]. */
+    fun driveBounds(e: Float, drive: Float, viewH: Int, visibleW: Float): FloatArray =
+        rawBounds(e, 0.0, 0.0, viewH, visibleW, drive).let { b -> FloatArray(4) { b[it].toFloat() } }
+
     /** The car's box on screen before fitting: left, top, right, bottom in px (y down). */
-    private fun rawBounds(e: Float, yaw: Double, elevation: Double, viewH: Int, visibleW: Float): DoubleArray {
-        val eye = eye(e, yaw, elevation)
-        val fwd = normalize(sub(TARGET, eye))
+    private fun rawBounds(e: Float, yaw: Double, elevation: Double, viewH: Int, visibleW: Float, drive: Float = 0f): DoubleArray {
+        val eye = eye(e, yaw, elevation, drive)
+        val fwd = normalize(sub(target(drive), eye))
         val right = normalize(cross(fwd, doubleArrayOf(0.0, 1.0, 0.0)))
         val up = cross(right, fwd)
         val f = focalPx(viewH)

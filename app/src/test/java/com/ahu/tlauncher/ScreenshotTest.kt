@@ -5,6 +5,10 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.asImageBitmap
 import app.cash.paparazzi.DeviceConfig
@@ -98,6 +102,25 @@ class ScreenshotTest {
     }
     @Test fun carOnRight() = shot("car_panel_right") { HomeScreen(state().copy(settings = state().settings.copy(carSide = com.ahu.tlauncher.data.CarSide.RIGHT)), NoopActions) }
     @Test fun homeDark() = shot("home_dark") { HomeScreen(state(), NoopActions) }
+    /** The car panel's extra cards (trip, engine, fuel) at split-view and full-screen widths. */
+    @Test fun panelCards() = shot("panel_cards") {
+        val now = state().now.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val trips = listOf(
+            com.ahu.tlauncher.system.Trip(now - 26 * 3_600_000L, now - 25 * 3_600_000L, 31.2, 2.6),
+            com.ahu.tlauncher.system.Trip(now - 3 * 3_600_000L, now - 3 * 3_600_000L + 1_380_000L, 12.4, 1.1),
+        )
+        val st = state().copy(trips = trips, diag = com.ahu.tlauncher.obd.DiagState(stored = listOf("P0171")))
+        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(com.ahu.tlauncher.ui.theme.T.colors.appBg).padding(16.dp)) {
+            androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)) {
+                androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.width(300.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
+                    com.ahu.tlauncher.ui.home.TripCard(st, false); com.ahu.tlauncher.ui.home.EngineCard(st, NoopActions); com.ahu.tlauncher.ui.home.FuelCard(st, NoopActions)
+                }
+                androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.width(620.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)) {
+                    com.ahu.tlauncher.ui.home.TripCard(st, true); com.ahu.tlauncher.ui.home.EngineCard(st, NoopActions); com.ahu.tlauncher.ui.home.FuelCard(st, NoopActions)
+                }
+            }
+        }
+    }
     @Test fun destinationWeather() = shot("status_destination_weather") {
         val now = System.currentTimeMillis()
         HomeScreen(state().copy(
