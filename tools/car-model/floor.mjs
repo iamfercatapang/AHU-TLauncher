@@ -84,3 +84,21 @@ export function png(n, rgba) {
     chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0)),
   ]);
 }
+
+// Route lane lines for the driving view (Tesla's blue lines either side of the car), shown only while navigating.
+// The strip's u runs across it, v along it from LANE_NEAR (behind the car) to LANE_FAR (ahead, in metres).
+export const LANE_NEAR = -5, LANE_FAR = 45;
+export function lanePixels(n) {
+  const px = Buffer.alloc(n * n * 4);
+  const col = [0.2, 0.42, 1.0]; // linear, a bright Tesla blue
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const z = LANE_NEAR + ((j + 0.5) / n) * (LANE_FAR - LANE_NEAR);
+    const u = Math.abs((i + 0.5) / n - 0.5) * 2; // 0 in the middle of the line, 1 at its edges
+    const along = smooth(-4.5, -1.5, z) * (1 - smooth(14, LANE_FAR, z));
+    const across = 1 - smooth(0.55, 1, u);
+    const o = (j * n + i) * 4;
+    for (let k = 0; k < 3; k++) px[o + k] = Math.round(toSrgb(col[k]) * 255);
+    px[o + 3] = Math.round(along * across * 0.85 * 255);
+  }
+  return px;
+}

@@ -173,6 +173,12 @@ internal fun Car3dLayer(
     progress: Float,
     visibleWidthPx: Float,
     modifier: Modifier = Modifier,
+    /** 0 = parked views, 1 = Tesla's chase view while driving (the camera glides between them). */
+    drive: Float = 0f,
+    /** How far the wheels have turned (radians); they spin while the car moves. */
+    wheelTurn: Double = 0.0,
+    /** Navigating: the route's lane lines show on the road. */
+    lanes: Boolean = false,
 ) {
     val ctx = LocalContext.current
     val density = LocalDensity.current
@@ -180,10 +186,11 @@ internal fun Car3dLayer(
     val glb by produceState<ByteBuffer?>(null) { value = Car3d.model(ctx) ?: run { car.failed = true; null } }
     val holder = remember { arrayOfNulls<Car3dRenderer>(1) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val full = progress >= 0.999f
+    val full = progress >= 0.999f && drive <= 0f
 
-    // Back to the default view: when the panel reaches split view, or 5 s after the last touch (700 ms ease-out).
-    LaunchedEffect(progress <= 0f) { if (progress <= 0f) { car.stopFling(); car.yaw = 0f; car.elevation = 0f } }
+    // Back to the default view: when the panel reaches split view, when driving starts, or 5 s after the last
+    // touch (700 ms ease-out).
+    LaunchedEffect(progress <= 0f, drive > 0f) { if (progress <= 0f || drive > 0f) { car.stopFling(); car.yaw = 0f; car.elevation = 0f } }
     LaunchedEffect(car.touches, car.dragging, full) {
         if (car.dragging || !full || (car.yaw == 0f && car.elevation == 0f)) return@LaunchedEffect
         delay(CarFraming.RETURN_DELAY_MS)
@@ -218,7 +225,10 @@ internal fun Car3dLayer(
             onRelease = { _: TextureView -> holder[0]?.destroy(); holder[0] = null },
             update = {
                 holder[0]?.update(
-                    Car3dRenderer.Frame(paintLook, dark, lowPerf, lightsOn, lampLevel, progress, car.yaw.toDouble(), car.elevation.toDouble(), visibleWidthPx),
+                    Car3dRenderer.Frame(
+                        paintLook, dark, lowPerf, lightsOn, lampLevel, progress, car.yaw.toDouble(), car.elevation.toDouble(), visibleWidthPx,
+                        drive, wheelTurn, lanes,
+                    ),
                 )
             },
         )
@@ -311,6 +321,12 @@ internal class Car3dRenderer(
         val yaw: Double,
         val elevation: Double,
         val visibleW: Float,
+        /** 0 = parked views, 1 = chase view. */
+        val drive: Float = 0f,
+        /** Wheel rotation about the axles (radians). */
+        val wheelTurn: Double = 0.0,
+        /** The lane lines on the road (while navigating). */
+        val lanes: Boolean = false,
     )
 
     private val engine: Engine
@@ -334,6 +350,11 @@ internal class Car3dRenderer(
     private val floorDark: IntArray
     private val floorLight: IntArray
     private val beams: IntArray
+    private val lanes: IntArray
+    /** Rims and tyres (and their reflections): entity, its own transform, and the wheel centre in its mesh. */
+    private val wheels: List<Wheel>
+
+    private class Wheel(val entity: Int, val base: FloatArray, val cx: Float, val cy: Float, val cz: Float)
 
     private var width = 0
     private var height = 0
@@ -343,6 +364,8 @@ internal class Car3dRenderer(
     private var darkShown: Boolean? = null
     private var lowPerfShown: Boolean? = null
     private var beamsShown = true // every part starts in the scene
+    private var lanesShown = true
+    private var wheelTurnShown = 0.0
     private var lampsShown: Float? = null
     private var framesLeft = 0
     private var scheduled = false
@@ -388,6 +411,18 @@ internal class Car3dRenderer(
         floorDark = renderablesUnder("floor_dark")
         floorLight = renderablesUnder("floor_light")
         beams = renderablesUnder("floor_beams")
+        lanes = renderablesUnder("lanes")
+        // Each rim and tyre turns about its axle: the mesh's x axis through the middle of its box.
+        wheels = run {
+            val rm = engine.renderableManager
+            val tm = engine.transformManager
+            listOf("rim", "tyre", "mirror_rim", "mirror_tyre").flatMap { n -> asset.getEntitiesByName(n).toList() }.mapNotNull { e ->
+                if (!rm.hasComponent(e) || !tm.hasComponent(e)) return@mapNotNull null
+                val box = rm.getAxisAlignedBoundingBox(rm.getInstance(e), com.google.android.filament.Box())
+                val c = box.center
+                Wheel(e, tm.getTransform(tm.getInstance(e), FloatArray(16)), c[0], c[1], c[2])
+            }
+        }
         // The beams are drawn after (over) the night floor they lie on.
         engine.renderableManager.let { rm -> for (e in beams) rm.setPriority(rm.getInstance(e), 6) }
 
@@ -465,6 +500,13 @@ internal class Car3dRenderer(
             beamsShown = wantBeams
         }
         if (f.lampLevel != lampsShown) { applyLamps(f.lampLevel); lampsShown = f.lampLevel }
+        // Lane lines only on the road of the driving view while navigating.
+        val wantLanes = f.lanes && f.drive > 0f
+        if (wantLanes != lanesShown) {
+            if (wantLanes) scene.addEntities(lanes) else scene.removeEntities(lanes)
+            lanesShown = wantLanes
+        }
+        if (f.wheelTurn != wheelTurnShown) { applyWheels(f.wheelTurn); wheelTurnShown = f.wheelTurn }
         // The reflection only shows in full screen (the prototype fades it in with the panel).
         val wantMirror = f.progress > 0.15f
         if (wantMirror != mirrorShown) {
@@ -515,6 +557,23 @@ internal class Car3dRenderer(
         }
     }
 
+    /** Turns every wheel [angle] radians about its axle (forward rolling for a car facing +Z). */
+    private fun applyWheels(angle: Double) {
+        val tm = engine.transformManager
+        val deg = Math.toDegrees(angle).toFloat()
+        val spin = FloatArray(16); val out = FloatArray(16)
+        for (w in wheels) {
+            // own transform × move to the centre × turn about x × move back
+            android.opengl.Matrix.setIdentityM(spin, 0)
+            android.opengl.Matrix.translateM(spin, 0, w.cx, w.cy, w.cz)
+            // The right-hand wheels are the same mesh turned half a turn, so their x axis points the other way.
+            android.opengl.Matrix.rotateM(spin, 0, if (w.base[0] < 0f) -deg else deg, 1f, 0f, 0f)
+            android.opengl.Matrix.translateM(spin, 0, -w.cx, -w.cy, -w.cz)
+            android.opengl.Matrix.multiplyMM(out, 0, w.base, 0, spin, 0)
+            tm.setTransform(tm.getInstance(w.entity), out)
+        }
+    }
+
     /** A few frames after each change: some drivers show a new TextureView frame one frame late. */
     private fun requestFrames() {
         framesLeft = 3
@@ -528,11 +587,12 @@ internal class Car3dRenderer(
         val f = frame ?: return
         if (!uiHelper.isReadyToRender || width == 0 || height == 0 || f.visibleW <= 0f) return
         applyScene(f)
-        val e = CarFraming.eye(f.progress, f.yaw, f.elevation)
-        val t = CarFraming.target()
+        val e = CarFraming.eye(f.progress, f.yaw, f.elevation, f.drive)
+        val t = CarFraming.target(f.drive)
         camera.lookAt(e[0], e[1], e[2], t[0], t[1], t[2], 0.0, 1.0, 0.0)
         // While orbited, the camera backs off and re-centres to keep the car clear of the panel's readouts and cards.
-        val fit = CarFraming.fit(f.progress, f.yaw, f.elevation, height, f.visibleW)
+        // (No orbit while driving: the orbit is reset when driving starts.)
+        val fit = if (f.drive > 0f) doubleArrayOf(1.0, 0.0, 0.0) else CarFraming.fit(f.progress, f.yaw, f.elevation, height, f.visibleW)
         camera.setCustomProjection(CarFraming.projection(width, height, f.visibleW, fit), CarFraming.NEAR, CarFraming.FAR)
         if (renderer.beginFrame(sc, frameTimeNanos)) {
             renderer.render(view)

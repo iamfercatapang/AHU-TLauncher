@@ -2,7 +2,7 @@ import { NodeIO, getBounds } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, KHRMaterialsClearcoat, KHRMaterialsUnlit } from '@gltf-transform/extensions';
 import { dedup, weld, simplifyPrimitive, prune, flatten, transformMesh, copyToDocument, unpartition } from '@gltf-transform/functions';
 import { MeshoptSimplifier } from 'meshoptimizer';
-import { floorPixels, png, FLOOR_SIZE } from './floor.mjs';
+import { floorPixels, lanePixels, png, FLOOR_SIZE, LANE_NEAR, LANE_FAR } from './floor.mjs';
 
 // Builds app/src/main/assets/models/avanza.glb from the original Sketchfab download. See README.md.
 //   node process.mjs [input.glb] [output.glb] [ratio]
@@ -741,6 +741,29 @@ for (const [name, kind, y] of [['floor_dark', 'dark', 0], ['floor_light', 'light
   const prim = doc.createPrimitive().setAttribute('POSITION', pos).setAttribute('TEXCOORD_0', uv)
     .setAttribute('NORMAL', nrm).setIndices(idx).setMaterial(mat);
   scene.addChild(doc.createNode(name).setMesh(doc.createMesh(name).addPrimitive(prim)).setTranslation([0, y, 0]));
+}
+
+// 6. Lane lines for the driving view: two soft blue strips either side of the car (a 3.5 m lane), from behind it
+// to far ahead, fading at both ends. Unlit and blended over the floor; the app shows them only while navigating.
+{
+  const LANE_HALF = 1.75, LINE_W = 0.16, y = 0.005;
+  const verts = [], uvs = [], nrms = [], ids = [];
+  for (const cx of [-LANE_HALF, LANE_HALF]) {
+    const b = verts.length / 3, x0 = cx - LINE_W / 2, x1 = cx + LINE_W / 2;
+    verts.push(x0, y, LANE_NEAR, x1, y, LANE_NEAR, x1, y, LANE_FAR, x0, y, LANE_FAR);
+    uvs.push(0, 0, 1, 0, 1, 1, 0, 1);
+    nrms.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0);
+    ids.push(b, b + 2, b + 1, b, b + 3, b + 2);
+  }
+  const acc = (type, arr) => doc.createAccessor().setType(type).setBuffer(buffer).setArray(arr);
+  const N = 64;
+  const tex = doc.createTexture('lanes').setMimeType('image/png').setImage(png(N, lanePixels(N)));
+  const mat = doc.createMaterial('lanes').setBaseColorTexture(tex).setAlphaMode('BLEND').setDoubleSided(true)
+    .setMetallicFactor(0).setRoughnessFactor(1).setExtension('KHR_materials_unlit', unlit.createUnlit());
+  const prim = doc.createPrimitive().setAttribute('POSITION', acc('VEC3', new Float32Array(verts)))
+    .setAttribute('TEXCOORD_0', acc('VEC2', new Float32Array(uvs))).setAttribute('NORMAL', acc('VEC3', new Float32Array(nrms)))
+    .setIndices(acc('SCALAR', new Uint16Array(ids))).setMaterial(mat);
+  scene.addChild(doc.createNode('lanes').setMesh(doc.createMesh('lanes').addPrimitive(prim)));
 }
 
 let tris = 0;

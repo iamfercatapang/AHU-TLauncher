@@ -156,6 +156,8 @@ fun CarStage(
     var start3d by remember { mutableStateOf(false) }
     LaunchedEffect(use3d) { if (use3d) { delay(700); start3d = true } else { start3d = false; car3d.ready = false } }
     val shown3d = animateFloatAsState(if (use3d && car3d.ready) 1f else 0f, tween(450), label = "car3d")
+    // Driving: the 3D car glides to Tesla's chase view (not with the photos, nor in low-performance mode).
+    val drive = rememberDriveBlend(state, enabled = use3d && !LocalLowPerf.current)
     var stageW by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     Box(
         modifier.then(panelSwipe).onSizeChanged { stageW = it.width }.then(if (drawBackground) Modifier.background(stageBrush()) else Modifier).clipToBounds().drawBehind {
@@ -168,14 +170,14 @@ fun CarStage(
             )
         },
     ) {
-        if (use3d && start3d) Car3dSlot(car3d, state, progress, contentScale, { stageW }, Modifier.matchParentSize().graphicsLayer {
+        if (use3d && start3d) Car3dSlot(car3d, state, progress, contentScale, { stageW }, drive, Modifier.matchParentSize().graphicsLayer {
             // Never fully transparent: a view that isn't drawn never takes the renderer's frames, which stalls it.
             alpha = shown3d.value.coerceAtLeast(0.004f)
         })
         Column(Modifier.fillMaxSize().padding(top = STATUS_H)) {
             // Each part shrinks around its own anchor, so it stays at its full-screen height while the panel glides.
             SpeedBlock(state, Modifier.fillMaxWidth().shrinkInPanel(contentScale, pivotY = 0.5f))
-            CarHero(state, Modifier.fillMaxWidth().weight(1f), progress, contentScale, use3d, { shown3d.value })
+            CarHero(state, Modifier.fillMaxWidth().weight(1f), progress, contentScale, use3d, { shown3d.value }, leaders = { 1f - drive })
         }
         Telltales(state, Modifier.align(Alignment.TopStart).padding(start = 18.dp, top = STATUS_H + 8.dp).shrinkInPanel(contentScale, pivotY = 0f))
         // Lights-on tell-tale sits at the panel's top-right corner, in the status row (as in the prototype).
@@ -195,14 +197,10 @@ fun CarStage(
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             contentAlignment = Alignment.BottomCenter,
         ) {
-            // Split view's card pager fades out as full screen's two-card row fades in, with the panel's progress.
-            if (showPager) Box(Modifier.graphicsLayer { alpha = 1f - prog.value() }) { CardPager(state, actions) }
-            if (showRow) {
-                Row(Modifier.widthIn(max = 660.dp).graphicsLayer { alpha = prog.value() }, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    MusicCard(state, actions, Modifier.weight(1.6f))
-                    NavigateCard(actions, Modifier.weight(1f))
-                }
-            }
+            // Split view's pager (one card a page) fades out as full screen's pager (music and Navigate side by side
+            // on the first page) fades in, with the panel's progress.
+            if (showPager) Box(Modifier.graphicsLayer { alpha = 1f - prog.value() }) { CardPager(state, actions, wide = false) }
+            if (showRow) Box(Modifier.widthIn(max = 660.dp).graphicsLayer { alpha = prog.value() }) { CardPager(state, actions, wide = true) }
         } }
 
         // Handle on the panel edge: tap to toggle the map (dragging it, like anywhere on the panel, swipes the panel).
@@ -220,12 +218,61 @@ fun CarStage(
 
 /** Reads the panel's progress and visible width itself, so only the 3D layer recomposes while it glides. */
 @Composable
-private fun Car3dSlot(car: Car3dState, state: HomeUiState, progress: () -> Float, contentScale: () -> Float, stageW: () -> Int, modifier: Modifier) {
+private fun Car3dSlot(car: Car3dState, state: HomeUiState, progress: () -> Float, contentScale: () -> Float, stageW: () -> Int, drive: Float, modifier: Modifier) {
     val p = progress()
     // In low-performance mode the camera jumps half-way instead of following the swipe.
     val low = LocalLowPerf.current
     val p3d = if (low) (if (p >= 0.5f) 1f else 0f) else p
-    Car3dLayer(car, state.settings.carPaint, T.colors.isDark, low, state.lights.on, p3d, stageW() * contentScale(), modifier)
+    // Driving ([drive] > 0): Tesla's chase view, wheels turning, and the lane lines while a route is being followed.
+    val wheelTurn = rememberWheelTurn(state, spinning = drive > 0f)
+    val lanes = state.route?.phase == com.ahu.tlauncher.route.RoutePhase.ACTIVE || state.nav != null
+    Car3dLayer(
+        car, state.settings.carPaint, T.colors.isDark, low, state.lights.on, p3d, stageW() * contentScale(), modifier,
+        drive = drive, wheelTurn = wheelTurn, lanes = lanes,
+    )
+}
+
+/** Above this speed (km/h) the car counts as driving; below it for [PARKED_AFTER_MS], it's back to parked. */
+private const val DRIVE_KMH = 5
+private const val PARKED_AFTER_MS = 3_000L
+/** The camera's glide between the parked views and the chase view. */
+private const val CHASE_GLIDE_MS = 800
+
+/** 0 while parked, 1 while driving, gliding between them (ease-out cubic). */
+@Composable
+private fun rememberDriveBlend(state: HomeUiState, enabled: Boolean): Float {
+    val moving by remember(state.live) { derivedStateOf { (state.displaySpeedKmh ?: 0) >= DRIVE_KMH } }
+    var driving by remember { mutableStateOf(false) }
+    LaunchedEffect(moving) {
+        if (moving) driving = true else { delay(PARKED_AFTER_MS); driving = false }
+    }
+    val d by animateFloatAsState(
+        if (driving && enabled) 1f else 0f, tween(CHASE_GLIDE_MS, easing = TMotion.EaseOutCubic), label = "chase",
+    )
+    return d
+}
+
+/** How far the wheels have turned (radians), rolling at the car's speed (capped so they don't strobe), ~30 fps. */
+@Composable
+private fun rememberWheelTurn(state: HomeUiState, spinning: Boolean): Double {
+    var turn by remember { androidx.compose.runtime.mutableDoubleStateOf(0.0) }
+    val speed by androidx.compose.runtime.rememberUpdatedState(state.displaySpeedKmh ?: 0)
+    LaunchedEffect(spinning) {
+        if (!spinning) return@LaunchedEffect
+        var last = 0L
+        while (true) {
+            androidx.compose.runtime.withFrameNanos { t ->
+                if (last == 0L) last = t
+                val dt = (t - last) / 1e9
+                if (dt >= 1.0 / 30) {
+                    val w = kotlin.math.min(speed / 3.6 / CarFraming.WHEEL_RADIUS, CarFraming.WHEEL_MAX_RAD_S)
+                    if (w > 0) turn = (turn + w * dt) % (2 * Math.PI)
+                    last = t
+                }
+            }
+        }
+    }
+    return turn
 }
 
 /**
@@ -329,7 +376,11 @@ private fun calloutKinds(state: HomeUiState): List<CalloutKind> {
 
 /** The car photos on a ground shadow (until the 3D car is on screen), with the engine readings beside it on the left. */
 @Composable
-private fun CarHero(state: HomeUiState, modifier: Modifier, progress: () -> Float, contentScale: () -> Float = { 1f }, use3d: Boolean = false, shown3d: () -> Float = { 0f }) {
+private fun CarHero(
+    state: HomeUiState, modifier: Modifier, progress: () -> Float, contentScale: () -> Float = { 1f }, use3d: Boolean = false, shown3d: () -> Float = { 0f },
+    /** How visible the callouts' leader lines are (they fade out while the car glides to the driving view). */
+    leaders: () -> Float = { 1f },
+) {
     val ctx = LocalContext.current
     val preview = LocalInspectionMode.current
     val custom = state.settings.carImages
@@ -405,14 +456,27 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, progress: () -> Floa
         }
         // Engine readings: a column at the panel's left edge, level with the middle of the car. It shrinks around
         // its own middle with the panel, like the other parts.
+        // Tesla's callouts: a thin leader line runs from each reading to a dot just inside the car's side,
+        // when there's room for it (full screen).
+        val leaderW = (maxWidth - imgW) / 2 + imgW * 0.1f - 18.dp
+        val lineColor = T.colors.muted.copy(alpha = 0.55f)
         if (callouts.isNotEmpty()) Column(
             Modifier.padding(top = calloutH + imgH / 2 - CALLOUTS_HALF_H).shrinkInPanel(contentScale, pivotY = 0.5f).padding(start = 18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             callouts.forEach { c ->
-                Column {
-                    Text(c.label, style = TType.caption, color = T.colors.muted, maxLines = 1)
-                    CalloutValue(c, state, f)
+                Row(if (leaderW >= LEADER_MIN_W) Modifier.width(leaderW) else Modifier, verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text(c.label, style = TType.caption, color = T.colors.muted, maxLines = 1)
+                        CalloutValue(c, state, f)
+                    }
+                    if (leaderW >= LEADER_MIN_W) {
+                        Spacer(Modifier.width(10.dp))
+                        Row(Modifier.weight(1f).graphicsLayer { alpha = leaders() * ((progress() - 0.5f) * 2f).coerceIn(0f, 1f) }, verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f).height(1.dp).background(lineColor))
+                            Box(Modifier.size(5.dp).clip(CircleShape).background(lineColor))
+                        }
+                    }
                 }
             }
         }
@@ -423,6 +487,8 @@ private fun CarHero(state: HomeUiState, modifier: Modifier, progress: () -> Floa
 private val CALLOUTS_HALF_H = 64.dp
 /** Width kept free for the reading column ("2,340 rpm" plus its margin). */
 private val CALLOUTS_W = 92.dp
+/** Narrowest reading-to-car span that still gets a leader line (reading, gap and a short line). */
+private val LEADER_MIN_W = 140.dp
 
 @Composable
 private fun rememberCarPainter(src: CarSource): Painter? {
@@ -467,17 +533,47 @@ private fun CalloutValue(c: CalloutKind, state: HomeUiState, fahrenheit: Boolean
 @Composable
 private fun cardColor() = if (T.colors.isDark) T.colors.card else Color.White.copy(alpha = 0.96f)
 
+/** Pages of the card pager under the car. */
+private enum class CardPage { MUSIC, NAVIGATE, MUSIC_NAVIGATE, TRIP, ENGINE, FUEL }
+
+/**
+ * Split view: music, Navigate, trip, then engine and fuel when OBD gives them, one card a page.
+ * Full screen: music and Navigate side by side on the first page (like Tesla's), then the same.
+ */
+private fun cardPages(state: HomeUiState, wide: Boolean): List<CardPage> {
+    val obd = ObdDisplay.show(state.obd.status)
+    return buildList {
+        if (wide) add(CardPage.MUSIC_NAVIGATE) else { add(CardPage.MUSIC); add(CardPage.NAVIGATE) }
+        add(CardPage.TRIP)
+        if (obd) add(CardPage.ENGINE)
+        if (obd && state.obd.data.fuelPct != null) add(CardPage.FUEL)
+    }
+}
+
 @Composable
-private fun CardPager(state: HomeUiState, actions: HomeActions) {
-    val pager = rememberPagerState { 2 }
+private fun CardPager(state: HomeUiState, actions: HomeActions, wide: Boolean) {
+    // Engine readings change all the time; the page list only when OBD comes or goes.
+    val pages by remember(state.live, wide) { derivedStateOf { cardPages(state, wide) } }
+    val pager = rememberPagerState { pages.size }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         HorizontalPager(pager, pageSpacing = 12.dp) { page ->
-            if (page == 0) MusicCard(state, actions, Modifier.fillMaxWidth()) else NavigateCard(actions, Modifier.fillMaxWidth())
+            when (pages.getOrNull(page)) {
+                CardPage.MUSIC -> MusicCard(state, actions, Modifier.fillMaxWidth())
+                CardPage.NAVIGATE -> NavigateCard(actions, Modifier.fillMaxWidth())
+                CardPage.MUSIC_NAVIGATE -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    MusicCard(state, actions, Modifier.weight(1.6f))
+                    NavigateCard(actions, Modifier.weight(1f))
+                }
+                CardPage.TRIP -> TripCard(state, wide, Modifier.fillMaxWidth())
+                CardPage.ENGINE -> EngineCard(state, actions, Modifier.fillMaxWidth())
+                CardPage.FUEL -> FuelCard(state, actions, Modifier.fillMaxWidth())
+                null -> Box(Modifier.fillMaxWidth().height(CARD_H))
+            }
         }
         // Prototype pagination: dots fade between states (300 ms); tapping one slides the cards (600 ms ease-out).
         val scope = androidx.compose.runtime.rememberCoroutineScope()
         Row(Modifier.padding(top = 1.dp)) {
-            repeat(2) { i ->
+            repeat(pages.size) { i ->
                 val dot by androidx.compose.animation.animateColorAsState(
                     if (pager.currentPage == i) T.colors.text else T.colors.secondary.copy(alpha = 0.4f), TMotion.dot(), label = "dot",
                 )
@@ -562,6 +658,98 @@ private fun NavShortcut(icon: ImageVector, label: String, onClick: () -> Unit, m
         Icon(icon, null, tint = T.colors.text, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(8.dp))
         Text(label, style = TType.button, color = T.colors.text)
+    }
+}
+
+/**
+ * Tesla's trip card ("Current drive / Since charge / Trip A"), from TLauncher's trip log: this drive (or the last
+ * one when parked), today and this week. Distance, time and fuel economy (with OBD fuel data).
+ */
+@Composable
+internal fun TripCard(state: HomeUiState, wide: Boolean, modifier: Modifier = Modifier) {
+    val mph = state.settings.speedUnit == SpeedUnit.MPH
+    val zone = java.time.ZoneId.systemDefault()
+    val nowMs = state.now.atZone(zone).toInstant().toEpochMilli()
+    val current = state.currentTripKm
+    val cols = remember(state.trips, current, state.now.toLocalDate()) {
+        val dayStart = state.now.toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
+        val weekStart = com.ahu.tlauncher.system.TripMath.weekStartMs(nowMs, zone)
+        val extra = current ?: 0.0
+        val drive = if (current != null) TripColumn("This drive", current, null, state.fuel.tripKmPerL)
+        else state.trips.lastOrNull()?.let { TripColumn("Last drive", it.km, it.minutes, it.kmPerL) } ?: TripColumn("Last drive", 0.0, 0, null)
+        fun total(label: String, from: Long) = com.ahu.tlauncher.system.TripMath.totals(state.trips, from).let { t ->
+            TripColumn(label, t.km + extra, t.minutes, t.kmPerL)
+        }
+        listOf(drive, total("Today", dayStart), total("This week", weekStart))
+    }
+    Row(modifier.height(CARD_H).clip(TShapes.button).background(cardColor()).padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        cols.forEachIndexed { i, c ->
+            if (i > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(T.colors.divider))
+            Column(Modifier.weight(1f).padding(horizontal = if (wide) 16.dp else 8.dp)) {
+                Text(c.label, style = TType.caption, color = T.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val dist = if (mph) c.km * 0.621371 else c.km
+                Text("%.1f %s".format(dist, if (mph) "mi" else "km"), style = if (wide) TType.title else TType.button, color = T.colors.text, maxLines = 1)
+                Text(c.minutes?.let { if (it >= 60) "${it / 60} h ${it % 60} min" else "$it min" } ?: "Driving", style = TType.caption, color = T.colors.muted, maxLines = 1)
+                Text(c.kmPerL?.let { "%.1f km/L".format(it) } ?: "– km/L", style = TType.caption, color = T.colors.muted, maxLines = 1)
+            }
+        }
+    }
+}
+
+private data class TripColumn(val label: String, val km: Double, val minutes: Int?, val kmPerL: Double?)
+
+/** Engine readings and stored fault codes in one card; tap for Settings → Car (diagnostics). */
+@Composable
+internal fun EngineCard(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modifier) {
+    val d = state.obd.data
+    val f = state.settings.tempUnit == TempUnit.F
+    val codes = state.diag.stored
+    val cells = listOf(
+        Triple("Coolant", d.coolantC?.let { if (f) "${(it * 9 / 5.0 + 32).roundToInt()}°F" else "$it°C" } ?: "–", (d.coolantC ?: 0) >= 105),
+        Triple("Battery", d.batteryV?.let { "%.1f V".format(it) } ?: "–", d.batteryV?.let { it < 11.8 || it > 15.2 } == true),
+        Triple("Engine", d.rpm?.let { "%,d rpm".format(it) } ?: "–", false),
+        Triple("Fault codes", when { codes == null -> "Not read"; codes.isEmpty() -> "None"; else -> "${codes.size} stored" }, !codes.isNullOrEmpty()),
+    )
+    Column(modifier.height(CARD_H).clip(TShapes.button).background(cardColor()).pressable(onClick = actions::openCarSettings).padding(horizontal = 16.dp, vertical = 12.dp)) {
+        for (row in cells.chunked(2)) {
+            Row(Modifier.weight(1f).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                row.forEach { (label, value, alert) ->
+                    Column(Modifier.weight(1f)) {
+                        Text(label, style = TType.caption, color = T.colors.muted, maxLines = 1)
+                        Text(value, style = TType.button, color = if (alert) TELL_RED else T.colors.text, maxLines = 1)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Fuel left (where Tesla shows charge): level, range, average economy and a button to find fuel nearby. */
+@Composable
+internal fun FuelCard(state: HomeUiState, actions: HomeActions, modifier: Modifier = Modifier) {
+    val pct = state.obd.data.fuelPct ?: return
+    val mph = state.settings.speedUnit == SpeedUnit.MPH
+    val low = pct < com.ahu.tlauncher.obd.FuelMath.LOW_FUEL_PCT
+    val tint = if (low) TELL_AMBER else T.colors.text
+    val level by animateFloatAsState(pct.coerceIn(0, 100) / 100f, TMotion.live(), label = "fuelCard")
+    Row(modifier.height(CARD_H).clip(TShapes.button).background(cardColor()).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text("$pct%", style = TType.display, color = tint)
+                Spacer(Modifier.width(10.dp))
+                state.fuel.rangeKm?.let { r ->
+                    Text(if (mph) "${(r * 0.621371).roundToInt()} mi left" else "$r km left", style = TType.label, color = T.colors.muted, modifier = Modifier.padding(bottom = 4.dp), maxLines = 1)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Box(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).background(T.colors.secondary.copy(alpha = 0.3f))) {
+                Box(Modifier.fillMaxHeight().fillMaxWidth(level).clip(CircleShape).background(tint))
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(state.fuel.avgKmPerL?.let { "Average %.1f km/L".format(it) } ?: "Average –", style = TType.caption, color = T.colors.muted, maxLines = 1)
+        }
+        Spacer(Modifier.width(12.dp))
+        com.ahu.tlauncher.ui.components.PillButton("Find fuel", icon = Icons.Rounded.LocalGasStation, height = 40.dp, onClick = actions::findFuel)
     }
 }
 

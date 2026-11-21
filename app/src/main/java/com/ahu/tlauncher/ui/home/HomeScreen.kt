@@ -188,6 +188,8 @@ fun HomeScreen(
         object : HomeActions by rawActions {
             override fun openNavApp() { if (routesOn) { mapVisible = true; overlay = Overlay.SEARCH } else rawActions.openNavApp() }
             override fun openMapSettings() { settingsStart = com.ahu.tlauncher.ui.settings.Section.NAVIGATION; overlay = Overlay.SETTINGS }
+            // Settings open in split view: from full screen, glide back first.
+            override fun openCarSettings() { settingsStart = com.ahu.tlauncher.ui.settings.Section.CAR; mapVisible = true; overlay = Overlay.SETTINGS }
             // Fuel stations are listed in the search panel, over the map.
             override fun findFuel() { rawActions.findFuel(); if (routesOn) { mapVisible = true; overlay = Overlay.SEARCH } }
             override fun openCardPlayer() { overlay = if (overlay == Overlay.CARD_MUSIC) Overlay.NONE else Overlay.CARD_MUSIC }
