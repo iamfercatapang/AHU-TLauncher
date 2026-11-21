@@ -408,7 +408,7 @@ private fun CarHero(
         val maxImgH = (maxHeight - calloutH) * 0.64f
         // With engine readings, room for their column on the left (and the same on the right, so the car stays centred).
         val sideRoom = if (callouts.isEmpty()) 16.dp else CALLOUTS_W
-        fun widthFor(r: Float) = min(maxWidth - sideRoom * 2, maxImgH * r) * CAR_SCALE
+        fun widthFor(r: Float) = (min(maxWidth - sideRoom * 2, maxImgH * r) * CAR_SCALE).coerceAtLeast(1.dp)
         // 0 = front, 1 = 3/4, following the panel (swipe or sweep). Like the prototype's turntable: the car
         // swings round on a vertical axis, and its footprint moves between the two photos' proportions.
         val p = progress()
@@ -461,7 +461,8 @@ private fun CarHero(
         val leaderW = (maxWidth - imgW) / 2 + imgW * 0.1f - 18.dp
         val lineColor = T.colors.muted.copy(alpha = 0.55f)
         if (callouts.isNotEmpty()) Column(
-            Modifier.padding(top = calloutH + imgH / 2 - CALLOUTS_HALF_H).shrinkInPanel(contentScale, pivotY = 0.5f).padding(start = 18.dp),
+            // Never negative: until the car photo has loaded, its stand-in shape can be shorter than the column.
+            Modifier.padding(top = (calloutH + imgH / 2 - CALLOUTS_HALF_H).coerceAtLeast(0.dp)).shrinkInPanel(contentScale, pivotY = 0.5f).padding(start = 18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             callouts.forEach { c ->
